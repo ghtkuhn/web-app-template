@@ -1,0 +1,24 @@
+{
+  "name": "web-app-template",
+  "version": "1.0.0",
+  "description": "An app template for developing web apps with the support of local AI models.",
+  "homepage": "https://github.com/ghtkuhn/web-app-template#readme",
+  "bugs": {
+    "url": "https://github.com/ghtkuhn/web-app-template/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ghtkuhn/web-app-template.git"
+  },
+  "license": "ISC",
+  "author": "",
+  "type": "module",
+  "main": "code/backend/src/index.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint:backend": "node code/backend/script/linter.ts"
+  },
+  "dependencies": {
+    "@babel/parser": "^8.0.4"
+  }
+}

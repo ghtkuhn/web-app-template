@@ -1,0 +1,25 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "",
+  "license": "ISC",
+  "author": "",
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "kysely": "^0.27.0",
+    "kysely-dialect-sqlite": "^0.27.0",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "@babel/parser": "^8.0.4",
+    "@types/node": "^20.0.0",
+    "@types/uuid": "^9.0.0",
+    "typescript": "^5.0.0"
+  },
+  "type": "module",
+  "main": "index.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint:backend": "node script/linter.ts"
+  }
+}
