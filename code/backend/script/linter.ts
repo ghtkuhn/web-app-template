@@ -100,7 +100,10 @@ class BackendLinter {
                 constants: 0,
                 types: 0,
                 classes: 0,
-                functions: 0
+                functions: 0,
+                imports: [],
+                baseClassName: null,
+                methodCalls: []
             };
         }
     }

@@ -1,6 +1,7 @@
 {
   "name": "web-app-template",
   "version": "1.0.0",
+  "private": true,
   "description": "An app template for developing web apps with the support of local AI models.",
   "homepage": "https://github.com/ghtkuhn/web-app-template#readme",
   "bugs": {
@@ -13,12 +14,18 @@
   "license": "ISC",
   "author": "",
   "type": "module",
-  "main": "code/backend/src/index.ts",
+  "workspaces": [
+    "code/backend",
+    "code/frontend/web"
+  ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "lint:backend": "node code/backend/script/linter.ts"
+    "lint": "npm run lint --workspaces --if-present",
+    "lint:backend": "npm run lint --workspace @app/backend",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm test --workspaces --if-present",
+    "verify": "npm run lint && npm run typecheck && npm test"
   },
-  "dependencies": {
-    "@babel/parser": "^8.0.4"
+  "devDependencies": {
+    "typescript": "^5.0.0"
   }
 }

@@ -48,6 +48,6 @@ export abstract class EntityDTO<T extends BaseObject> extends BaseDTO implements
    */
   toObject(): Partial<T> {
     const { ...data } = this;
-    return data as Partial<T>;
+    return data as unknown as Partial<T>;
   }
 }
