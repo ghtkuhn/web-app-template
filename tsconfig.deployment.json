@@ -5,6 +5,8 @@
     },
     "include": [
         "script/deployment/**/*.ts",
+        "script/memory-check.ts",
+        "script/memory-check/**/*.ts",
         "script/template-update.ts",
         "script/template-update/**/*.ts"
     ]

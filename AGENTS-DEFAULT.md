@@ -4,6 +4,7 @@
 * You must not modify the contents of this file.
 * You must create `data/ai/MEMORY.md` if it does not exist.
 * You must read the file contents of `data/ai/MEMORY.md` after ensuring it exists.
+* You must summarize `data/ai/MEMORY.md` when it exceeds 25 KiB; `npm run check:memory` and `npm run verify` enforce this limit.
 
 
 ---
