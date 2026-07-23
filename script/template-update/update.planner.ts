@@ -5,9 +5,12 @@ import type {
     UpdateConflict,
     UpdatePlan,
 } from './interfaces.ts';
+import { PackageManifestMerger } from './package-manifest.merger.ts';
 
 /** Produces a deterministic three-way update plan. */
 export class UpdatePlanner {
+    private readonly packageManifest = new PackageManifestMerger();
+
     /** Compares the old template, local project, and new template. */
     public plan(
         baseRoot: string,
@@ -35,6 +38,23 @@ export class UpdatePlanner {
                 conflicts,
             );
         }
+        const packagePlan = this.packageManifest.plan(
+            baseRoot,
+            localRoot,
+            incomingRoot,
+        );
+        if (packagePlan.action) {
+            actions.push(packagePlan.action);
+        }
+        if (packagePlan.conflict) {
+            conflicts.push(packagePlan.conflict);
+        }
+        actions.sort((left, right) =>
+            left.relativePath.localeCompare(right.relativePath),
+        );
+        conflicts.sort((left, right) =>
+            left.relativePath.localeCompare(right.relativePath),
+        );
         return { actions, conflicts };
     }
 
@@ -227,7 +247,10 @@ export class UpdatePlanner {
     private collect(root: string, directory: string, result: Set<string>): void {
         for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
             const entryPath = path.join(directory, entry.name);
-            const relativePath = path.relative(root, entryPath);
+            const relativePath = path
+                .relative(root, entryPath)
+                .split(path.sep)
+                .join('/');
             if (this.ignored(relativePath)) {
                 continue;
             }
@@ -245,6 +268,8 @@ export class UpdatePlanner {
         const exact = new Set([
             '.git',
             '.template',
+            'package.json',
+            'package-lock.json',
             'CODEX-INBOX.md',
             '.env',
             'data/ai/MEMORY.md',
@@ -292,10 +317,10 @@ export class UpdatePlanner {
         localRoot: string,
         relativePath: string,
     ): string | undefined {
-        const parts = relativePath.split(path.sep);
+        const parts = relativePath.split('/');
         for (let index = 1; index < parts.length; index += 1) {
-            const parent = parts.slice(0, index).join(path.sep);
-            const parentPath = path.join(localRoot, parent);
+            const parent = parts.slice(0, index).join('/');
+            const parentPath = path.join(localRoot, ...parts.slice(0, index));
             if (fs.existsSync(parentPath)) {
                 const status = fs.lstatSync(parentPath);
                 if (status.isSymbolicLink() || !status.isDirectory()) {

@@ -18,6 +18,8 @@ lerna-debug.log*
 CODEX-INBOX.md
 .template/conflicts/
 .template/cache/
+.template/logs/
+.template/status.json
 data/ai/MEMORY.md
 data/ai/kanban/todo/
 data/ai/kanban/done/

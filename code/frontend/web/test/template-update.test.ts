@@ -8,6 +8,7 @@ import { ConflictReporter } from '../../../../script/template-update/conflict.re
 import { GitHubReleaseClient } from '../../../../script/template-update/github.release-client.ts';
 import { SemanticVersion } from '../../../../script/template-update/semantic-version.ts';
 import { TemplateMetadataRepository } from '../../../../script/template-update/template.metadata-repository.ts';
+import { TemplateUpdater } from '../../../../script/template-update/template.updater.ts';
 import { UpdatePlanner } from '../../../../script/template-update/update.planner.ts';
 import { UpdateTransaction } from '../../../../script/template-update/update.transaction.ts';
 import type { ProcessRunner } from '../../../../script/deployment/process.runner.ts';
@@ -24,6 +25,18 @@ function write(root: string, relativePath: string, content: string): void {
     const target = path.join(root, relativePath);
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, content);
+}
+
+function archive(root: string, name: string): Buffer {
+    const archivePath = path.join(path.dirname(root), `${name}.tar.gz`);
+    ProcessFixtureRunner.run('tar', [
+        '-czf',
+        archivePath,
+        '-C',
+        path.dirname(root),
+        path.basename(root),
+    ]);
+    return fs.readFileSync(archivePath);
 }
 
 afterEach(() => {
@@ -43,10 +56,22 @@ test('semantic versions accept stable tags and compare deterministically', () =>
     expect(() => new SemanticVersion('1.0.0-beta.1')).toThrow(/Invalid stable/);
 });
 
-test('metadata falls back to package version for pre-updater projects', () => {
+test('metadata requires explicit initialization for legacy projects', () => {
     const project = temporaryRoot('template-metadata-');
     write(project, 'package.json', JSON.stringify({
         version: '1.4.0',
+    }));
+
+    expect(() => new TemplateMetadataRepository().load(project)).toThrow(
+        /template:init/,
+    );
+});
+
+test('metadata loads only the dedicated template version file', () => {
+    const project = temporaryRoot('template-metadata-');
+    write(project, '.template/version.json', JSON.stringify({
+        version: '1.4.0',
+        repository: 'ghtkuhn/web-app-template',
     }));
 
     expect(new TemplateMetadataRepository().load(project)).toEqual({
@@ -55,19 +80,45 @@ test('metadata falls back to package version for pre-updater projects', () => {
     });
 });
 
-test('metadata accepts the npm repository object for pre-updater projects', () => {
-    const project = temporaryRoot('template-metadata-');
+test('legacy initialization validates a release without changing app version', async () => {
+    const project = temporaryRoot('template-init-');
     write(project, 'package.json', JSON.stringify({
-        version: '1.4.0',
-        repository: {
-            type: 'git',
-            url: 'git+https://github.com/ghtkuhn/web-app-template.git',
+        name: 'my-app',
+        version: '8.7.6',
+    }));
+    const requested: string[] = [];
+    const runner = {
+        run(): string {
+            return '';
+        },
+    } as ProcessRunner;
+    const updater = new TemplateUpdater(runner, () => ({
+        async resolve(version?: string) {
+            requested.push(version as string);
+            return {
+                version: version as string,
+                tag: `v${version}`,
+                archiveUrl: version as string,
+            };
+        },
+        async download() {
+            throw new Error('not used');
         },
     }));
 
-    expect(new TemplateMetadataRepository().load(project)).toEqual({
-        version: '1.4.0',
-        repository: 'ghtkuhn/web-app-template',
+    await updater.initialize(project, '1.2.3');
+
+    expect(requested).toEqual(['1.2.3']);
+    expect(JSON.parse(fs.readFileSync(
+        path.join(project, '.template/version.json'),
+        'utf8',
+    ))).toMatchObject({ version: '1.2.3' });
+    expect(JSON.parse(fs.readFileSync(
+        path.join(project, 'package.json'),
+        'utf8',
+    ))).toMatchObject({ version: '8.7.6' });
+    await expect(updater.initialize(project, '1.2.3')).rejects.toMatchObject({
+        exitCode: 1,
     });
 });
 
@@ -188,6 +239,91 @@ test('planner excludes local secrets, runtime data, and agent state', () => {
     expect(plan.conflicts).toEqual([]);
 });
 
+test('package planning preserves app identity and merges template properties', () => {
+    const base = temporaryRoot('template-base-');
+    const local = temporaryRoot('template-local-');
+    const incoming = temporaryRoot('template-incoming-');
+    write(base, 'package.json', JSON.stringify({
+        name: 'template',
+        version: '1.0.0',
+        scripts: {
+            verify: 'old',
+            local: 'base',
+        },
+        dependencies: {
+            old: '1.0.0',
+        },
+    }));
+    write(local, 'package.json', JSON.stringify({
+        name: 'my-app',
+        version: '7.4.2',
+        repository: 'local/repository',
+        scripts: {
+            verify: 'old',
+            local: 'custom',
+        },
+        dependencies: {
+            old: '1.0.0',
+        },
+    }));
+    write(incoming, 'package.json', JSON.stringify({
+        name: 'template-renamed',
+        version: '2.0.0',
+        scripts: {
+            verify: 'new',
+            local: 'base',
+        },
+        dependencies: {
+            old: '1.0.0',
+            added: '2.0.0',
+        },
+    }));
+
+    const plan = new UpdatePlanner().plan(base, local, incoming);
+    const packageAction = plan.actions.find(
+        (action) => action.relativePath === 'package.json',
+    );
+    expect(packageAction?.kind).toBe('write');
+    const merged = JSON.parse(fs.readFileSync(
+        (packageAction as { sourcePath: string }).sourcePath,
+        'utf8',
+    )) as Record<string, unknown>;
+
+    expect(merged.name).toBe('my-app');
+    expect(merged.version).toBe('7.4.2');
+    expect(merged.repository).toBe('local/repository');
+    expect(merged.scripts).toEqual({
+        local: 'custom',
+        verify: 'new',
+    });
+    expect(merged.dependencies).toEqual({
+        added: '2.0.0',
+        old: '1.0.0',
+    });
+    expect(plan.conflicts).toEqual([]);
+});
+
+test('package planning reports property-level concurrent changes', () => {
+    const base = temporaryRoot('template-base-');
+    const local = temporaryRoot('template-local-');
+    const incoming = temporaryRoot('template-incoming-');
+    write(base, 'package.json', JSON.stringify({
+        scripts: { verify: 'old' },
+    }));
+    write(local, 'package.json', JSON.stringify({
+        scripts: { verify: 'local' },
+    }));
+    write(incoming, 'package.json', JSON.stringify({
+        scripts: { verify: 'incoming' },
+    }));
+
+    const plan = new UpdatePlanner().plan(base, local, incoming);
+
+    expect(plan.conflicts).toHaveLength(1);
+    expect(plan.conflicts[0]?.relativePath).toBe('package.json');
+    expect(plan.conflicts[0]?.reason).toContain('/scripts/verify');
+});
+
 test('conflict reports contain metadata and three-way variants', () => {
     const project = temporaryRoot('template-project-');
     const base = path.join(project, 'base.txt');
@@ -197,7 +333,10 @@ test('conflict reports contain metadata and three-way variants', () => {
     fs.writeFileSync(local, 'local');
     fs.writeFileSync(incoming, 'incoming');
 
-    const report = new ConflictReporter().write(project, '2.0.0', [{
+    const report = new ConflictReporter().write(project, {
+        version: '1.0.0',
+        repository: 'ghtkuhn/web-app-template',
+    }, '2.0.0', [{
         relativePath: 'src/file.ts',
         reason: 'both changed',
         basePath: base,
@@ -208,6 +347,7 @@ test('conflict reports contain metadata and three-way variants', () => {
     expect(JSON.parse(
         fs.readFileSync(path.join(report, 'conflicts.json'), 'utf8'),
     )).toEqual([{
+        id: 'src/file.ts',
         path: 'src/file.ts',
         reason: 'both changed',
     }]);
@@ -216,7 +356,63 @@ test('conflict reports contain metadata and three-way variants', () => {
     ).toBe('incoming');
 });
 
-test('transaction rolls project files back when verification fails', () => {
+test('conflict sessions require exact decisions and reject stale variants', () => {
+    const project = temporaryRoot('template-project-');
+    const base = path.join(project, 'base.txt');
+    const local = path.join(project, 'local.txt');
+    const incoming = path.join(project, 'incoming.txt');
+    fs.writeFileSync(base, 'base');
+    fs.writeFileSync(local, 'local');
+    fs.writeFileSync(incoming, 'incoming');
+    const reporter = new ConflictReporter();
+    const conflicts = [{
+        relativePath: 'src/file.ts',
+        reason: 'both changed',
+        basePath: base,
+        localPath: local,
+        incomingPath: incoming,
+    }];
+    const report = reporter.write(project, {
+        version: '1.0.0',
+        repository: 'ghtkuhn/web-app-template',
+    }, '2.0.0', conflicts);
+    const session = reporter.load(project, '2.0.0');
+
+    expect(() => reporter.resolutions(project, session)).toThrow(
+        /not resolved/,
+    );
+    write(report, 'resolutions.json', JSON.stringify({
+        'src/file.ts': 'incoming',
+        unknown: 'local',
+    }));
+    expect(() => reporter.resolutions(project, session)).toThrow(
+        /do not match/,
+    );
+    fs.writeFileSync(local, 'changed after staging');
+    expect(() => reporter.assertCurrent(session, conflicts)).toThrow(/stale/);
+});
+
+test('aborting a conflict session removes only ignored staging state', () => {
+    const project = temporaryRoot('template-project-');
+    const local = path.join(project, 'local.txt');
+    fs.writeFileSync(local, 'project content');
+    const reporter = new ConflictReporter();
+    reporter.write(project, {
+        version: '1.0.0',
+        repository: 'ghtkuhn/web-app-template',
+    }, '2.0.0', [{
+        relativePath: 'local.txt',
+        reason: 'conflict',
+        localPath: local,
+    }]);
+
+    reporter.remove(project, '2.0.0');
+
+    expect(fs.readFileSync(local, 'utf8')).toBe('project content');
+    expect(reporter.pending(project)).toEqual([]);
+});
+
+test('transaction keeps installed files when verification fails', () => {
     const project = temporaryRoot('template-project-');
     const incoming = temporaryRoot('template-incoming-');
     write(project, 'existing.txt', 'old');
@@ -228,6 +424,51 @@ test('transaction rolls project files back when verification fails', () => {
             if (command === 'npm' && arguments_[0] === 'run') {
                 verificationRuns += 1;
                 throw new Error('verification failed');
+            }
+            return '';
+        },
+    } as ProcessRunner;
+
+    const result = new UpdateTransaction(runner).execute(project, [
+        {
+            kind: 'write',
+            relativePath: 'existing.txt',
+            sourcePath: path.join(incoming, 'existing.txt'),
+            mode: 0o644,
+        },
+        {
+            kind: 'write',
+            relativePath: 'added.txt',
+            sourcePath: path.join(incoming, 'added.txt'),
+            mode: 0o644,
+        },
+    ], '2.0.0');
+    expect(verificationRuns).toBe(1);
+    expect(result.verificationPassed).toBe(false);
+    expect(fs.readFileSync(path.join(project, 'existing.txt'), 'utf8')).toBe(
+        'new',
+    );
+    expect(fs.existsSync(path.join(project, 'added.txt'))).toBe(true);
+});
+
+test('transaction restores files, metadata, and lockfile after install failure', () => {
+    const project = temporaryRoot('template-project-');
+    const incoming = temporaryRoot('template-incoming-');
+    write(project, 'existing.txt', 'old');
+    write(project, '.template/version.json', '{"version":"1.0.0"}');
+    write(project, 'package-lock.json', 'old-lock');
+    write(incoming, 'existing.txt', 'new');
+    write(incoming, 'added.txt', 'added');
+    write(incoming, 'version.json', '{"version":"2.0.0"}');
+    let installs = 0;
+    const runner = {
+        run(command: string, arguments_: readonly string[]): string {
+            if (command === 'npm' && arguments_[0] === 'install') {
+                installs += 1;
+                if (installs === 1) {
+                    write(project, 'package-lock.json', 'broken-lock');
+                    throw new Error('install failed');
+                }
             }
             return '';
         },
@@ -246,12 +487,146 @@ test('transaction rolls project files back when verification fails', () => {
             sourcePath: path.join(incoming, 'added.txt'),
             mode: 0o644,
         },
-    ])).toThrow(/rolled back/);
-    expect(verificationRuns).toBe(1);
+        {
+            kind: 'write',
+            relativePath: '.template/version.json',
+            sourcePath: path.join(incoming, 'version.json'),
+            mode: 0o644,
+        },
+    ], '2.0.0')).toThrow(/rolled back/);
+    expect(installs).toBe(2);
     expect(fs.readFileSync(path.join(project, 'existing.txt'), 'utf8')).toBe(
         'old',
     );
     expect(fs.existsSync(path.join(project, 'added.txt'))).toBe(false);
+    expect(fs.readFileSync(
+        path.join(project, '.template/version.json'),
+        'utf8',
+    )).toBe('{"version":"1.0.0"}');
+    expect(fs.readFileSync(path.join(project, 'package-lock.json'), 'utf8'))
+        .toBe('old-lock');
+});
+
+test('updater continues all resolution types and keeps a failed verify update', async () => {
+    const fixture = temporaryRoot('template-updater-');
+    const base = path.join(fixture, 'repository-1.0.0');
+    const incoming = path.join(fixture, 'repository-1.1.0');
+    const project = path.join(fixture, 'project');
+    fs.mkdirSync(base);
+    fs.mkdirSync(incoming);
+    fs.mkdirSync(project);
+    const packageBase = {
+        name: 'template',
+        version: '1.0.0',
+        scripts: { verify: 'old' },
+    };
+    write(base, 'package.json', JSON.stringify(packageBase));
+    write(incoming, 'package.json', JSON.stringify({
+        ...packageBase,
+        version: '1.1.0',
+        scripts: { verify: 'new' },
+    }));
+    write(project, 'package.json', JSON.stringify({
+        ...packageBase,
+        name: 'spendwise-like-app',
+        version: '9.0.0',
+    }));
+    for (const file of ['local.txt', 'incoming.txt', 'merged.txt']) {
+        write(base, file, 'base');
+        write(project, file, 'local');
+        write(incoming, file, 'incoming');
+    }
+    write(base, 'delete.txt', 'base');
+    write(project, 'delete.txt', 'local');
+    write(incoming, 'added-linter.ts', 'export const rule = true;\n');
+    write(project, '.template/version.json', JSON.stringify({
+        version: '1.0.0',
+        repository: 'ghtkuhn/web-app-template',
+    }));
+    const releases = new Map([
+        ['1.0.0', archive(base, 'base')],
+        ['1.1.0', archive(incoming, 'incoming')],
+    ]);
+    const runner = {
+        run(command: string, arguments_: readonly string[], options?: {
+            readonly cwd?: string;
+        }): string {
+            if (command === 'git') {
+                return '';
+            }
+            if (command === 'npm' && arguments_[0] === 'install') {
+                write(options?.cwd as string, 'package-lock.json', 'generated');
+                return '';
+            }
+            if (command === 'npm' && arguments_[0] === 'run') {
+                throw new Error('verify found migration work');
+            }
+            return '';
+        },
+    } as ProcessRunner;
+    const updater = new TemplateUpdater(runner, () => ({
+        async resolve(version?: string) {
+            const resolved = version ?? '1.1.0';
+            return {
+                version: resolved,
+                tag: `v${resolved}`,
+                archiveUrl: resolved,
+            };
+        },
+        async download(release) {
+            return releases.get(release.version) as Buffer;
+        },
+    }));
+
+    await expect(updater.update(project, '1.1.0')).rejects.toMatchObject({
+        exitCode: 1,
+    });
+    expect(fs.readFileSync(path.join(project, 'local.txt'), 'utf8')).toBe(
+        'local',
+    );
+    const report = path.join(project, '.template/conflicts/1.1.0');
+    write(report, 'resolutions.json', JSON.stringify({
+        'delete.txt': 'delete',
+        'incoming.txt': 'incoming',
+        'local.txt': 'local',
+        'merged.txt': 'merged',
+    }));
+    write(report, 'resolved/merged.txt', 'manually merged');
+
+    const result = await updater.continue(project, '1.1.0');
+
+    expect(result.verificationPassed).toBe(false);
+    expect(fs.readFileSync(path.join(project, 'local.txt'), 'utf8')).toBe(
+        'local',
+    );
+    expect(fs.readFileSync(path.join(project, 'incoming.txt'), 'utf8')).toBe(
+        'incoming',
+    );
+    expect(fs.readFileSync(path.join(project, 'merged.txt'), 'utf8')).toBe(
+        'manually merged',
+    );
+    expect(fs.existsSync(path.join(project, 'delete.txt'))).toBe(false);
+    expect(fs.existsSync(path.join(project, 'added-linter.ts'))).toBe(true);
+    expect(JSON.parse(fs.readFileSync(
+        path.join(project, 'package.json'),
+        'utf8',
+    ))).toMatchObject({
+        name: 'spendwise-like-app',
+        version: '9.0.0',
+        scripts: { verify: 'new' },
+    });
+    expect(JSON.parse(fs.readFileSync(
+        path.join(project, '.template/version.json'),
+        'utf8',
+    ))).toMatchObject({ version: '1.1.0' });
+    expect(JSON.parse(fs.readFileSync(
+        path.join(project, '.template/status.json'),
+        'utf8',
+    ))).toMatchObject({
+        version: '1.1.0',
+        verification: 'failed',
+    });
+    expect(fs.existsSync(report)).toBe(false);
 });
 
 test('extracted releases update a project while preserving local files', () => {
@@ -298,7 +673,7 @@ test('extracted releases update a project while preserving local files', () => {
         },
     } as ProcessRunner;
 
-    new UpdateTransaction(runner).execute(local, plan.actions);
+    new UpdateTransaction(runner).execute(local, plan.actions, '1.1.0');
 
     expect(fs.readFileSync(path.join(local, 'managed.txt'), 'utf8')).toBe(
         'new',

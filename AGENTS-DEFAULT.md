@@ -227,8 +227,13 @@
 ## Template Update Rules
 
 * Check stable upstream releases with `npm run template:check`.
+* `.template/version.json` is the only installed-template version source; `package.json.version` always belongs to the application.
+* Initialize legacy applications without metadata exactly once with `npm run template:init -- <installed-version>`.
 * Update only from a clean Git worktree with `npm run template:update` or an explicit stable version.
-* Review updater conflicts under `.template/conflicts/<version>/`; do not force, bypass, or hand-merge them without user direction.
+* Resolve updater conflicts only under `.template/conflicts/<version>/`, select `local`, `incoming`, `merged`, or `delete` in `resolutions.json`, and continue with `npm run template:update -- --continue <version>`.
+* Abort unresolved staging with `npm run template:update -- --abort <version>`; this must not change project files.
 * Template updates must preserve local modules, features, migrations, secrets, runtime data, local deployment profiles, Memory, and Kanban task contents.
-* After a successful update, inspect the uncommitted diff and run `npm run verify` before creating a deliberate commit.
+* Application-owned package metadata must remain local. Template scripts, engines, workspaces, and dependencies are merged property by property.
+* A failed post-update Verify does not roll back the installed template. Inspect `.template/status.json` and its referenced log, migrate the application, and run `npm run verify` again.
+* After an update, inspect the uncommitted diff and verification status before creating a deliberate commit.
 * Template updates must not commit, push, deploy, restore databases, or mutate external infrastructure automatically.

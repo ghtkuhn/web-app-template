@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { TemplateMetadata } from './interfaces.ts';
 import { SemanticVersion } from './semantic-version.ts';
 
-const DEFAULT_REPOSITORY = 'ghtkuhn/web-app-template';
+export const DEFAULT_TEMPLATE_REPOSITORY = 'ghtkuhn/web-app-template';
 
 /** npm package repository metadata accepted during legacy initialization. */
 interface PackageRepository {
@@ -13,20 +13,20 @@ interface PackageRepository {
 
 /** Loads and renders the installed template version metadata. */
 export class TemplateMetadataRepository {
-    /** Loads metadata or initializes it from the root package version. */
+    /** Loads explicit installed-template metadata. */
     public load(projectRoot: string): TemplateMetadata {
         const metadataPath = path.join(
             projectRoot,
             '.template/version.json',
         );
-        const source = (fs.existsSync(metadataPath)
-            ? JSON.parse(fs.readFileSync(metadataPath, 'utf8'))
-            : JSON.parse(
-                  fs.readFileSync(
-                      path.join(projectRoot, 'package.json'),
-                      'utf8',
-                  ),
-              )) as {
+        if (!fs.existsSync(metadataPath)) {
+            throw new Error(
+                'Template metadata is missing; run npm run template:init -- <installed-version>.',
+            );
+        }
+        const source = JSON.parse(
+            fs.readFileSync(metadataPath, 'utf8'),
+        ) as {
                   version?: string;
                   repository?: string | PackageRepository;
               };
@@ -35,10 +35,17 @@ export class TemplateMetadataRepository {
         }
         const version = new SemanticVersion(source.version).value;
         const repository = this.normalizeRepository(source.repository);
-        if (repository !== DEFAULT_REPOSITORY) {
+        if (repository !== DEFAULT_TEMPLATE_REPOSITORY) {
             throw new Error(`Unsupported template repository '${repository}'.`);
         }
         return { version, repository };
+    }
+
+    /** Returns whether explicit template metadata already exists. */
+    public exists(projectRoot: string): boolean {
+        return fs.existsSync(
+            path.join(projectRoot, '.template/version.json'),
+        );
     }
 
     /** Writes target metadata into a supplied staging path. */
@@ -55,7 +62,7 @@ export class TemplateMetadataRepository {
         repository?: string | PackageRepository,
     ): string {
         if (!repository) {
-            return DEFAULT_REPOSITORY;
+            return DEFAULT_TEMPLATE_REPOSITORY;
         }
 
         const repositoryUrl =
@@ -63,7 +70,7 @@ export class TemplateMetadataRepository {
         if (!repositoryUrl) {
             throw new Error('Template repository URL is missing.');
         }
-        if (repositoryUrl === DEFAULT_REPOSITORY) {
+        if (repositoryUrl === DEFAULT_TEMPLATE_REPOSITORY) {
             return repositoryUrl;
         }
 
