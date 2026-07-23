@@ -1,0 +1,22 @@
+import { BaseModule } from '../../base/base.module.ts';
+import type { NamedModuleDefinition } from '../../base/interfaces.ts';
+import { {{CONSTANT_NAME}}_MODULE_NAME } from './constants.ts';
+import type { {{PASCAL_NAME}}ModulePort } from './interfaces.ts';
+import type { {{PASCAL_NAME}}NodeRequest } from './types.ts';
+
+export { {{CONSTANT_NAME}}_MODULE_NAME } from './constants.ts';
+export type { {{PASCAL_NAME}}ModulePort } from './interfaces.ts';
+export type { {{PASCAL_NAME}}NodeRequest } from './types.ts';
+
+/** Public gateway for the {{MODULE_NAME}} domain. */
+export class {{PASCAL_NAME}}Module
+    extends BaseModule<{{PASCAL_NAME}}NodeRequest, never>
+    implements {{PASCAL_NAME}}ModulePort
+{
+    /** Durable registry metadata consumed by the generated module catalog. */
+    public static readonly definition = {
+        name: {{CONSTANT_NAME}}_MODULE_NAME,
+        dependencies: [],
+        create: () => new {{PASCAL_NAME}}Module(),
+    } satisfies NamedModuleDefinition;
+}

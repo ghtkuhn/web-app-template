@@ -1,26 +1,17 @@
 import { BaseHandler } from './base.handler.ts';
-import { HandlerResult } from './interfaces.ts';
+import type { CliHandlerInput, HandlerResult } from './interfaces.ts';
 
 /**
- * CliHandler adapts internal Controller logic to Command Line Interface calls.
- *
- * RESPONSIBILITIES:
- * - Parse CLI arguments/flags.
- * - Format results for terminal output (stdout).
+ * Adapts parsed CLI commands to a module controller.
+ * Output formatting and process exit codes remain inside `CliRunner`.
  */
-export abstract class CliHandler extends BaseHandler {
-  protected async processRequest(input: string[]): Promise<HandlerResult> {
-    throw new Error('processRequest must be implemented by a concrete CliHandler');
-  }
-
-  /**
-   * Helper to print the result to the console.
-   */
-  protected printResponse(result: HandlerResult) {
-    if (result.success) {
-      console.log('✅ Success:', JSON.stringify(result.data, null, 2));
-    } else {
-      console.error('❌ Error:', result.error);
+export abstract class CliHandler extends BaseHandler<CliHandlerInput> {
+    /** Processes one structured command received from the CLI transport. */
+    protected async processRequest(
+        input: CliHandlerInput,
+    ): Promise<HandlerResult> {
+        throw new Error(
+            'processRequest must be implemented by a concrete CliHandler',
+        );
     }
-  }
 }

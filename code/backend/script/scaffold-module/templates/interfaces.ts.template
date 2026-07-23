@@ -1,0 +1,6 @@
+import type { IBaseModule } from '../../base/interfaces.ts';
+import type { {{PASCAL_NAME}}NodeRequest } from './types.ts';
+
+/** Public in-process contract exposed by the {{MODULE_NAME}} module. */
+export interface {{PASCAL_NAME}}ModulePort
+    extends IBaseModule<{{PASCAL_NAME}}NodeRequest, never> {}

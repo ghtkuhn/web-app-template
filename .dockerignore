@@ -1,0 +1,8 @@
+.git
+.fallow
+**/.DS_Store
+**/dist
+**/node_modules
+**/test-results
+data
+logs

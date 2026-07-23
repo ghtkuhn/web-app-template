@@ -1,0 +1,74 @@
+openapi: 3.1.0
+info:
+    title: Web App Backend API
+    version: 1.0.0
+    description: Public HTTP contract exposed by the backend application.
+    license:
+        name: ISC
+        identifier: ISC
+servers:
+    - url: /
+      description: Current backend origin
+paths:
+    /api/health:
+        get:
+            operationId: getHealth
+            summary: Read backend health
+            description: Returns the current health status of the backend process.
+            tags:
+                - Health
+            security: []
+            responses:
+                "200":
+                    description: The backend is healthy.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/HealthResponse"
+                "404":
+                    description: The Health module is not available.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/ErrorResponse"
+                "403":
+                    description: The request Origin is not allowed.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/ErrorResponse"
+components:
+    schemas:
+        HealthResponse:
+            type: object
+            additionalProperties: false
+            required:
+                - success
+                - data
+            properties:
+                success:
+                    type: boolean
+                    const: true
+                data:
+                    $ref: "#/components/schemas/HealthStatus"
+        HealthStatus:
+            type: object
+            additionalProperties: false
+            required:
+                - status
+            properties:
+                status:
+                    type: string
+                    const: ok
+        ErrorResponse:
+            type: object
+            additionalProperties: false
+            required:
+                - success
+                - error
+            properties:
+                success:
+                    type: boolean
+                    const: false
+                error:
+                    type: string

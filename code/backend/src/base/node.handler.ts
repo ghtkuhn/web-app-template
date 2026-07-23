@@ -1,22 +1,20 @@
 import { BaseHandler } from './base.handler.ts';
-import { HandlerResult } from './interfaces.ts';
+import type { HandlerResult } from './interfaces.ts';
 
 /**
- * NodeHandler provides a programmatic API for module-to-module interaction.
- *
- * RESPONSIBILITIES:
- * - Allow other backend modules to call this module's logic without HTTP/WS overhead.
- * - Ensure that all Controller validation and business rules are still applied.
+ * Provides a typed in-process entry point for module-to-module communication.
+ * Callers access it exclusively through the owning module's `dispatch('node', ...)` port.
  */
-export abstract class NodeHandler extends BaseHandler {
-  protected async processRequest(input: any): Promise<HandlerResult> {
-    throw new Error('processRequest must be implemented by a concrete NodeHandler');
-  }
-
-  /**
-   * Since this is programmatic, it simply returns the HandlerResult directly.
-   */
-  async execute(params: any): Promise<HandlerResult> {
-    return this.handle(params);
-  }
+export abstract class NodeHandler<TInput, TOutput> extends BaseHandler<
+    TInput,
+    TOutput
+> {
+    /** Processes one typed request from another module. */
+    protected async processRequest(
+        input: TInput,
+    ): Promise<HandlerResult<TOutput>> {
+        throw new Error(
+            'processRequest must be implemented by a concrete NodeHandler',
+        );
+    }
 }

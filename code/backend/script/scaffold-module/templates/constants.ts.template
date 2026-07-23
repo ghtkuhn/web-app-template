@@ -1,0 +1,2 @@
+/** Stable configuration and registry name of the {{MODULE_NAME}} module. */
+export const {{CONSTANT_NAME}}_MODULE_NAME = '{{MODULE_NAME}}' as const;

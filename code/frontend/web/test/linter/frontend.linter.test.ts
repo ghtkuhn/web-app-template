@@ -1,0 +1,181 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { expect, test } from 'vitest';
+import { FrontendLinter } from '../../script/linter/frontend.linter.ts';
+import type { LintWriter } from '../../script/linter/interfaces.ts';
+import { LinterCli } from '../../script/linter/linter.cli.ts';
+
+class Fixture {
+    public readonly root = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'frontend-linter-'),
+    );
+
+    public write(relativePath: string, source: string): void {
+        const filePath = path.join(
+            this.root,
+            'code/frontend/web/src',
+            relativePath,
+        );
+        fs.mkdirSync(path.dirname(filePath), { recursive: true });
+        fs.writeFileSync(filePath, source, 'utf8');
+    }
+
+    public issues() {
+        return new FrontendLinter(this.root).run().issues;
+    }
+
+    public dispose(): void {
+        fs.rmSync(this.root, { recursive: true, force: true });
+    }
+}
+
+class BufferWriter implements LintWriter {
+    public value = '';
+
+    public write(chunk: string): void {
+        this.value += chunk;
+    }
+}
+
+test('real frontend satisfies all architecture rules', () => {
+    const projectRoot = path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        '../../../../..',
+    );
+    const result = new FrontendLinter(projectRoot).run();
+    expect(result.issues).toEqual([]);
+    expect(result.filesChecked).toBeGreaterThan(0);
+});
+
+test('presentation imports, network access, styles, and SFC syntax are strict', () => {
+    const fixture = new Fixture();
+    try {
+        fixture.write(
+            'presentation/desktop/views/BadView.vue',
+            `<script>
+             import Other from '../../mobile/views/BadView.vue';
+             fetch('/api');
+             </script>
+             <template><Other /></template>
+             <style>@media (min-width: 1px) { div {} }</style>`,
+        );
+        const ids = fixture.issues().map((issue) => issue.ruleId);
+        expect(ids).toContain('PRESENTATION_CROSS_IMPORT');
+        expect(ids).toContain('PRESENTATION_NETWORK_ACCESS');
+        expect(ids).toContain('PRESENTATION_STYLE_SCOPE');
+        expect(ids).toContain('PRESENTATION_MEDIA_QUERY');
+        expect(ids).toContain('VUE_SCRIPT_SETUP');
+        expect(ids).toContain('PRESENTATION_VIEW_PARITY');
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('layer, router, breakpoint, shared, and naming ownership are enforced', () => {
+    const fixture = new Fixture();
+    try {
+        fixture.write(
+            'core/service.ts',
+            `import App from '../app/App.vue';
+             createRouter({});
+             console.log(window.innerWidth);`,
+        );
+        fixture.write(
+            'shared/SharedWidget.vue',
+            '<template><div /></template>',
+        );
+        fixture.write(
+            'app/bad-name.vue',
+            '<template><div /></template>',
+        );
+        const ids = fixture.issues().map((issue) => issue.ruleId);
+        expect(ids).toContain('FRONTEND_LAYER_DIRECTION');
+        expect(ids).toContain('ROUTER_OWNERSHIP');
+        expect(ids).toContain('PRESENTATION_BREAKPOINT_OWNERSHIP');
+        expect(ids).toContain('SHARED_VUE_COMPONENT');
+        expect(ids).toContain('VUE_COMPONENT_NAME');
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('source structure and route presentation coverage are enforced', () => {
+    const fixture = new Fixture();
+    try {
+        fixture.write('loose.ts', 'export const loose = true;');
+        fixture.write(
+            'presentation/desktop/direct.vue',
+            '<template><div /></template>',
+        );
+        fixture.write(
+            'app/routes/HomeRoute.vue',
+            `<script setup lang="ts">
+             import Desktop from '../../presentation/desktop/views/HomeView.vue';
+             </script>
+             <template><Desktop /></template>`,
+        );
+        const ids = fixture.issues().map((issue) => issue.ruleId);
+        expect(ids).toContain('FRONTEND_SOURCE_PLACEMENT');
+        expect(ids).toContain('PRESENTATION_STRUCTURE');
+        expect(ids).toContain('ROUTE_PRESENTATION_COVERAGE');
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('Core ownership, direction, environment, and design tokens are strict', () => {
+    const fixture = new Fixture();
+    try {
+        fixture.write(
+            'core/loose.ts',
+            'console.log(import.meta.env.VITE_API_BASE_URL);',
+        );
+        fixture.write(
+            'core/models/account.model.ts',
+            "import { HealthService } from '../services/health.service.ts';",
+        );
+        fixture.write(
+            'presentation/desktop/components/Card.vue',
+            `<script setup lang="ts">
+             import type { paths } from '../../../core/api/generated/schema.ts';
+             </script>
+             <template><div /></template>
+             <style scoped>div { color: #fff; }</style>`,
+        );
+        const ids = fixture.issues().map((issue) => issue.ruleId);
+        expect(ids).toContain('CORE_STRUCTURE');
+        expect(ids).toContain('FRONTEND_ENV_OWNERSHIP');
+        expect(ids).toContain('CORE_LAYER_DIRECTION');
+        expect(ids).toContain('PRESENTATION_NETWORK_ACCESS');
+        expect(ids).toContain('DESIGN_TOKEN_USAGE');
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('parser failures and CLI exit codes are stable', () => {
+    const valid = new Fixture();
+    const invalid = new Fixture();
+    try {
+        valid.write('main.ts', 'export {};');
+        invalid.write('main.ts', 'export const = ;');
+        const stdout = new BufferWriter();
+        const stderr = new BufferWriter();
+        expect(new LinterCli(valid.root, stdout, stderr).run()).toBe(0);
+        expect(stdout.value).toMatch(/Frontend architecture valid/);
+
+        expect(
+            new LinterCli(
+                invalid.root,
+                new BufferWriter(),
+                stderr,
+            ).run(),
+        ).toBe(2);
+        expect(stderr.value).toMatch(/FRONTEND_PARSE_ERROR/);
+    } finally {
+        valid.dispose();
+        invalid.dispose();
+    }
+});

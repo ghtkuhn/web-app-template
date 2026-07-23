@@ -1,4 +1,4 @@
-import { HandlerResult, IBaseController } from './interfaces.ts';
+import type { HandlerResult, IBaseController } from './interfaces.ts';
 
 /**
  * BaseController provides a standardized foundation for all internal module controllers.
@@ -17,25 +17,25 @@ import { HandlerResult, IBaseController } from './interfaces.ts';
  * - Must return a HandlerResult object.
  */
 export abstract class BaseController implements IBaseController {
-  /**
-   * Helper to create a successful result.
-   */
-  protected success<T>(data: T, statusCode = 200): HandlerResult<T> {
-    return {
-      success: true,
-      data,
-      statusCode,
-    };
-  }
+    /**
+     * Helper to create a successful result.
+     */
+    protected success<T>(data: T, statusCode = 200): HandlerResult<T> {
+        return {
+            success: true,
+            data,
+            statusCode,
+        };
+    }
 
-  /**
-   * Helper to create an error result.
-   */
-  protected error(message: string, statusCode = 500): HandlerResult {
-    return {
-      success: false,
-      error: message,
-      statusCode,
-    };
-  }
+    /**
+     * Helper to create an error result.
+     */
+    protected error(message: string, statusCode = 500): HandlerResult {
+        return {
+            success: false,
+            error: message,
+            statusCode,
+        };
+    }
 }

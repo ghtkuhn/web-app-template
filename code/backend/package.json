@@ -1,25 +1,39 @@
 {
-  "name": "@app/backend",
-  "version": "1.0.0",
-  "description": "",
-  "license": "ISC",
-  "author": "",
-  "dependencies": {
-    "better-sqlite3": "^11.0.0",
-    "kysely": "^0.27.0",
-    "uuid": "^9.0.0"
-  },
-  "devDependencies": {
-    "@babel/parser": "^8.0.4",
-    "@types/node": "^20.0.0",
-    "@types/uuid": "^9.0.0"
-  },
-  "type": "module",
-  "main": "src/index.ts",
-  "scripts": {
-    "lint": "node script/linter.ts",
-    "lint:backend": "npm run lint",
-    "typecheck": "tsc --project tsconfig.json",
-    "test": "node --test"
-  }
+    "name": "@app/backend",
+    "version": "1.0.0",
+    "description": "",
+    "license": "ISC",
+    "author": "",
+    "engines": {
+        "node": ">=22.23.1 <23"
+    },
+    "dependencies": {
+        "better-sqlite3": "^12.11.1",
+        "kysely": "^0.27.0",
+        "uuid": "^9.0.0",
+        "ws": "^8.21.1"
+    },
+    "devDependencies": {
+        "@apidevtools/swagger-parser": "^12.1.0",
+        "@babel/parser": "^8.0.4",
+        "@redocly/cli": "^2.40.0",
+        "@types/better-sqlite3": "^7.6.13",
+        "@types/node": "^22.20.1",
+        "@types/uuid": "^9.0.0",
+        "@types/ws": "^8.18.1",
+        "ajv": "^8.20.0"
+    },
+    "type": "module",
+    "main": "src/index.ts",
+    "scripts": {
+        "cli": "node src/cli.ts",
+        "lint": "npm run lint:architecture && npm run lint:openapi",
+        "lint:architecture": "node script/linter.ts",
+        "lint:openapi": "redocly lint openapi/openapi.yaml",
+        "lint:backend": "npm run lint",
+        "scaffold:file": "node script/scaffold-file.ts",
+        "scaffold:module": "node script/scaffold-module.ts",
+        "typecheck": "tsc --project tsconfig.json",
+        "test": "node --test test/*.test.ts test/**/*.test.ts"
+    }
 }

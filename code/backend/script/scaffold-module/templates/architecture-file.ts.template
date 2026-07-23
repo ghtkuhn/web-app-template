@@ -1,0 +1,4 @@
+import { {{BASE_CLASS}} } from '{{IMPORT_DEPTH}}/base/{{BASE_FILE}}';
+
+/** Architecture-safe {{DESCRIPTION}} scaffold. */
+export {{ABSTRACT}}class {{CLASS_NAME}} extends {{BASE_CLASS}}{{BASE_TYPE_ARGUMENTS}} {}

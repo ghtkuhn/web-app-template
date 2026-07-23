@@ -1,0 +1,2 @@
+/** In-process operations exposed by the {{MODULE_NAME}} module. */
+export type {{PASCAL_NAME}}NodeRequest = never;

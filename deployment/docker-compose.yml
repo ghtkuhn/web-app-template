@@ -1,0 +1,39 @@
+services:
+    backend:
+        image: ${BACKEND_IMAGE:-web-app-backend:local}
+        build:
+            context: ..
+            dockerfile: deployment/docker/backend.Dockerfile
+        environment:
+            NODE_ENV: ${DEPLOY_NODE_ENV:-development}
+            APP_SECRET: ${APP_SECRET:?APP_SECRET is required}
+            HTTP_ENABLED: "true"
+            PORT: "3000"
+            WEBSOCKET_ENABLED: "true"
+            WEBSOCKET_PORT: "3001"
+            DB_TYPE: sqlite
+            DB_SQLITE_PATH: ${DEPLOY_SQLITE_PATH:-/var/lib/web-app/backend.sqlite}
+            DB_BACKUP_RETENTION: ${DB_BACKUP_RETENTION:-10}
+            DEPLOYMENT_RELEASE_ID: ${DEPLOYMENT_RELEASE_ID:-development}
+            ACTIVE_MODULES: ${DEPLOY_ACTIVE_MODULES:-health}
+            ALLOWED_ORIGINS: ${DEPLOY_ALLOWED_ORIGINS:-http://localhost:8080}
+        ports:
+            - "${BACKEND_HTTP_PORT:-3000}:3000"
+            - "${BACKEND_WEBSOCKET_PORT:-3001}:3001"
+        volumes:
+            - backend-data:/var/lib/web-app
+
+    frontend:
+        image: ${FRONTEND_IMAGE:-web-app-frontend:local}
+        build:
+            context: ..
+            dockerfile: deployment/docker/frontend.Dockerfile
+        environment:
+            FRONTEND_API_BASE_URL: ${FRONTEND_API_BASE_URL:-http://localhost:3000}
+            FRONTEND_WEBSOCKET_URL: ${FRONTEND_WEBSOCKET_URL:-ws://localhost:3001}
+            FRONTEND_PRESENTATION_LOCK: ${FRONTEND_PRESENTATION_LOCK:-null}
+        ports:
+            - "${FRONTEND_HTTP_PORT:-8080}:80"
+
+volumes:
+    backend-data:

@@ -12,8 +12,19 @@ lerna-debug.log*
 
 # Local agent and code-analysis state
 .code-graph/
+.fallow/
 .smallcode/
 .memory/
+CODEX-INBOX.md
+data/ai/MEMORY.md
+data/ai/kanban/todo/
+data/ai/kanban/done/
+
+# Local project details and credentials
+project.json
+
+# Local database files
+data/sqlite/
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
@@ -30,6 +41,30 @@ lib-cov
 # Coverage directory used by tools like istanbul
 coverage
 *.lcov
+playwright-report/
+test-results/
+
+# Deployment-local profiles and Compose overrides
+deployment/profiles/*.local.json
+deployment/profiles/private/
+deployment/docker-compose.override.yml
+deployment/docker-compose.*.local.yml
+
+# Generated deployment artifacts and rendered runtime configuration
+deployment/releases/
+deployment/artifacts/
+deployment/runtime/
+deployment/tmp/
+deployment/**/backend.env
+deployment/**/runtime-config.js
+deployment/**/*.sha256
+
+# Deployment credentials and local diagnostic output
+deployment/secrets/
+deployment/keys/
+deployment/logs/
+deployment/**/*.key
+deployment/**/*.pem
 
 # nyc test coverage
 .nyc_output

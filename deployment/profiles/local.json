@@ -1,0 +1,34 @@
+{
+    "schemaVersion": 1,
+    "name": "local",
+    "environment": "local",
+    "requiredSecrets": ["APP_SECRET"],
+    "backend": {
+        "enabled": true,
+        "target": {
+            "driver": "docker",
+            "image": "web-app-backend:local",
+            "hostPort": 3000
+        },
+        "publicHttpUrl": "http://localhost:3000",
+        "publicWebSocketUrl": "ws://localhost:3001",
+        "allowedOrigins": ["http://localhost:8080"],
+        "activeModules": ["health"],
+        "sqlitePath": "/var/lib/web-app/backend.sqlite",
+        "databaseBackupRetention": 10
+    },
+    "frontend": {
+        "enabled": true,
+        "target": {
+            "driver": "docker",
+            "image": "web-app-frontend:local",
+            "hostPort": 8080
+        },
+        "publicUrl": "http://localhost:8080",
+        "runtime": {
+            "apiBaseUrl": "http://localhost:3000",
+            "webSocketUrl": "ws://localhost:3001",
+            "presentationLock": null
+        }
+    }
+}

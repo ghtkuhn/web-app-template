@@ -1,7 +1,7 @@
 import { BaseObject } from './base.object.ts';
-import { IBaseStore } from './interfaces.ts';
-import { Kysely } from 'kysely';
-import { Database } from '../database.ts';
+import type { IBaseStore } from './interfaces.ts';
+import type { Kysely } from 'kysely';
+import type { Database } from '../database.ts';
 
 /**
  * BaseStore provides a generic interface for data persistence and retrieval.
@@ -11,22 +11,24 @@ import { Database } from '../database.ts';
  * - Map database rows to Domain Objects.
  *
  * IMPORT RULES:
- * - ALLOWED: Database drivers, Domain Objects, Base classes.
- * - FORBIDDEN: Services, Controllers, DTOs (Stores only care about the DB and Domain Objects).
+ * - ALLOWED: The provided Kysely database abstraction, Domain Objects, Base classes.
+ * - FORBIDDEN: Database drivers, connection creation, DTOs, Services, Controllers, Handlers.
  *
  * CONSTRAINTS:
  * - Must NOT contain business logic or validation rules beyond data integrity.
+ * - Must NOT create or own a database connection.
+ * - Must receive the application-owned client through constructor injection.
  */
 export abstract class BaseStore<T extends BaseObject> implements IBaseStore<T> {
-  protected db: Kysely<Database>;
+    protected readonly db: Kysely<Database>;
 
-  constructor() {
-    // In a real implementation, the DB instance would be injected via a DI container
-    // or retrieved from DatabaseManager. For simplicity in this base class, we assume it's handled by the subclass.
-  }
+    /** Receives the application-owned database client. */
+    constructor(database: Kysely<Database>) {
+        this.db = database;
+    }
 
-  abstract save(object: T): Promise<T>;
-  abstract findById(id: string): Promise<T | null>;
-  abstract findAll(): Promise<T[]>;
-  abstract delete(id: string): Promise<void>;
+    abstract save(object: T): Promise<T>;
+    abstract findById(id: string): Promise<T | null>;
+    abstract findAll(): Promise<T[]>;
+    abstract delete(id: string): Promise<void>;
 }

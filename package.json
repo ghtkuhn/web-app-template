@@ -14,6 +14,9 @@
   "license": "ISC",
   "author": "",
   "type": "module",
+  "engines": {
+    "node": ">=22.23.1 <23"
+  },
   "workspaces": [
     "code/backend",
     "code/frontend/web"
@@ -21,11 +24,30 @@
   "scripts": {
     "lint": "npm run lint --workspaces --if-present",
     "lint:backend": "npm run lint --workspace @app/backend",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "generate:api": "npm run generate:api --workspace @app/web",
+    "check:api": "npm run check:api --workspace @app/web",
+    "scaffold:file": "node code/backend/script/scaffold-file.ts",
+    "scaffold:module": "node code/backend/script/scaffold-module.ts",
+    "scaffold:route": "npm run scaffold:route --workspace @app/web --",
+    "scaffold:component": "npm run scaffold:component --workspace @app/web --",
+    "scaffold:feature": "npm run scaffold:feature --workspace @app/web --",
+    "deployment:validate": "node script/deployment/deployment.cli.ts validate",
+    "deployment:scaffold": "node script/deployment/deployment.cli.ts scaffold",
+    "deployment:build": "node script/deployment/deployment.cli.ts build",
+    "deployment:deploy": "node script/deployment/deployment.cli.ts deploy",
+    "deployment:status": "node script/deployment/deployment.cli.ts status",
+    "deployment:rollback": "node script/deployment/deployment.cli.ts rollback",
+    "deployment:stop": "node script/deployment/deployment.cli.ts stop",
+    "deployment:database:list": "node script/deployment/deployment.cli.ts database:list",
+    "deployment:database:restore": "node script/deployment/deployment.cli.ts database:restore",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "tsc --project tsconfig.deployment.json && npm run typecheck --workspaces --if-present",
     "test": "npm test --workspaces --if-present",
-    "verify": "npm run lint && npm run typecheck && npm test"
+    "audit": "node script/fallow.ts",
+    "verify": "npm run deployment:validate -- --all && npm run check:api && npm run lint && npm run typecheck && npm test && npm run build && npm run test:e2e --workspace @app/web && npm run audit"
   },
   "devDependencies": {
+    "ajv": "^8.20.0",
     "typescript": "^5.0.0"
   }
 }
