@@ -11,6 +11,13 @@ export class FixtureProject {
         this.root = fs.mkdtempSync(path.join(os.tmpdir(), 'backend-linter-'));
     }
 
+    /** Creates a fixture directory relative to the project root. */
+    public mkdir(relativePath: string): string {
+        const directoryPath = path.join(this.root, relativePath);
+        fs.mkdirSync(directoryPath, { recursive: true });
+        return directoryPath;
+    }
+
     /** Writes a UTF-8 fixture file relative to the project root. */
     public write(relativePath: string, source: string): string {
         const filePath = path.join(this.root, relativePath);

@@ -33,6 +33,11 @@ export class PathResolver {
             .join('/');
     }
 
+    /** Returns the forbidden plural module directory beside src/module/. */
+    public pluralModuleRoot(): string {
+        return path.join(this.backendSourceRoot, 'modules');
+    }
+
     /** Resolves a relative source dependency; package dependencies return null. */
     public resolveDependency(
         sourceFile: string,

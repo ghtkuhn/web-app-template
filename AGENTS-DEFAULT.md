@@ -76,6 +76,7 @@
 ## Backend Programming Rules (Strict Layered Architecture)
 
 * Domain modules live in `code/backend/src/module/<name>/`.
+* Backend modules must use the singular `module` directory. The plural path `code/backend/src/modules/` is forbidden.
 * A module may contain the layers it actually needs: `api`, `controller`, `service`, `store`, `object`, and `dto`.
 * The strict dependency flow is **API Handler** → **Controller** → **Service** → **Store** → **Database**.
 * Interfaces, type aliases, and constants must be declared in the module-level `interfaces.ts`, `types.ts`, and `constants.ts` files.

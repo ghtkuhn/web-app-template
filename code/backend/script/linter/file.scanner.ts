@@ -3,6 +3,14 @@ import path from 'node:path';
 
 /** Provides deterministic recursive TypeScript source discovery. */
 export class FileScanner {
+    /** Returns whether a directory exists at the exact path. */
+    public directoryExists(directory: string): boolean {
+        return (
+            fs.existsSync(directory) &&
+            fs.statSync(directory).isDirectory()
+        );
+    }
+
     /** Returns all TypeScript files below a directory in lexical order. */
     public listTypeScriptFiles(directory: string): string[] {
         if (!fs.existsSync(directory)) {

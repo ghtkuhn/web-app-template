@@ -15,6 +15,43 @@ test('real backend satisfies all architecture rules', () => {
     assert.ok(result.filesChecked > 0);
 });
 
+test('backend modules must use the singular module directory', () => {
+    const fixture = new FixtureProject();
+    try {
+        fixture.mkdir('code/backend/src/modules');
+
+        const emptyDirectoryIssues = new BackendLinter({
+            projectRoot: fixture.root,
+        }).run().issues;
+        assert.deepEqual(emptyDirectoryIssues, [
+            {
+                ruleId: 'MODULE_DIRECTORY_NAME',
+                severity: 'error',
+                file: 'code/backend/src/modules',
+                message:
+                    'Backend modules must be placed in ' +
+                    'code/backend/src/module/<name>/; ' +
+                    'code/backend/src/modules/ is forbidden.',
+            },
+        ]);
+
+        fixture.write(
+            'code/backend/src/modules/example/index.ts',
+            'export class IncorrectModule {}',
+        );
+
+        const populatedDirectoryIssues = new BackendLinter({
+            projectRoot: fixture.root,
+        }).run().issues;
+        assert.deepEqual(
+            populatedDirectoryIssues.map((issue) => issue.ruleId),
+            ['MODULE_DIRECTORY_NAME'],
+        );
+    } finally {
+        fixture.dispose();
+    }
+});
+
 test('DTO classes must extend BaseDTO or EntityDTO', () => {
     const fixture = new FixtureProject();
     try {

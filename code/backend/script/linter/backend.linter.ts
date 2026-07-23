@@ -34,6 +34,7 @@ export class BackendLinter {
             this.paths.sourceRoot(),
         );
         const issues = [
+            ...this.moduleDirectoryIssues(),
             ...this.moduleRootFileIssues(),
             ...this.auxiliaryFileTypeIssues(),
         ];
@@ -78,6 +79,26 @@ export class BackendLinter {
             });
             return null;
         }
+    }
+
+    /** Rejects the plural source directory even when it contains no files. */
+    private moduleDirectoryIssues(): LintIssue[] {
+        const pluralModuleRoot = this.paths.pluralModuleRoot();
+        if (!this.scanner.directoryExists(pluralModuleRoot)) {
+            return [];
+        }
+
+        return [
+            {
+                ruleId: 'MODULE_DIRECTORY_NAME',
+                severity: 'error',
+                file: this.paths.relative(pluralModuleRoot),
+                message:
+                    'Backend modules must be placed in ' +
+                    'code/backend/src/module/<name>/; ' +
+                    'code/backend/src/modules/ is forbidden.',
+            },
+        ];
     }
 
     /** Rejects files of every type placed directly in the module root. */
