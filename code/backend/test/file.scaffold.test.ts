@@ -104,9 +104,35 @@ class FileScaffoldFixture {
             '../script/scaffold-module/templates/architecture-file.ts.template',
         );
         this.write(
+            'openapi/openapi.yaml',
+            'openapi: 3.1.0\ninfo:\n    title: Fixture\n    version: 1.0.0\npaths: {}\n',
+        );
+        this.write(
+            'package.json',
+            '{"dependencies":{},"devDependencies":{}}',
+        );
+        this.write(
             'src/module/example/index.ts',
             `import { BaseModule } from '../../base/base.module.ts';
-             export class ExampleModule extends BaseModule<never, never> {}`,
+             import type { NamedModuleDefinition } from '../../base/interfaces.ts';
+             import type { ExampleModulePort } from './interfaces.ts';
+             export class ExampleModule extends BaseModule<never, never> implements ExampleModulePort {
+                 public static readonly definition = {
+                     name: 'example',
+                     dependencies: [],
+                     create: () => new ExampleModule(),
+                 } satisfies NamedModuleDefinition;
+             }
+             export type { ExampleModulePort } from './interfaces.ts';`,
+        );
+        this.write(
+            'src/module/example/interfaces.ts',
+            'export interface ExampleModulePort {}',
+        );
+        this.write(
+            'src/module.catalog.ts',
+            `import { ExampleModule } from './module/example/index.ts';
+             export const moduleDefinitions = [ExampleModule.definition];`,
         );
         this.write(
             'src/module/example/api/owner.http.handler.ts',

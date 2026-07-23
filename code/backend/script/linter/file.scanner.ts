@@ -45,6 +45,24 @@ export class FileScanner {
             .sort((left, right) => left.localeCompare(right));
     }
 
+    /** Returns all directories located directly below a directory. */
+    // fallow-ignore-next-line code-duplication -- File and directory queries deliberately expose symmetric APIs.
+    public listDirectDirectories(directory: string): string[] {
+        if (!fs.existsSync(directory)) {
+            return [];
+        }
+        return fs
+            .readdirSync(directory, { withFileTypes: true })
+            .filter((entry) => entry.isDirectory())
+            .map((entry) => path.join(directory, entry.name))
+            .sort((left, right) => left.localeCompare(right));
+    }
+
+    /** Returns whether a directory has no entries. */
+    public isEmptyDirectory(directory: string): boolean {
+        return fs.existsSync(directory) && fs.readdirSync(directory).length === 0;
+    }
+
     /** Recursively collects TypeScript files. */
     private collect(
         directory: string,

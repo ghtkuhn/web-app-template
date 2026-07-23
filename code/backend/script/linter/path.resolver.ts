@@ -145,6 +145,26 @@ export class PathResolver {
         return this.backendSourceRoot;
     }
 
+    /** Returns the backend workspace package manifest. */
+    public packageManifest(): string {
+        return path.join(this.projectRoot, 'code/backend/package.json');
+    }
+
+    /** Returns the checked-in OpenAPI document. */
+    public openApiDocument(): string {
+        return path.join(this.projectRoot, 'code/backend/openapi/openapi.yaml');
+    }
+
+    /** Returns the backend test root. */
+    public testRoot(): string {
+        return path.join(this.projectRoot, 'code/backend/test');
+    }
+
+    /** Returns the generated module catalog. */
+    public moduleCatalog(): string {
+        return path.join(this.backendSourceRoot, 'module.catalog.ts');
+    }
+
     /** Returns the domain-module root. */
     public moduleRoot(): string {
         return this.modulesRoot;

@@ -104,6 +104,14 @@ class ScaffoldFixture {
             '../script/scaffold-module/templates',
         );
         this.write(
+            'code/backend/openapi/openapi.yaml',
+            'openapi: 3.1.0\ninfo:\n    title: Fixture\n    version: 1.0.0\npaths: {}\n',
+        );
+        this.write(
+            'code/backend/package.json',
+            '{"dependencies":{},"devDependencies":{}}',
+        );
+        this.write(
             'code/backend/src/config.ts',
             `export const config = {
     untouched: true,
@@ -115,7 +123,19 @@ class ScaffoldFixture {
         );
         this.write(
             'code/backend/src/module/health/index.ts',
-            'export class HealthModule extends BaseModule {}\n',
+            `export class HealthModule extends BaseModule implements HealthModulePort {
+    public static readonly definition = {
+        name: 'health',
+        dependencies: [],
+        create: () => new HealthModule(),
+    } satisfies NamedModuleDefinition;
+}
+export type { HealthModulePort } from './interfaces.ts';
+`,
+        );
+        this.write(
+            'code/backend/src/module/health/interfaces.ts',
+            'export interface HealthModulePort {}\n',
         );
         this.write(
             'code/backend/src/module.catalog.ts',

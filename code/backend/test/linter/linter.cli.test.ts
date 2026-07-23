@@ -19,7 +19,10 @@ test('linter CLI returns zero and writes a success summary', () => {
     try {
         fixture.write(
             'code/backend/src/module/example/index.ts',
-            'export class ExampleModule extends BaseModule {}',
+            `export class ExampleModule extends BaseModule implements ExampleModulePort {
+                public static readonly definition = {} satisfies NamedModuleDefinition;
+            }
+            export type { ExampleModulePort } from './interfaces.ts';`,
         );
         const exitCode = new LinterCli(fixture.root, stdout, stderr).run();
         assert.equal(exitCode, 0);
@@ -70,7 +73,7 @@ test('linter CLI returns two for parser failures', () => {
             stderr,
         ).run();
         assert.equal(exitCode, 2);
-        assert.match(stderr.value, /^FATAL \[SOURCE_PARSE_ERROR\]/);
+        assert.match(stderr.value, /FATAL \[SOURCE_PARSE_ERROR\]/);
     } finally {
         fixture.dispose();
     }

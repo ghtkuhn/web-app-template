@@ -4,6 +4,7 @@ import type {
 } from '../../../base/interfaces.ts';
 import { WebSocketHandler } from '../../../base/websocket.handler.ts';
 import { HealthController } from '../controller/health.controller.ts';
+import type { HealthStatusDTO } from '../dto/health-status.dto.ts';
 
 /** Adapts the health `status` WebSocket event to the health controller. */
 export class HealthWebSocketHandler extends WebSocketHandler {
@@ -18,7 +19,7 @@ export class HealthWebSocketHandler extends WebSocketHandler {
     /** Handles the supported health event. */
     protected async processRequest(
         input: WebSocketHandlerInput,
-    ): Promise<HandlerResult> {
+    ): Promise<HandlerResult<HealthStatusDTO>> {
         if (input.event !== 'status') {
             return { success: false, error: 'Unknown health event' };
         }

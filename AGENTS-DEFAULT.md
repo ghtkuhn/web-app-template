@@ -70,6 +70,7 @@
   - Exit codes 0 and 1 mean success (1 = findings found). Only exit code 2 is an actual error.
   - If new findings are introduced by your changes, address them before completing the task.
   - Pre-existing inherited findings do not block the change (`fallow audit` excludes them by default).
+  - Use `npm run audit` during normal work. Its console output is bounded for agent context; inspect the complete ignored report at `.fallow/audit.json` only when details are required.
 * Run `npx fallow recommend --format json` on first use to detect the stack and propose `.fallowrc.json`. Save it if appropriate.
 
 
@@ -81,6 +82,8 @@
 * The strict dependency flow is **API Handler** → **Controller** → **Service** → **Store** → **Database**.
 * Interfaces, type aliases, and constants must be declared in the module-level `interfaces.ts`, `types.ts`, and `constants.ts` files.
 * Public module contracts must be exported exclusively through `code/backend/src/module/<name>/index.ts`.
+* Module roots may contain only `index.ts`, `interfaces.ts`, `types.ts`, `constants.ts`, and the supported layer directories. Loose implementation files, empty layers, unknown directories, and non-TypeScript artifacts are forbidden.
+* Local TypeScript imports and re-exports must include the `.ts` extension.
 
 ### Layer Responsibilities and Constraints
 
@@ -90,7 +93,9 @@
    - Must not import Services or Stores directly.
 2. **Controllers (`controller/`)**
    - Must extend `BaseController`.
-   - Coordinate application behavior through Services and return `HandlerResult`.
+   - Coordinate application behavior through Services and return `HandlerResult<DTO>`.
+   - Must remain transport-neutral and must not accept request/response objects or read transport bodies.
+   - Must not expose raw exception messages or translate arbitrary exceptions into client errors.
    - Must not import Handlers, Stores, or Domain Objects.
    - Object/DTO mapping belongs in Services.
 3. **Services (`service/`)**
@@ -103,9 +108,11 @@
    - Encapsulate persistence operations and map database data to Domain Objects.
    - Must not import DTOs, Services, Controllers, or Handlers.
    - May use the provided database abstraction but must not import database drivers or create connections.
+   - Must use typed Store contracts without `any` and explicitly map database rows to Domain Objects.
 5. **Objects (`object/`)**
    - Must extend `BaseObject`.
    - Represent persistent domain state and invariants.
+   - Sensitive fields must be explicitly excluded from serialization.
 6. **DTOs (`dto/`)**
    - Must extend `BaseDTO` or `EntityDTO`.
    - Define transported application data without depending on Handlers, Controllers, Services, Stores, or database drivers.
@@ -127,6 +134,7 @@
 * Consumers may import only the public contract exported by `code/backend/src/module/<name>/index.ts`.
 * Required module ports are supplied through constructor injection by `ModuleRegistry`.
 * Each module owns its durable registry metadata in the static `definition` exposed by its public module class.
+* Each module entry point must publicly re-export its typed module port and expose a typed `ModuleDefinition`; every module must be present in the generated catalog.
 * Application infrastructure follows `Application → DatabaseManager → ModuleRegistry → Module Factory → Store`; it must not be modeled as a domain-module dependency.
 * In-process communication uses the injected module port and typed `dispatch('node', request)` calls.
 * Node requests use a discriminated `operation` field and a `NodeRequestContext` containing the required `caller` and optional `correlationId`.
@@ -140,6 +148,7 @@
 * Composition files may import modules only through their public `index.ts`.
 * The generated `module.catalog.ts` only aggregates module-owned definitions and must not declare dependencies or factories itself.
 * Domain modules must not import Registry or process entry-point files.
+* Domain modules must not read `process.env` or define secret fallbacks; validated runtime configuration is owned by `code/backend/src/config.ts`.
 * Database drivers and connection creation are allowed only in `code/backend/src/base/base.database.ts`.
 * Stores receive the shared database client through constructor injection, use the provided abstraction, and must not import `DatabaseManager` or create their own connections.
 * `code/backend/src/database.ts` defines the complete current Kysely database schema used for compile-time typing.
@@ -155,6 +164,7 @@
 
 * `code/backend/openapi/openapi.yaml` is the central OpenAPI 3.1 contract for the public HTTP API.
 * Every new or changed HTTP endpoint must update the OpenAPI document and include a matching contract test.
+* Concrete HTTP handlers must declare literal `/api` routes that are covered by the matching OpenAPI method and backend tests.
 * DTOs and OpenAPI schemas must describe the same public JSON representation without making database row types public.
 * Node, CLI, and WebSocket contracts must not be documented as OpenAPI operations.
 * OpenAPI linting and HTTP contract tests must pass through the root `npm run verify` command.
@@ -165,6 +175,8 @@
 * You must create new architecture class files in existing modules with `npm run scaffold:file -- <module> <type> <name> [--owner <owner>]` instead of assembling their boilerplate manually.
 * Free function declarations are forbidden in regular module files.
 * Regular module and auxiliary files must not declare more than one class; auxiliary files must declare exactly one.
+* Architecture filenames and class names must follow their scaffolded layer conventions.
+* Runtime packages imported by backend domain code must be declared in `code/backend/package.json` dependencies.
 * Module files must preserve four-space indentation and include appropriate code comments and JSDoc.
 * `npm run verify` must pass before backend work is declared complete.
 

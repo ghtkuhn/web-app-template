@@ -1,4 +1,7 @@
 import { CompositionRuleSet } from './composition.rule-set.ts';
+import { ContractRuleSet } from './contract.rule-set.ts';
+import { CoverageRuleSet } from './coverage.rule-set.ts';
+import { DependencyRuleSet } from './dependency.rule-set.ts';
 import { DomainRuleSet } from './domain.rule-set.ts';
 import { FileScanner } from './file.scanner.ts';
 import { InfrastructureRuleSet } from './infrastructure.rule-set.ts';
@@ -9,6 +12,9 @@ import type {
     SourceAnalysis,
 } from './interfaces.ts';
 import { PathResolver } from './path.resolver.ts';
+import { PersistenceRuleSet } from './persistence.rule-set.ts';
+import { ProjectRuleSet } from './project.rule-set.ts';
+import { SecurityRuleSet } from './security.rule-set.ts';
 import { SourceAnalyzer } from './source.analyzer.ts';
 
 /** Coordinates source discovery, analysis, and architecture rule evaluation. */
@@ -19,6 +25,12 @@ export class BackendLinter {
     private readonly domainRules: DomainRuleSet;
     private readonly compositionRules: CompositionRuleSet;
     private readonly infrastructureRules: InfrastructureRuleSet;
+    private readonly projectRules: ProjectRuleSet;
+    private readonly contractRules: ContractRuleSet;
+    private readonly persistenceRules: PersistenceRuleSet;
+    private readonly securityRules: SecurityRuleSet;
+    private readonly dependencyRules: DependencyRuleSet;
+    private readonly coverageRules: CoverageRuleSet;
 
     /** Creates a reusable linter core without output side effects. */
     constructor(config: BackendLinterConfig) {
@@ -26,6 +38,12 @@ export class BackendLinter {
         this.domainRules = new DomainRuleSet(this.paths);
         this.compositionRules = new CompositionRuleSet(this.paths);
         this.infrastructureRules = new InfrastructureRuleSet(this.paths);
+        this.projectRules = new ProjectRuleSet(this.paths);
+        this.contractRules = new ContractRuleSet(this.paths);
+        this.persistenceRules = new PersistenceRuleSet(this.paths);
+        this.securityRules = new SecurityRuleSet(this.paths);
+        this.dependencyRules = new DependencyRuleSet(this.paths);
+        this.coverageRules = new CoverageRuleSet(this.paths);
     }
 
     /** Analyzes the backend and returns deterministically sorted findings. */
@@ -37,6 +55,10 @@ export class BackendLinter {
             ...this.moduleDirectoryIssues(),
             ...this.moduleRootFileIssues(),
             ...this.auxiliaryFileTypeIssues(),
+            ...this.projectRules.evaluateStructure(),
+            ...this.persistenceRules.evaluateDatabaseSchema(),
+            ...this.dependencyRules.configurationIssues(),
+            ...this.coverageRules.configurationIssues(),
         ];
 
         for (const filePath of sourceFiles) {
@@ -48,6 +70,12 @@ export class BackendLinter {
             issues.push(...this.infrastructureRules.evaluate(analysis));
             if (this.paths.moduleName(filePath)) {
                 issues.push(...this.domainRules.evaluate(analysis));
+                issues.push(...this.projectRules.evaluateSource(analysis));
+                issues.push(...this.contractRules.evaluate(analysis));
+                issues.push(...this.persistenceRules.evaluate(analysis));
+                issues.push(...this.securityRules.evaluate(analysis));
+                issues.push(...this.dependencyRules.evaluate(analysis));
+                issues.push(...this.coverageRules.evaluate(analysis));
             }
             if (this.paths.isCompositionFile(filePath)) {
                 issues.push(...this.compositionRules.evaluate(analysis));

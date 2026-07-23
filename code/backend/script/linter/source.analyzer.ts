@@ -1,6 +1,10 @@
 import fs from 'node:fs';
 import { parse } from '@babel/parser';
-import type { SourceAnalysis, SourceDependency } from './interfaces.ts';
+import type {
+    ClassAnalysis,
+    SourceAnalysis,
+    SourceDependency,
+} from './interfaces.ts';
 
 type AstNode = {
     type?: string;
@@ -8,6 +12,17 @@ type AstNode = {
     declaration?: AstNode | null;
     declarations?: Array<{ id?: { type?: string } }>;
     superClass?: AstNode | null;
+    implements?: AstNode[];
+    body?: { body?: AstNode[] };
+    params?: AstNode[];
+    returnType?: AstNode;
+    typeAnnotation?: AstNode;
+    expression?: AstNode;
+    argument?: AstNode;
+    id?: AstNode;
+    key?: AstNode;
+    importKind?: string;
+    exportKind?: string;
     name?: string;
     object?: AstNode;
     property?: AstNode;
@@ -34,6 +49,7 @@ export class SourceAnalyzer {
             this.collectRuntimeDependencies(statement, analysis.dependencies);
             this.collectMethodCalls(statement, analysis.methodCalls);
         }
+        this.collectFacts(ast.program.body, analysis);
         return analysis;
     }
 
@@ -54,6 +70,7 @@ export class SourceAnalyzer {
             dependencies.push({
                 source: astNode.source.value,
                 kind: 'dynamic-import',
+                typeOnly: false,
             });
         }
         if (astNode.type === 'CallExpression') {
@@ -68,9 +85,17 @@ export class SourceAnalyzer {
                 astNode.callee?.type === 'Identifier' &&
                 astNode.callee.name === 'require'
             ) {
-                dependencies.push({ source, kind: 'require' });
+                dependencies.push({
+                    source,
+                    kind: 'require',
+                    typeOnly: false,
+                });
             } else if (source && astNode.callee?.type === 'Import') {
-                dependencies.push({ source, kind: 'dynamic-import' });
+                dependencies.push({
+                    source,
+                    kind: 'dynamic-import',
+                    typeOnly: false,
+                });
             }
         }
 
@@ -99,7 +124,20 @@ export class SourceAnalyzer {
             constantCount: 0,
             functionCount: 0,
             classBaseNames: [],
+            classes: [],
             methodCalls: [],
+            constructorCalls: [],
+            parameterNames: [],
+            returnTypeNames: [],
+            anyTypeCount: 0,
+            catchCount: 0,
+            objectReturnCount: 0,
+            environmentAccessCount: 0,
+            requestBodyAccessCount: 0,
+            unknownCastCount: 0,
+            throwMessageAccessCount: 0,
+            validationCallOffsets: [],
+            persistenceCallOffsets: [],
         };
     }
 
@@ -143,9 +181,11 @@ export class SourceAnalyzer {
                 analysis.functionCount += 1;
                 break;
             case 'ClassDeclaration':
-                analysis.classBaseNames.push(
-                    this.expressionName(node.superClass ?? null),
-                );
+                {
+                    const classAnalysis = this.classAnalysis(node);
+                    analysis.classBaseNames.push(classAnalysis.baseName);
+                    analysis.classes.push(classAnalysis);
+                }
                 break;
         }
     }
@@ -157,7 +197,13 @@ export class SourceAnalyzer {
         dependencies: SourceDependency[],
     ): void {
         if (typeof node.source?.value === 'string') {
-            dependencies.push({ source: node.source.value, kind });
+            dependencies.push({
+                source: node.source.value,
+                kind,
+                typeOnly:
+                    node.importKind === 'type' ||
+                    node.exportKind === 'type',
+            });
         }
     }
 
@@ -208,5 +254,160 @@ export class SourceAnalyzer {
                 this.collectMethodCalls(value, methodCalls);
             }
         }
+    }
+
+    /** Extracts method signatures and security-relevant syntax recursively. */
+    // fallow-ignore-next-line complexity -- Exhaustively dispatches tested Babel node variants.
+    private collectFacts(node: unknown, analysis: SourceAnalysis): void {
+        if (!node || typeof node !== 'object') {
+            return;
+        }
+        if (Array.isArray(node)) {
+            for (const child of node) {
+                this.collectFacts(child, analysis);
+            }
+            return;
+        }
+
+        const astNode = node as AstNode;
+        if (astNode.type === 'TSAnyKeyword') {
+            analysis.anyTypeCount += 1;
+        }
+        if (astNode.type === 'CatchClause') {
+            analysis.catchCount += 1;
+        }
+        if (
+            astNode.type === 'ReturnStatement' &&
+            astNode.argument?.type === 'ObjectExpression'
+        ) {
+            analysis.objectReturnCount += 1;
+        }
+        if (
+            astNode.type === 'MemberExpression' &&
+            this.expressionName(astNode.object ?? null) === 'process' &&
+            this.expressionName(astNode.property ?? null) === 'env'
+        ) {
+            analysis.environmentAccessCount += 1;
+        }
+        if (
+            astNode.type === 'MemberExpression' &&
+            this.expressionName(astNode.property ?? null) === 'body'
+        ) {
+            analysis.requestBodyAccessCount += 1;
+        }
+        if (
+            astNode.type === 'MemberExpression' &&
+            this.expressionName(astNode.property ?? null) === 'message' &&
+            astNode.object?.type === 'Identifier'
+        ) {
+            analysis.throwMessageAccessCount += 1;
+        }
+        if (
+            astNode.type === 'TSAsExpression' &&
+            astNode.typeAnnotation?.type === 'TSUnknownKeyword'
+        ) {
+            analysis.unknownCastCount += 1;
+        }
+        if (astNode.type === 'NewExpression') {
+            analysis.constructorCalls.push({
+                className: this.expressionName(astNode.callee ?? null),
+                firstArgumentName: this.expressionName(
+                    astNode.arguments?.[0] ?? null,
+                ),
+            });
+        }
+        if (
+            ['ClassMethod', 'ClassPrivateMethod', 'TSDeclareMethod'].includes(
+                astNode.type ?? '',
+            )
+        ) {
+            for (const parameter of astNode.params ?? []) {
+                const parameterName = this.expressionName(parameter);
+                if (parameterName) {
+                    analysis.parameterNames.push(parameterName);
+                }
+            }
+            const returnTypeName = this.typeName(astNode.returnType ?? null);
+            if (returnTypeName) {
+                analysis.returnTypeNames.push(returnTypeName);
+            }
+        }
+        if (astNode.type === 'CallExpression') {
+            const methodName =
+                astNode.callee?.type === 'MemberExpression'
+                    ? this.expressionName(astNode.callee.property ?? null)
+                    : null;
+            const offset =
+                typeof (astNode as { start?: unknown }).start === 'number'
+                    ? ((astNode as { start: number }).start)
+                    : 0;
+            if (methodName === 'validate') {
+                analysis.validationCallOffsets.push(offset);
+            }
+            if (
+                methodName &&
+                ['save', 'create', 'insert', 'createUser'].includes(methodName)
+            ) {
+                analysis.persistenceCallOffsets.push(offset);
+            }
+        }
+
+        for (const [key, value] of Object.entries(astNode)) {
+            if (['loc', 'start', 'end'].includes(key)) {
+                continue;
+            }
+            this.collectFacts(value, analysis);
+        }
+    }
+
+    /** Describes one top-level class without interpreting its implementation. */
+    // fallow-ignore-next-line complexity -- Declarative extraction covers independent class-member kinds.
+    private classAnalysis(node: AstNode): ClassAnalysis {
+        const members = node.body?.body ?? [];
+        return {
+            name: this.expressionName(node.id ?? null),
+            baseName: this.expressionName(node.superClass ?? null),
+            implementedNames: (node.implements ?? [])
+                .map((item) =>
+                    this.expressionName(
+                        (item.expression as AstNode | undefined) ?? item,
+                    ),
+                )
+                .filter((name): name is string => Boolean(name)),
+            methodNames: this.memberNames(members, [
+                'ClassMethod',
+                'ClassPrivateMethod',
+                'TSDeclareMethod',
+            ]),
+            propertyNames: this.memberNames(members, [
+                'ClassProperty',
+                'ClassPrivateProperty',
+            ]),
+        };
+    }
+
+    /** Extracts named class members for an explicit set of Babel node kinds. */
+    private memberNames(members: AstNode[], types: string[]): string[] {
+        return members
+            .filter((member) => types.includes(member.type ?? ''))
+            .map((member) => this.expressionName(member.key ?? null))
+            .filter((name): name is string => Boolean(name));
+    }
+
+    /** Returns the primary identifier used by a TypeScript type annotation. */
+    // fallow-ignore-next-line complexity -- Small recursive TypeScript-node normalizer.
+    private typeName(node: AstNode | null): string | null {
+        if (!node) {
+            return null;
+        }
+        if (node.type === 'TSTypeAnnotation') {
+            return this.typeName(node.typeAnnotation ?? null);
+        }
+        if (node.type === 'TSTypeReference') {
+            return this.expressionName(
+                (node.typeName as AstNode | undefined) ?? null,
+            );
+        }
+        return node.type ?? null;
     }
 }

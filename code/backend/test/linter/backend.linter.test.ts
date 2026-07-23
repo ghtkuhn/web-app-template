@@ -221,6 +221,7 @@ test('regular module files reject misplaced declarations and structure', () => {
             .run()
             .issues.map((issue) => issue.ruleId);
         assert.deepEqual(ruleIds, [
+            'MODULE_DIRECTORY_UNKNOWN',
             'DECLARATION_CONSTANT_LOCATION',
             'DECLARATION_INTERFACE_LOCATION',
             'DECLARATION_TYPE_LOCATION',
@@ -350,9 +351,13 @@ test('module root files and parser failures produce stable findings', () => {
             .issues;
         assert.deepEqual(
             issues.map((issue) => issue.ruleId),
-            ['MODULE_ROOT_FILE', 'SOURCE_PARSE_ERROR'],
+            [
+                'MODULE_ROOT_FILE',
+                'MODULE_ROOT_PLACEMENT',
+                'SOURCE_PARSE_ERROR',
+            ],
         );
-        assert.equal(issues[1].severity, 'fatal');
+        assert.equal(issues[2].severity, 'fatal');
     } finally {
         fixture.dispose();
     }
@@ -438,8 +443,11 @@ test('auxiliary classes require their matching base and exactly one class', () =
         assert.deepEqual(ruleIds, [
             'AUX_CLASS_COUNT',
             'DECLARATION_CONSTANT_LOCATION',
+            'LAYER_FILE_NAME',
             'AUX_CLASS_COUNT',
+            'LAYER_FILE_NAME',
             'LAYER_BASE_CLASS',
+            'LAYER_FILE_NAME',
             'MODULE_FREE_FUNCTION',
         ]);
     } finally {
@@ -472,9 +480,12 @@ test('auxiliary paths require a supported layer, one level, and an owner', () =>
             .issues.map((issue) => issue.ruleId);
         assert.deepEqual(ruleIds, [
             'AUX_LAYER_UNSUPPORTED',
+            'LAYER_FILE_NAME',
             'AUX_PATH_DEPTH',
+            'LAYER_FILE_NAME',
             'AUX_FILE_TYPE',
             'AUX_OWNER_MISSING',
+            'LAYER_FILE_NAME',
         ]);
     } finally {
         fixture.dispose();
@@ -518,7 +529,9 @@ test('auxiliary imports are private, one-way, and never re-exported', () => {
             'AUX_IMPORT_OWNER',
             'AUX_REEXPORT',
             'AUX_IMPORT_DIRECTION',
+            'LAYER_FILE_NAME',
             'AUX_IMPORT_OWNER',
+            'LAYER_FILE_NAME',
             'AUX_IMPORT_OWNER',
         ]);
     } finally {
@@ -556,6 +569,217 @@ test('auxiliary classes retain their architecture layer restrictions', () => {
             ).length,
             2,
         );
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('module roots, entries, registration, and local imports are strict', () => {
+    const fixture = new FixtureProject();
+    try {
+        fixture.mkdir('code/backend/src/module/empty');
+        fixture.write(
+            'code/backend/src/module/example/user.ts',
+            `import { BaseObject } from '../../base/base.object';
+             export class User extends BaseObject {}`,
+        );
+        fixture.mkdir('code/backend/src/module/example/unexpected');
+        fixture.mkdir('code/backend/src/module/example/dto');
+        fixture.write(
+            'code/backend/src/module/example/.DS_Store',
+            'metadata',
+        );
+        fixture.write('code/backend/src/module.catalog.ts', 'export {};');
+
+        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+            .run()
+            .issues.map((issue) => issue.ruleId);
+        for (const ruleId of [
+            'MODULE_ENTRY_MISSING',
+            'MODULE_ROOT_PLACEMENT',
+            'MODULE_DIRECTORY_UNKNOWN',
+            'MODULE_DIRECTORY_EMPTY',
+            'MODULE_NON_SOURCE_FILE',
+            'MODULE_REGISTRATION_MISSING',
+            'LOCAL_IMPORT_EXTENSION',
+        ]) {
+            assert.ok(ruleIds.includes(ruleId), ruleId);
+        }
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('controllers, handlers, DTO boundaries, and architecture casts are strict', () => {
+    const fixture = new FixtureProject();
+    try {
+        fixture.write(
+            'code/backend/src/module/example/controller/auth.controller.ts',
+            `export class AuthController extends BaseController {
+                public async login(req: any, res: any): Promise<HandlerResult<User>> {
+                    try {
+                        const result = await this.authService.login(req.body);
+                        return { success: true, data: result, error: res.message };
+                    } catch (error) {
+                        return { success: false, error: error.message };
+                    }
+                }
+            }`,
+        );
+        fixture.write(
+            'code/backend/src/module/example/api/auth.http.handler.ts',
+            `import { UserObject } from '../object/user.object.ts';
+             export class AuthHttpHandler extends HttpHandler {
+                 protected processRequest(): Promise<HandlerResult<UserObject>> {
+                     return this.controller.login();
+                 }
+             }`,
+        );
+        fixture.write(
+            'code/backend/src/module/example/service/auth.service.ts',
+            `export class AuthService extends BaseService {
+                public run() { return this.store as unknown as AuthStore; }
+            }`,
+        );
+
+        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+            .run()
+            .issues.map((issue) => issue.ruleId);
+        for (const ruleId of [
+            'CONTROLLER_TRANSPORT_INPUT',
+            'CONTROLLER_DTO_CONTRACT',
+            'CONTROLLER_ERROR_TRANSLATION',
+            'RAW_ERROR_RESPONSE',
+            'ANONYMOUS_RESPONSE_CONTRACT',
+            'LAYER_RETURN_CONTRACT',
+            'HANDLER_DTO_OUTPUT',
+            'DOMAIN_OBJECT_TRANSPORT',
+            'DOMAIN_ARCHITECTURE_CAST',
+        ]) {
+            assert.ok(ruleIds.includes(ruleId), ruleId);
+        }
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('stores and services enforce typed mapping and validation', () => {
+    const fixture = new FixtureProject();
+    try {
+        fixture.write(
+            'code/backend/src/module/example/store/user.store.ts',
+            `export class UserStore extends BaseStore {
+                public async save(user: any): Promise<any> {
+                    const result = await this.db.updateTable('users').executeTakeFirst();
+                    return new UserObject(result);
+                }
+            }`,
+        );
+        fixture.write(
+            'code/backend/src/module/example/service/user.service.ts',
+            `export class UserService extends BaseService {
+                public async create(): Promise<UserDTO> {
+                    const user = new UserObject({});
+                    await this.store.save(user);
+                    user.validate();
+                    return new UserDTO();
+                }
+            }`,
+        );
+        fixture.write(
+            'code/backend/src/database.ts',
+            `export interface UserTable {
+                id: string;
+                created_at: string;
+            }`,
+        );
+
+        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+            .run()
+            .issues.map((issue) => issue.ruleId);
+        for (const ruleId of [
+            'STORE_ANY_TYPE',
+            'STORE_QUERY_OBJECT_MAPPING',
+            'STORE_SAVE_SEMANTICS',
+            'DATABASE_OBJECT_METADATA',
+            'OBJECT_VALIDATION_BEFORE_PERSIST',
+        ]) {
+            assert.ok(ruleIds.includes(ruleId), ruleId);
+        }
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('domain configuration, secrets, serialization, and dependencies are strict', () => {
+    const fixture = new FixtureProject();
+    try {
+        fixture.write(
+            'code/backend/src/module/example/constants.ts',
+            `import { z } from 'zod';
+             export const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
+             export const LoginSchema = z.object({});`,
+        );
+        fixture.write(
+            'code/backend/src/module/example/object/user.object.ts',
+            `export class UserObject extends BaseObject {
+                public passwordHash = '';
+            }`,
+        );
+
+        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+            .run()
+            .issues.map((issue) => issue.ruleId);
+        for (const ruleId of [
+            'CONSTANT_EXECUTABLE_VALUE',
+            'DOMAIN_ENV_ACCESS',
+            'SECRET_FALLBACK',
+            'SENSITIVE_OBJECT_SERIALIZATION',
+            'UNDECLARED_WORKSPACE_DEPENDENCY',
+        ]) {
+            assert.ok(ruleIds.includes(ruleId), ruleId);
+        }
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('HTTP routes require OpenAPI and integration-test coverage', () => {
+    const fixture = new FixtureProject();
+    try {
+        fixture.write(
+            'code/backend/src/module/example/api/auth.http.handler.ts',
+            `export class AuthHttpHandler extends HttpHandler {
+                protected processRequest(): Promise<HandlerResult<AuthDTO>> {
+                    const path = '/api/auth/login';
+                    return this.controller.login(path);
+                }
+            }`,
+        );
+
+        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+            .run()
+            .issues.map((issue) => issue.ruleId);
+        assert.ok(ruleIds.includes('HTTP_OPENAPI_COVERAGE'));
+        assert.ok(ruleIds.includes('MODULE_TEST_COVERAGE'));
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('malformed package and OpenAPI contracts are fatal linter errors', () => {
+    const fixture = new FixtureProject();
+    try {
+        fixture.write('code/backend/package.json', '{ invalid');
+        fixture.write('code/backend/openapi/openapi.yaml', 'not-openapi');
+
+        const issues = new BackendLinter({ projectRoot: fixture.root }).run()
+            .issues;
+        assert.deepEqual(
+            issues.map((issue) => issue.ruleId),
+            ['OPENAPI_PARSE_ERROR', 'PACKAGE_MANIFEST_PARSE_ERROR'],
+        );
+        assert.ok(issues.every((issue) => issue.severity === 'fatal'));
     } finally {
         fixture.dispose();
     }
