@@ -31,6 +31,8 @@
     "scaffold:route": "npm run scaffold:route --workspace @app/web --",
     "scaffold:component": "npm run scaffold:component --workspace @app/web --",
     "scaffold:feature": "npm run scaffold:feature --workspace @app/web --",
+    "template:check": "node script/template-update.ts check",
+    "template:update": "node script/template-update.ts update",
     "deployment:validate": "node script/deployment/deployment.cli.ts validate",
     "deployment:scaffold": "node script/deployment/deployment.cli.ts scaffold",
     "deployment:build": "node script/deployment/deployment.cli.ts build",

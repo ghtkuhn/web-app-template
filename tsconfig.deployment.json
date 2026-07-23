@@ -3,5 +3,9 @@
     "compilerOptions": {
         "types": ["node"]
     },
-    "include": ["script/deployment/**/*.ts"]
+    "include": [
+        "script/deployment/**/*.ts",
+        "script/template-update.ts",
+        "script/template-update/**/*.ts"
+    ]
 }
