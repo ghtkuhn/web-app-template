@@ -55,6 +55,22 @@ test('metadata falls back to package version for pre-updater projects', () => {
     });
 });
 
+test('metadata accepts the npm repository object for pre-updater projects', () => {
+    const project = temporaryRoot('template-metadata-');
+    write(project, 'package.json', JSON.stringify({
+        version: '1.4.0',
+        repository: {
+            type: 'git',
+            url: 'git+https://github.com/ghtkuhn/web-app-template.git',
+        },
+    }));
+
+    expect(new TemplateMetadataRepository().load(project)).toEqual({
+        version: '1.4.0',
+        repository: 'ghtkuhn/web-app-template',
+    });
+});
+
 test('template updater CLI documents usage and stable input exit codes', () => {
     const projectRoot = path.resolve(
         path.dirname(new URL(import.meta.url).pathname),
