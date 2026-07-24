@@ -67,12 +67,47 @@
 * You must not build island solutions or implementations tailored to one specific test case, fixture, or issue.
 * You must derive solutions generically; tests may cover examples, but implementation logic must not special-case them.
 * You must not install new dependencies without user consent.
+* You must not invoke `rm`, `rmdir`, `unlink`, or another direct system deletion command.
+* You must delete project files and directories only with `npm run rm -- <project-relative-path>`.
+* You should run `npm run rm -- <project-relative-path> --dry-run` first when the target contains multiple files or directories.
 * Before declaring a task done, run `npx fallow audit --format json` in the project root.
   - Exit codes 0 and 1 mean success (1 = findings found). Only exit code 2 is an actual error.
   - If new findings are introduced by your changes, address them before completing the task.
   - Pre-existing inherited findings do not block the change (`fallow audit` excludes them by default).
   - Use `npm run audit` during normal work. Its console output is bounded for agent context; inspect the complete ignored report at `.fallow/audit.json` only when details are required.
 * Run `npx fallow recommend --format json` on first use to detect the stack and propose `.fallowrc.json`. Save it if appropriate.
+
+
+## Root npm Scripts
+
+* `npm run audit`: Runs the bounded Fallow code-health audit and stores its full ignored report under `.fallow/`.
+* `npm run build`: Builds every workspace that defines a build command.
+* `npm run check:api`: Verifies that generated frontend OpenAPI types match the backend contract.
+* `npm run check:memory`: Rejects a missing or oversized `data/ai/MEMORY.md`.
+* `npm run deployment:build`: Builds deployable backend and frontend artifacts for a deployment profile.
+* `npm run deployment:database:list`: Lists SQLite migration backups for a deployment profile.
+* `npm run deployment:database:restore`: Restores one explicitly selected SQLite backup.
+* `npm run deployment:deploy`: Deploys selected components using a validated deployment profile.
+* `npm run deployment:rollback`: Reactivates a previous application release without automatically restoring its database.
+* `npm run deployment:scaffold`: Creates a new versioned deployment profile.
+* `npm run deployment:status`: Reads deployment and health status for selected components.
+* `npm run deployment:stop`: Stops selected deployed services without deleting persistent infrastructure.
+* `npm run deployment:validate`: Validates one or all deployment profiles against the schema.
+* `npm run generate:api`: Regenerates checked-in frontend TypeScript contracts from OpenAPI.
+* `npm run lint`: Runs every workspace linter.
+* `npm run lint:backend`: Runs the backend architecture and OpenAPI linters.
+* `npm run rm`: Safely removes explicit project-relative files, directories, or symlinks; pass targets after `--` and use `--dry-run` for preview.
+* `npm run scaffold:component`: Creates one presentation-local Vue component.
+* `npm run scaffold:feature`: Creates a frontend Model, Service, and Composable feature skeleton.
+* `npm run scaffold:file`: Creates one architecture-compliant class file in an existing backend module.
+* `npm run scaffold:module`: Creates, registers, and activates a minimal backend module.
+* `npm run scaffold:route`: Creates and registers one route adapter plus Desktop, Tablet, and Mobile views.
+* `npm run template:check`: Reports the installed and latest stable template versions and pending updater state.
+* `npm run template:init`: Initializes explicit template metadata for a legacy application.
+* `npm run template:update`: Installs or continues a stable template update and supports conflict continuation or abort.
+* `npm run test`: Runs all workspace unit, integration, and component tests.
+* `npm run typecheck`: Typechecks root tooling and all workspaces.
+* `npm run verify`: Runs the complete required validation, lint, typecheck, test, build, browser-smoke, and Fallow pipeline.
 
 
 ## Backend Programming Rules (Strict Layered Architecture)

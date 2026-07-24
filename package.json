@@ -24,6 +24,7 @@
   "scripts": {
     "lint": "npm run lint --workspaces --if-present",
     "lint:backend": "npm run lint --workspace @app/backend",
+    "rm": "node script/safe-remove.ts",
     "generate:api": "npm run generate:api --workspace @app/web",
     "check:api": "npm run check:api --workspace @app/web",
     "check:memory": "node script/memory-check.ts",

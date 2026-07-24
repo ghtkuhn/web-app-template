@@ -7,6 +7,8 @@
         "script/deployment/**/*.ts",
         "script/memory-check.ts",
         "script/memory-check/**/*.ts",
+        "script/safe-remove.ts",
+        "script/safe-remove/**/*.ts",
         "script/template-update.ts",
         "script/template-update/**/*.ts"
     ]
