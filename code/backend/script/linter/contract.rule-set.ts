@@ -139,16 +139,13 @@ export class ContractRuleSet {
         }
         if (
             analysis.filePath.endsWith('/constants.ts') &&
-            (/\bnew\s+[A-Za-z_$]/u.test(analysis.source) ||
-                analysis.dependencies.some((dependency) =>
-                    ['zod', 'joi', 'yup'].includes(dependency.source),
-                ))
+            analysis.executableConstantCount > 0
         ) {
             issues.push(
                 this.issue(
                     analysis,
                     'CONSTANT_EXECUTABLE_VALUE',
-                    'constants.ts may contain passive values only, not executable validators.',
+                    'constants.ts may contain passive values only; functions, methods, classes, calls, constructors, and mutations are forbidden.',
                 ),
             );
         }

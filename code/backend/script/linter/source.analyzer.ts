@@ -5,12 +5,16 @@ import type {
     SourceAnalysis,
     SourceDependency,
 } from './interfaces.ts';
+import { PassiveConstantAnalyzer } from './passive-constant.analyzer.ts';
 
 type AstNode = {
     type?: string;
     source?: { value?: unknown };
     declaration?: AstNode | null;
-    declarations?: Array<{ id?: { type?: string } }>;
+    declarations?: Array<{
+        id?: { type?: string };
+        init?: AstNode | null;
+    }>;
     superClass?: AstNode | null;
     implements?: AstNode[];
     body?: { body?: AstNode[] };
@@ -35,6 +39,8 @@ type AstNode = {
 
 /** Extracts architecture-relevant facts from TypeScript source files. */
 export class SourceAnalyzer {
+    private readonly passiveConstants = new PassiveConstantAnalyzer();
+
     /** Parses one file and returns its top-level declarations and dependencies. */
     public analyze(filePath: string): SourceAnalysis {
         const source = fs.readFileSync(filePath, 'utf8');
@@ -122,6 +128,7 @@ export class SourceAnalyzer {
             interfaceCount: 0,
             typeCount: 0,
             constantCount: 0,
+            executableConstantCount: 0,
             functionCount: 0,
             classBaseNames: [],
             classes: [],
@@ -175,6 +182,13 @@ export class SourceAnalyzer {
             case 'VariableDeclaration':
                 if ((node as { kind?: string }).kind === 'const') {
                     analysis.constantCount += node.declarations?.length ?? 0;
+                    analysis.executableConstantCount +=
+                        node.declarations?.filter(
+                            (declaration) =>
+                                !this.passiveConstants.isPassive(
+                                    declaration.init ?? null,
+                                ),
+                        ).length ?? 0;
                 }
                 break;
             case 'FunctionDeclaration':

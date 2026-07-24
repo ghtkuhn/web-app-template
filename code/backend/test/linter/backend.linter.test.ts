@@ -764,6 +764,69 @@ test('domain configuration, secrets, serialization, and dependencies are strict'
     }
 });
 
+test('constants accept recursively passive data and static expressions', () => {
+    const fixture = new FixtureProject();
+    try {
+        fixture.write(
+            'code/backend/src/module/example/constants.ts',
+            `const STATUS = { OK: 'ok' } as const;
+             export const VALUES = {
+                 name: 'example',
+                 enabled: true,
+                 attempts: 3,
+                 nested: [null, STATUS.OK],
+                 timeout: 5 * 1000,
+                 label: \`status-\${STATUS.OK}\`,
+             } as const;`,
+        );
+
+        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+            .run()
+            .issues.map((issue) => issue.ruleId);
+        assert.ok(!ruleIds.includes('CONSTANT_EXECUTABLE_VALUE'));
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('constants reject executable values at every nesting depth', () => {
+    const invalidInitializers = [
+        `{
+            name: 'auth',
+            create(deps: any, infra: any): any {
+                return require('./index.ts');
+            },
+        }`,
+        `() => 'value'`,
+        `function named() { return 'value'; }`,
+        `class Anonymous {}`,
+        `buildValue()`,
+        `new Builder()`,
+        `{ nested: { run: () => true } }`,
+        `{ get value() { return 'value'; } }`,
+        `target.value = 'changed'`,
+        `import('./service/example.service.ts')`,
+    ];
+    for (const initializer of invalidInitializers) {
+        const fixture = new FixtureProject();
+        try {
+            fixture.write(
+                'code/backend/src/module/example/constants.ts',
+                `export const VALUE = ${initializer};`,
+            );
+            const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+                .run()
+                .issues.map((issue) => issue.ruleId);
+            assert.ok(
+                ruleIds.includes('CONSTANT_EXECUTABLE_VALUE'),
+                initializer,
+            );
+        } finally {
+            fixture.dispose();
+        }
+    }
+});
+
 test('HTTP routes require OpenAPI and integration-test coverage', () => {
     const fixture = new FixtureProject();
     try {

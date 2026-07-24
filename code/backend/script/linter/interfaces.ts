@@ -39,6 +39,7 @@ export interface SourceAnalysis {
     interfaceCount: number;
     typeCount: number;
     constantCount: number;
+    executableConstantCount: number;
     functionCount: number;
     classBaseNames: Array<string | null>;
     classes: ClassAnalysis[];
