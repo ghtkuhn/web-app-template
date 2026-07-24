@@ -67,6 +67,8 @@
 * You must not build island solutions or implementations tailored to one specific test case, fixture, or issue.
 * You must derive solutions generically; tests may cover examples, but implementation logic must not special-case them.
 * You must not install new dependencies without user consent.
+* You must not create, edit, move, rename, or delete files or directories below `code/backend/src/base/`.
+* When using Little Coder, you must start it with `npm run little-coder -- [arguments]` so the project mutation guard is loaded.
 * You must not invoke `rm`, `rmdir`, `unlink`, or another direct system deletion command.
 * You must delete project files and directories only with `npm run rm -- <project-relative-path>`.
 * You should run `npm run rm -- <project-relative-path> --dry-run` first when the target contains multiple files or directories.
@@ -96,6 +98,7 @@
 * `npm run generate:api`: Regenerates checked-in frontend TypeScript contracts from OpenAPI.
 * `npm run lint`: Runs every workspace linter.
 * `npm run lint:backend`: Runs the backend architecture and OpenAPI linters.
+* `npm run little-coder`: Starts Little Coder with the project extension that blocks every mutation below `code/backend/src/base/`.
 * `npm run rm`: Safely removes explicit project-relative files, directories, or symlinks; pass targets after `--` and use `--dry-run` for preview.
 * `npm run scaffold:component`: Creates one presentation-local Vue component.
 * `npm run scaffold:feature`: Creates a frontend Model, Service, and Composable feature skeleton.
