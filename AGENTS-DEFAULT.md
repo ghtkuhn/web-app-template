@@ -5,6 +5,9 @@
 * You must create `data/ai/MEMORY.md` if it does not exist.
 * You must read the file contents of `data/ai/MEMORY.md` after ensuring it exists.
 * You must summarize `data/ai/MEMORY.md` when it exceeds 25 KiB; `npm run check:memory` and `npm run verify` enforce this limit.
+* You must communicate tersely. Do not repeat the task or narrate routine steps.
+* You must keep progress updates to at most one short sentence.
+* Your final response must contain only the result, verification status, and genuine blockers.
 
 
 ---
@@ -68,7 +71,10 @@
 * You must derive solutions generically; tests may cover examples, but implementation logic must not special-case them.
 * You must not install new dependencies without user consent.
 * You must not create, edit, move, rename, or delete files or directories below `code/backend/src/base/`.
-* When using Little Coder, you must start it with `npm run little-coder -- [arguments]` so the project mutation guard is loaded.
+* When using Little Coder, you must start it with `npm run little-coder -- [arguments]` so the project mutation guards are loaded.
+* Little Coder backend changes must remain within the active lint-gate batch or repair scope.
+* You must not bypass a red backend lint gate, weaken its rules, or modify protected architecture controls to make it green.
+* You must run backend work in small lintable batches; the gate enforces a layer/module check and a maximum of five successful file mutations.
 * You must not invoke `rm`, `rmdir`, `unlink`, or another direct system deletion command.
 * You must delete project files and directories only with `npm run rm -- <project-relative-path>`.
 * You should run `npm run rm -- <project-relative-path> --dry-run` first when the target contains multiple files or directories.
@@ -98,7 +104,7 @@
 * `npm run generate:api`: Regenerates checked-in frontend TypeScript contracts from OpenAPI.
 * `npm run lint`: Runs every workspace linter.
 * `npm run lint:backend`: Runs the backend architecture and OpenAPI linters.
-* `npm run little-coder`: Starts Little Coder with the project extension that blocks every mutation below `code/backend/src/base/`.
+* `npm run little-coder`: Starts Little Coder with Base protection and the incremental backend architecture lint gate.
 * `npm run rm`: Safely removes explicit project-relative files, directories, or symlinks; pass targets after `--` and use `--dry-run` for preview.
 * `npm run scaffold:component`: Creates one presentation-local Vue component.
 * `npm run scaffold:feature`: Creates a frontend Model, Service, and Composable feature skeleton.
