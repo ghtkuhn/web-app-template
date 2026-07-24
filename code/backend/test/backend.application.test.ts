@@ -35,11 +35,15 @@ test('backend stop closes application-owned database infrastructure', async () =
     }
 });
 
-test('backend startup failure releases partially initialized infrastructure', async () => {
+test('backend startup failure releases partially initialized infrastructure', async (context) => {
     const originalHttp = config.server.enabled;
     const originalWebSocket = config.websocket.enabled;
     const originalType = config.database.type;
     const originalExitCode = process.exitCode;
+    const loggedErrors: unknown[][] = [];
+    context.mock.method(console, 'error', (...arguments_: unknown[]) => {
+        loggedErrors.push(arguments_);
+    });
     config.server.enabled = false;
     config.websocket.enabled = false;
     config.database.type = 'postgres';
@@ -48,6 +52,12 @@ test('backend startup failure releases partially initialized infrastructure', as
     try {
         await new BackendApplication().start();
         assert.equal(process.exitCode, 1);
+        assert.equal(loggedErrors.length, 1);
+        assert.equal(loggedErrors[0]?.[0], '🚨 Critical failure during bootstrap:');
+        assert.match(
+            String(loggedErrors[0]?.[1]),
+            /Unsupported database type 'postgres'/,
+        );
         await assert.rejects(
             DatabaseManager.getInstance(),
             /Unsupported database type 'postgres'/,
