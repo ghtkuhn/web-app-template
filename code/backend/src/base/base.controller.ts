@@ -18,7 +18,11 @@ import type { HandlerResult, IBaseController } from './interfaces.ts';
  */
 export abstract class BaseController implements IBaseController {
     /**
-     * Helper to create a successful result.
+     * Creates a successful transport-neutral result.
+     *
+     * @param data Typed DTO or other approved application response data.
+     * @param statusCode Optional transport compatibility status.
+     * @returns A successful handler result.
      */
     protected success<T>(data: T, statusCode = 200): HandlerResult<T> {
         return {
@@ -29,7 +33,11 @@ export abstract class BaseController implements IBaseController {
     }
 
     /**
-     * Helper to create an error result.
+     * Creates a controlled transport-neutral failure result.
+     *
+     * @param message Safe caller-facing failure description.
+     * @param statusCode Optional transport compatibility status.
+     * @returns A failed handler result.
      */
     protected error(message: string, statusCode = 500): HandlerResult {
         return {

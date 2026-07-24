@@ -14,12 +14,12 @@ import type { HandlerResult } from './interfaces.ts';
  */
 export abstract class HttpHandler extends BaseHandler<Request> {
     /**
-     * Specialized processRequest for HTTP.
+     * Processes one HTTP request after native-server adaptation.
+     *
      * @param request A standard Web Request object (fetch API).
+     * @returns A transport-neutral result for HTTP serialization.
      */
     protected async processRequest(request: Request): Promise<HandlerResult> {
-        // Implementation will be handled in concrete module handlers,
-        // but this base class ensures the type contract.
         throw new Error(
             'processRequest must be implemented by a concrete HttpHandler',
         );

@@ -26,6 +26,8 @@ export class HttpServer {
 
     /**
      * Creates a stopped HTTP server using the provided module registry.
+     *
+     * @param config Port, module gateways, transport limits, and origin policy.
      */
     constructor(config: HttpServerConfig) {
         this.configuredPort = config.port;

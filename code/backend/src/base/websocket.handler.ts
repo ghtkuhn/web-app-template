@@ -6,7 +6,14 @@ import type { HandlerResult, WebSocketHandlerInput } from './interfaces.ts';
  * Response framing and socket operations remain inside `WebSocketServer`.
  */
 export abstract class WebSocketHandler extends BaseHandler<WebSocketHandlerInput> {
-    /** Processes one validated event received from the WebSocket transport. */
+    /**
+     * Processes one structured event received from the WebSocket transport.
+     *
+     * Concrete handlers remain responsible for validating untrusted event data.
+     *
+     * @param input Event envelope supplied by the WebSocket server.
+     * @returns A transport-neutral result for WebSocket serialization.
+     */
     protected async processRequest(
         input: WebSocketHandlerInput,
     ): Promise<HandlerResult> {

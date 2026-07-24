@@ -12,14 +12,24 @@ export class CliRunner {
     private readonly stdout: OutputWriter;
     private readonly stderr: OutputWriter;
 
-    /** Creates a CLI runner with optionally replaceable output streams for tests. */
+    /**
+     * Creates a CLI runner with optionally replaceable output streams.
+     *
+     * @param config Module registry and output destinations.
+     */
     constructor(config: CliRunnerConfig) {
         this.modules = new Map(Object.entries(config.modules));
         this.stdout = config.stdout ?? process.stdout;
         this.stderr = config.stderr ?? process.stderr;
     }
 
-    /** Parses `<module> <command> [arguments] [--options]` and returns an exit code. */
+    /**
+     * Parses `<module> <command> [arguments] [--options]` and executes it.
+     *
+     * @param argv CLI tokens excluding the runtime and entry-point paths.
+     * @returns Process-compatible exit code: zero for success, one for a handler
+     * failure, and two for invalid usage or an unknown module.
+     */
     public async run(argv: string[]): Promise<number> {
         const [moduleName, command, ...tokens] = argv;
         if (!moduleName || !command) {

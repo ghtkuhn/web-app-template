@@ -10,7 +10,7 @@ import type BetterSqlite3Type from 'better-sqlite3';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const BetterSqlite3 = require('better-sqlite3') as typeof BetterSqlite3Type;
-// Project root is 3 levels up from src/base: base -> src -> backend -> project-root
+// Project root is four levels above src/base: base -> src -> backend -> code -> root.
 const PROJECT_ROOT = path.resolve(__dirname, '../../../..');
 
 /**
@@ -23,8 +23,12 @@ export class DatabaseManager {
     private static closePromise: Promise<void> | null = null;
 
     /**
-     * Returns the initialized Kysely instance.
-     * If not yet initialized, it creates the configured SQLite connection.
+     * Returns the process-wide Kysely instance.
+     *
+     * If no instance exists, creates the configured SQLite connection. Concurrent
+     * callers receive the same application-owned client.
+     *
+     * @returns The initialized shared database abstraction.
      */
     public static async getInstance(): Promise<Kysely<Database>> {
         if (this.closePromise) {
@@ -59,7 +63,7 @@ export class DatabaseManager {
     }
 
     /**
-     * Closes the database connection gracefully.
+     * Closes the shared database connection gracefully and idempotently.
      */
     public static async close(): Promise<void> {
         if (this.closePromise) {
@@ -87,7 +91,11 @@ export class DatabaseManager {
         return path.resolve(PROJECT_ROOT, config.database.sqlitePath);
     }
 
-    /** Creates a transactionally consistent SQLite backup. */
+    /**
+     * Creates a transactionally consistent SQLite backup.
+     *
+     * @param destination Filesystem destination for the new backup.
+     */
     public static async backup(destination: string): Promise<void> {
         if (!this.nativeDatabase) {
             throw new Error('Database connection is not initialized.');
@@ -95,7 +103,11 @@ export class DatabaseManager {
         await this.nativeDatabase.backup(destination);
     }
 
-    /** Runs SQLite's full integrity check on the active connection. */
+    /**
+     * Runs SQLite's full integrity check on the active connection.
+     *
+     * @throws Error when no active connection exists or integrity verification fails.
+     */
     public static assertIntegrity(): void {
         const result = this.nativeDatabase
             ?.pragma('integrity_check', { simple: true });
@@ -104,7 +116,12 @@ export class DatabaseManager {
         }
     }
 
-    /** Verifies an on-disk SQLite database without changing it. */
+    /**
+     * Verifies an on-disk SQLite database without changing it.
+     *
+     * @param filePath SQLite file to open read-only.
+     * @throws Error when SQLite reports an integrity failure.
+     */
     public static assertFileIntegrity(filePath: string): void {
         const database = new BetterSqlite3(filePath, { readonly: true });
         try {

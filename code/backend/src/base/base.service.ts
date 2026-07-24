@@ -3,7 +3,7 @@ import { BaseStore } from './base.store.ts';
 import type { IBaseService } from './interfaces.ts';
 
 /**
- * BaseService implements the business logic layer of a module.
+ * BaseService provides common behavior for a module's business-logic layer.
  *
  * RESPONSIBILITIES:
  * - Orchestrate workflows between Controllers and Stores.
@@ -23,12 +23,20 @@ export abstract class BaseService<
 > implements IBaseService<T> {
     protected store: S;
 
+    /**
+     * Receives the Service's private persistence dependency.
+     *
+     * @param store Typed Store used for all persistence operations.
+     */
     constructor(store: S) {
         this.store = store;
     }
 
     /**
-     * Standard method to save an object after validation.
+     * Validates and persists a domain object.
+     *
+     * @param object Domain object to create or update.
+     * @returns The persisted domain object.
      */
     async createOrUpdate(object: T): Promise<T> {
         object.validate();
@@ -36,7 +44,11 @@ export abstract class BaseService<
     }
 
     /**
-     * Fetches an object by ID and throws an error if not found.
+     * Fetches an object by ID.
+     *
+     * @param id Stable domain-object identifier.
+     * @returns The matching object.
+     * @throws Error when no object exists for the identifier.
      */
     async getById(id: string): Promise<T> {
         const object = await this.store.findById(id);
@@ -50,12 +62,10 @@ export abstract class BaseService<
 
     /**
      * Returns all objects of the domain type.
+     *
+     * @returns All objects visible through the Store contract.
      */
     async getAll(): Promise<T[]> {
         return this.store.findAll();
-    }
-
-    protected logError(error: any, context: string) {
-        console.error(`[${this.constructor.name}] Error in ${context}:`, error);
     }
 }

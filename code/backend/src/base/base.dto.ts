@@ -3,12 +3,11 @@ import { BaseObject } from './base.object.ts';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
- * BaseDTO (Data Transfer Object) defines the contract for data exchanged between
- * the backend and external clients.
+ * BaseDTO defines transported application data at backend boundaries.
  *
  * RESPONSIBILITIES:
  * - Act as a filtered view of Domain Objects to prevent leaking sensitive internal state.
- * - Provide a consistent structure for API responses and requests.
+ * - Provide explicit request and response contracts for supported transports.
  *
  * IMPORT RULES:
  * - ALLOWED: Basic TypeScript types, Base classes.
@@ -18,6 +17,11 @@ import { v4 as uuidv4 } from 'uuid';
  * - Must NOT contain business logic or database access code.
  */
 export abstract class BaseDTO implements IBaseDTO {
+    /**
+     * Assigns already validated DTO properties.
+     *
+     * @param data Initial DTO values.
+     */
     constructor(data?: Partial<BaseDTO>) {
         if (data) {
             Object.assign(this, data);
@@ -26,18 +30,25 @@ export abstract class BaseDTO implements IBaseDTO {
 }
 
 /**
- * Specialized base class for DTOs that represent a domain entity.
- * Provides mapping methods to convert between the Domain Object and the DTO.
+ * Base for DTOs that carry the public identity of a domain entity.
+ *
+ * The conversion methods are primitives invoked by Services; Services retain
+ * ownership of mapping decisions and transported field selection.
  */
 export abstract class EntityDTO<T extends BaseObject>
     extends BaseDTO
     implements IEntityDTO<T>
 {
+    /** Public identity of the mapped domain entity. */
     id: string = uuidv4();
 
     /**
-     * Maps a domain object to this DTO.
-     * Should be overridden in subclasses to define which fields are exposed.
+     * Copies explicitly supported domain data into this DTO.
+     *
+     * Subclasses should expose only fields selected by the owning Service.
+     *
+     * @param object Domain object being mapped by a Service.
+     * @returns This DTO instance.
      */
     fromObject(object: T): this {
         if (object && object.id) {
@@ -47,7 +58,9 @@ export abstract class EntityDTO<T extends BaseObject>
     }
 
     /**
-     * Maps the DTO data back to a partial domain object for creation or update.
+     * Produces partial domain data for a Service-controlled mapping operation.
+     *
+     * @returns Partial data that a Service may use to construct or update an object.
      */
     toObject(): Partial<T> {
         const { ...data } = this;

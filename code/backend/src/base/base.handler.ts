@@ -5,7 +5,7 @@ import type { IHandler, HandlerResult } from './interfaces.ts';
  *
  * RESPONSIBILITIES:
  * - Provide a common interface for handling requests.
- * - Implement cross-cutting concerns like logging and telemetry.
+ * - Normalize uncaught handler failures into a safe transport-neutral result.
  *
  * IMPORT RULES:
  * - ALLOWED: Controllers, Base classes.
@@ -19,26 +19,28 @@ export abstract class BaseHandler<
     TOutput = unknown,
 > implements IHandler<TInput, TOutput> {
     /**
-     * The main entry point for the handler.
+     * Handles one transport-specific input and shields callers from exceptions.
+     *
      * @param input Transport-specific input (e.g., Request object, CLI args).
+     * @returns A transport-neutral success or failure result.
      */
     async handle(input: TInput): Promise<HandlerResult<TOutput>> {
         try {
             return await this.processRequest(input);
-        } catch (error: unknown) {
+        } catch {
             return {
                 success: false,
-                error:
-                    error instanceof Error
-                        ? error.message
-                        : 'Internal Server Error',
+                error: 'Internal Server Error',
                 statusCode: 500,
             };
         }
     }
 
     /**
-     * Abstract method to be implemented by specialized handlers.
+     * Processes one request after transport adaptation.
+     *
+     * @param input Transport-specific input supplied by the module gateway.
+     * @returns A transport-neutral result for the caller to serialize.
      */
     protected abstract processRequest(
         input: TInput,

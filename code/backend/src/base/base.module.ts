@@ -10,7 +10,7 @@ import type {
  *
  * RESPONSIBILITIES:
  * - Act as the sole public entry point for the module.
- * - Route requests to the appropriate handler (HTTP, WS, CLI, Node) via .dispatch().
+ * - Route requests to the appropriate handler (HTTP, WebSocket, CLI, Node) via `dispatch()`.
  * - Encapsulate all internal logic (Services, Stores) from other modules.
  *
  * IMPORT RULES:
@@ -21,7 +21,7 @@ import type {
  * - Must NOT contain business logic.
  * - Internal Controllers, Services, and Stores are composed here but remain private.
  * - Stores receive database infrastructure from the module's registry factory.
- * - All inter-module communication MUST go through this class via .dispatch('node', ...).
+ * - Inter-module callers use the injected public module port and `dispatch('node', ...)`.
  */
 export abstract class BaseModule<
     TNodeInput = unknown,
@@ -31,7 +31,10 @@ export abstract class BaseModule<
         new Map();
 
     /**
-     * Registers a handler for a specific transport interface.
+     * Registers the private handler used for one transport.
+     *
+     * @param type Transport gateway owned by the handler.
+     * @param handler Handler implementation to invoke for that transport.
      */
     registerHandler<TInput, TOutput>(
         type: TransportType,
@@ -41,9 +44,14 @@ export abstract class BaseModule<
     }
 
     /**
-     * The only public method to interact with this module.
-     * @param type The interface to use ('http', 'ws', 'cli', 'node').
+     * Dispatches external or in-process input through a registered handler.
+     *
+     * This is the public interaction method exposed by module ports;
+     * `registerHandler()` exists only for module construction.
+     *
+     * @param type The interface to use (`http`, `websocket`, `cli`, or `node`).
      * @param input The request data/payload.
+     * @returns The selected handler result or a controlled unsupported-transport error.
      */
     async dispatch(
         type: 'node',
@@ -68,12 +76,10 @@ export abstract class BaseModule<
 
         try {
             return await handler.handle(input);
-        } catch (error: unknown) {
-            const message =
-                error instanceof Error ? error.message : 'Unknown error';
+        } catch {
             return {
                 success: false,
-                error: `Module Dispatch Error: ${message}`,
+                error: 'Internal module error',
                 statusCode: 500,
             };
         }

@@ -2,12 +2,19 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseManager } from './base.database.ts';
 
+/** Metadata describing one managed SQLite backup file. */
 export interface DatabaseBackup {
+    /** Filename-safe identifier accepted by restore operations. */
     readonly id: string;
+    /** Absolute path to the managed backup file. */
     readonly path: string;
+    /** Backup size in bytes. */
     readonly size: number;
+    /** UTC timestamp segment encoded in the backup identifier. */
     readonly timestamp: string;
+    /** Sanitized application release identifier. */
     readonly release: string;
+    /** Encoded source-to-target migration range. */
     readonly migrations: string;
 }
 
@@ -16,12 +23,24 @@ export class DatabaseBackupManager {
     private readonly databasePath: string;
     private readonly backupRoot: string;
 
+    /**
+     * Creates a manager for backups adjacent to one SQLite database.
+     *
+     * @param databasePath Absolute or resolvable path to the live database.
+     */
     public constructor(databasePath = DatabaseManager.getSqlitePath()) {
         this.databasePath = databasePath;
         this.backupRoot = path.join(path.dirname(databasePath), 'backups');
     }
 
-    /** Creates and validates one atomic pre-migration backup. */
+    /**
+     * Creates and validates one atomic pre-migration backup.
+     *
+     * @param releaseId Release about to apply the pending migrations.
+     * @param fromMigration Last migration already present in the database.
+     * @param toMigration Last pending migration covered by this backup.
+     * @returns Metadata for the completed backup.
+     */
     public async create(
         releaseId: string,
         fromMigration: string,
@@ -45,7 +64,7 @@ export class DatabaseBackupManager {
         return this.describe(target);
     }
 
-    /** Lists valid backup filenames without opening their contents. */
+    /** Returns managed backups in descending identifier order. */
     public list(): readonly DatabaseBackup[] {
         if (!fs.existsSync(this.backupRoot)) {
             return [];
@@ -57,14 +76,24 @@ export class DatabaseBackupManager {
             .map((name) => this.describe(path.join(this.backupRoot, name)));
     }
 
-    /** Removes older backups after a successful deployment. */
+    /**
+     * Removes backups beyond the requested retention count.
+     *
+     * @param count Number of newest managed backups to preserve.
+     */
     public retain(count: number): void {
         for (const backup of this.list().slice(count)) {
             fs.rmSync(backup.path);
         }
     }
 
-    /** Validates and atomically restores an explicit backup identifier. */
+    /**
+     * Validates and atomically restores an explicit backup identifier.
+     *
+     * The caller must stop all writers before invoking this operation.
+     *
+     * @param id Exact managed backup identifier to restore.
+     */
     public restore(id: string): void {
         if (!this.isBackupId(id) || id === 'latest') {
             throw new Error(`Invalid database backup identifier '${id}'.`);

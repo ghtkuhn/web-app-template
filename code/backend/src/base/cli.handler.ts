@@ -6,7 +6,12 @@ import type { CliHandlerInput, HandlerResult } from './interfaces.ts';
  * Output formatting and process exit codes remain inside `CliRunner`.
  */
 export abstract class CliHandler extends BaseHandler<CliHandlerInput> {
-    /** Processes one structured command received from the CLI transport. */
+    /**
+     * Processes one structured command received from the CLI transport.
+     *
+     * @param input Parsed command, arguments, and options.
+     * @returns A transport-neutral result for CLI serialization.
+     */
     protected async processRequest(
         input: CliHandlerInput,
     ): Promise<HandlerResult> {

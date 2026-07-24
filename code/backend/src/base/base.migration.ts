@@ -11,7 +11,9 @@ import { config } from '../config.ts';
 import { DatabaseBackupManager } from './base.database-backup.ts';
 import { DatabaseManager } from './base.database.ts';
 
+/** Result metadata returned after checking and applying pending migrations. */
 export interface MigrationOutcome {
+    /** Whether the run created a pre-migration SQLite backup. */
     readonly backupCreated: boolean;
 }
 
@@ -19,7 +21,16 @@ export interface MigrationOutcome {
 export class MigrationManager {
     private static migrationPromise: Promise<MigrationOutcome> | null = null;
 
-    /** Backs up the database and applies all pending versioned migrations. */
+    /**
+     * Applies all pending versioned migrations.
+     *
+     * Creates exactly one integrity-checked backup when migrations are pending
+     * and serializes concurrent migration requests within this process.
+     *
+     * @param database Application-owned database abstraction to migrate.
+     * @param backups Backup manager used before the first pending migration.
+     * @returns Whether a pre-migration backup was created.
+     */
     public static async migrate(
         database: Kysely<Database>,
         backups = new DatabaseBackupManager(),

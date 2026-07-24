@@ -132,7 +132,7 @@ test('HEAD responses contain no body', async () => {
     );
 });
 
-test('handler failures return 500 without stack traces', async () => {
+test('handler failures return 500 without internal details', async () => {
     const module = new TestModule();
     module.registerHandler('http', new ThrowingHandler());
     await withServer({ test: module }, async (server) => {
@@ -142,6 +142,8 @@ test('handler failures return 500 without stack traces', async () => {
         assert.equal(response.status, 500);
         const body = await response.text();
         assert.doesNotMatch(body, /at ThrowingHandler/);
+        assert.doesNotMatch(body, /secret failure details/);
+        assert.match(body, /Internal Server Error/);
     });
 });
 

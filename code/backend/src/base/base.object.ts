@@ -17,16 +17,24 @@ import type { IBaseObject } from './interfaces.ts';
  * - Must NOT contain logic for persisting itself to the database.
  */
 export abstract class BaseObject implements IBaseObject {
+    /** Stable identity assigned when the object is first constructed. */
     id: string = uuidv4();
+    /** Creation time retained across persistence mappings. */
     createdAt: Date = new Date();
+    /** Last domain-change time retained across persistence mappings. */
     updatedAt: Date = new Date();
+    /** Whether the object has been logically deleted. */
     isDeleted: boolean = false;
+    /** Time of logical deletion, when applicable. */
     deletedAt?: Date;
 
+    /**
+     * Initializes domain state from trusted, explicitly mapped values.
+     *
+     * @param data Initial identity, metadata, and subclass properties.
+     */
     constructor(data: Partial<BaseObject>) {
         Object.assign(this, data);
-        // Sicherstellen, dass updatedAt bei Initialisierung gesetzt ist
-        if (data.updatedAt) this.updatedAt = data.updatedAt;
     }
 
     /**
@@ -42,17 +50,23 @@ export abstract class BaseObject implements IBaseObject {
     }
 
     /**
-     * Converts the domain object into a plain JavaScript object
-     * suitable for API responses (JSON).
+     * Produces the object's controlled domain serialization.
+     *
+     * Domain objects are not public transport contracts. Services must map them
+     * to DTOs before returning data through HTTP, WebSocket, CLI, or Node ports.
+     * Subclasses containing sensitive fields must exclude those fields here.
+     *
+     * @returns A plain representation of non-sensitive domain state.
      */
     toJSON() {
         const json = { ...this };
-        // Sensitive fields can be removed or formats adjusted here
         return json;
     }
 
     /**
      * Marks the object as deleted (Soft Delete).
+     *
+     * Updates both deletion and modification metadata.
      */
     softDelete(): void {
         this.isDeleted = true;

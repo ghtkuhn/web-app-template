@@ -9,7 +9,12 @@ export abstract class NodeHandler<TInput, TOutput> extends BaseHandler<
     TInput,
     TOutput
 > {
-    /** Processes one typed request from another module. */
+    /**
+     * Processes one typed request from another module.
+     *
+     * @param input Discriminated request supplied through an injected module port.
+     * @returns A typed transport-neutral result.
+     */
     protected async processRequest(
         input: TInput,
     ): Promise<HandlerResult<TOutput>> {

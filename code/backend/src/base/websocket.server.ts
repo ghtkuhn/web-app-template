@@ -23,7 +23,11 @@ export class WebSocketServer {
     private heartbeat: NodeJS.Timeout | null = null;
     private readonly responsiveClients = new WeakSet<WebSocket>();
 
-    /** Creates a stopped WebSocket server. */
+    /**
+     * Creates a stopped WebSocket server.
+     *
+     * @param config Port, module gateways, message limits, heartbeat, and origins.
+     */
     constructor(config: WebSocketServerConfig) {
         this.configuredPort = config.port;
         this.modules = new Map(Object.entries(config.modules));
