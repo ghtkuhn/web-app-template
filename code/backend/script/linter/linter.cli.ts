@@ -2,7 +2,7 @@ import type { LintResult, LintWriter } from './interfaces.ts';
 import { BackendLinter } from './backend.linter.ts';
 
 const ARCHITECTURE_GUIDANCE =
-    'Read code/backend/ARCHITECTURE.md to understand the required backend structure.\n';
+    'You must Read code/backend/ARCHITECTURE.md to understand the required backend structure.\n';
 
 /** Formats linter results for command-line execution and maps exit codes. */
 export class LinterCli {
@@ -33,8 +33,8 @@ export class LinterCli {
         } catch (error: unknown) {
             const message =
                 error instanceof Error ? error.message : 'Unknown linter error';
-            this.stderr.write(`FATAL [LINTER_FAILURE] ${message}\n`);
             this.stderr.write(ARCHITECTURE_GUIDANCE);
+            this.stderr.write(`FATAL [LINTER_FAILURE] ${message}\n`);
             return 2;
         }
     }
@@ -48,12 +48,12 @@ export class LinterCli {
             return;
         }
 
+        this.stderr.write(ARCHITECTURE_GUIDANCE);
         for (const issue of result.issues) {
             const prefix = issue.severity === 'fatal' ? 'FATAL' : 'ERROR';
             this.stderr.write(
                 `${prefix} [${issue.ruleId}] ${issue.file}: ${issue.message}\n`,
             );
         }
-        this.stderr.write(ARCHITECTURE_GUIDANCE);
     }
 }

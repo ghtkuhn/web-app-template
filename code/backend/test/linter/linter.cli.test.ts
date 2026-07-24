@@ -52,12 +52,12 @@ test('linter CLI returns one with deterministic architecture diagnostics', () =>
         ).run();
         assert.equal(exitCode, 1);
         const lines = stderr.value.trim().split('\n');
-        assert.match(lines[0], /module\/alpha/);
-        assert.match(lines[1], /module\/zeta/);
         assert.equal(
-            lines.at(-1),
-            'Read code/backend/ARCHITECTURE.md to understand the required backend structure.',
+            lines[0],
+            'You must Read code/backend/ARCHITECTURE.md to understand the required backend structure.',
         );
+        assert.match(lines[1], /module\/alpha/);
+        assert.match(lines[2], /module\/zeta/);
     } finally {
         fixture.dispose();
     }
@@ -77,10 +77,15 @@ test('linter CLI returns two for parser failures', () => {
             stderr,
         ).run();
         assert.equal(exitCode, 2);
-        assert.match(stderr.value, /FATAL \[SOURCE_PARSE_ERROR\]/);
-        assert.match(
-            stderr.value,
-            /Read code\/backend\/ARCHITECTURE\.md/,
+        const lines = stderr.value.trim().split('\n');
+        assert.equal(
+            lines[0],
+            'You must Read code/backend/ARCHITECTURE.md to understand the required backend structure.',
+        );
+        assert.ok(
+            lines
+                .slice(1)
+                .some((line) => /FATAL \[SOURCE_PARSE_ERROR\]/.test(line)),
         );
     } finally {
         fixture.dispose();
