@@ -233,6 +233,26 @@ test('regular module files reject misplaced declarations and structure', () => {
     }
 });
 
+test('unknown module directories report allowed directories and root files', () => {
+    const fixture = new FixtureProject();
+    try {
+        fixture.mkdir('code/backend/src/module/example/constants');
+
+        const issue = new BackendLinter({ projectRoot: fixture.root })
+            .run()
+            .issues.find(
+                (candidate) =>
+                    candidate.ruleId === 'MODULE_DIRECTORY_UNKNOWN',
+            );
+        assert.equal(
+            issue?.message,
+            "Unsupported module-root directory 'constants'. Allowed directories: api, controller, dto, object, service, store. Module contracts and metadata must use these root files: constants.ts, index.ts, interfaces.ts, types.ts.",
+        );
+    } finally {
+        fixture.dispose();
+    }
+});
+
 test('composition and domain code respect dependency direction', () => {
     const fixture = new FixtureProject();
     try {

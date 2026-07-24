@@ -18,6 +18,8 @@ const LAYERS = new Set([
     'object',
     'dto',
 ]);
+const ALLOWED_LAYER_DIRECTORIES = [...LAYERS].sort().join(', ');
+const ALLOWED_MODULE_ROOT_FILES = [...ROOT_FILES].sort().join(', ');
 
 /** Enforces whole-project module shape, registration, and file naming. */
 export class ProjectRuleSet {
@@ -78,7 +80,7 @@ export class ProjectRuleSet {
                         this.issue(
                             directory,
                             'MODULE_DIRECTORY_UNKNOWN',
-                            `Unknown module directory '${layer}'.`,
+                            `Unsupported module-root directory '${layer}'. Allowed directories: ${ALLOWED_LAYER_DIRECTORIES}. Module contracts and metadata must use these root files: ${ALLOWED_MODULE_ROOT_FILES}.`,
                         ),
                     );
                 } else if (this.scanner.isEmptyDirectory(directory)) {
