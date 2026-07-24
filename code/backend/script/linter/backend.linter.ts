@@ -14,8 +14,11 @@ import type {
 import { PathResolver } from './path.resolver.ts';
 import { PersistenceRuleSet } from './persistence.rule-set.ts';
 import { ProjectRuleSet } from './project.rule-set.ts';
+import { ProjectModel } from './project.model.ts';
 import { SecurityRuleSet } from './security.rule-set.ts';
 import { SourceAnalyzer } from './source.analyzer.ts';
+import { TransportRuleSet } from './transport.rule-set.ts';
+import { WorkspaceRuleSet } from './workspace.rule-set.ts';
 
 /** Coordinates source discovery, analysis, and architecture rule evaluation. */
 export class BackendLinter {
@@ -31,10 +34,15 @@ export class BackendLinter {
     private readonly securityRules: SecurityRuleSet;
     private readonly dependencyRules: DependencyRuleSet;
     private readonly coverageRules: CoverageRuleSet;
+    private readonly architectureEvasionRules: ArchitectureEvasionRuleSet;
+    private readonly transportRules: TransportRuleSet;
+    private readonly workspaceRules: WorkspaceRuleSet;
+    private readonly project: ProjectModel;
 
     /** Creates a reusable linter core without output side effects. */
     constructor(config: BackendLinterConfig) {
         this.paths = new PathResolver(config.projectRoot);
+        this.project = new ProjectModel(this.paths);
         this.domainRules = new DomainRuleSet(this.paths);
         this.compositionRules = new CompositionRuleSet(this.paths);
         this.infrastructureRules = new InfrastructureRuleSet(this.paths);
@@ -43,7 +51,15 @@ export class BackendLinter {
         this.persistenceRules = new PersistenceRuleSet(this.paths);
         this.securityRules = new SecurityRuleSet(this.paths);
         this.dependencyRules = new DependencyRuleSet(this.paths);
-        this.coverageRules = new CoverageRuleSet(this.paths);
+        this.coverageRules = new CoverageRuleSet(this.paths, this.project);
+        this.architectureEvasionRules = new ArchitectureEvasionRuleSet(
+            this.paths,
+        );
+        this.transportRules = new TransportRuleSet(this.paths);
+        this.workspaceRules = new WorkspaceRuleSet(
+            this.paths,
+            this.project,
+        );
     }
 
     /** Analyzes the backend and returns deterministically sorted findings. */
@@ -59,13 +75,16 @@ export class BackendLinter {
             ...this.persistenceRules.evaluateDatabaseSchema(),
             ...this.dependencyRules.configurationIssues(),
             ...this.coverageRules.configurationIssues(),
+            ...this.workspaceConfigurationIssues(),
         ];
+        const analyses: SourceAnalysis[] = [];
 
         for (const filePath of sourceFiles) {
             const analysis = this.analyze(filePath, issues);
             if (!analysis) {
                 continue;
             }
+            analyses.push(analysis);
 
             issues.push(...this.infrastructureRules.evaluate(analysis));
             if (this.paths.moduleName(filePath)) {
@@ -76,16 +95,37 @@ export class BackendLinter {
                 issues.push(...this.securityRules.evaluate(analysis));
                 issues.push(...this.dependencyRules.evaluate(analysis));
                 issues.push(...this.coverageRules.evaluate(analysis));
+                issues.push(
+                    ...this.architectureEvasionRules.evaluate(analysis),
+                );
+                issues.push(...this.transportRules.evaluate(analysis));
             }
             if (this.paths.isCompositionFile(filePath)) {
                 issues.push(...this.compositionRules.evaluate(analysis));
             }
         }
+        issues.push(
+            ...this.architectureEvasionRules.evaluateFactoryCompleteness(
+                analyses,
+            ),
+            ...this.transportRules.evaluateTests(
+                this.project.testAnalyses(),
+            ),
+        );
 
         return {
             issues: this.sortIssues(issues),
             filesChecked: sourceFiles.length,
         };
+    }
+
+    /** Converts malformed workspace metadata into an existing fatal finding. */
+    private workspaceConfigurationIssues(): LintIssue[] {
+        try {
+            return this.workspaceRules.evaluate();
+        } catch {
+            return [];
+        }
     }
 
     /** Converts parser failures into fatal lint findings. */
@@ -169,3 +209,4 @@ export class BackendLinter {
         });
     }
 }
+import { ArchitectureEvasionRuleSet } from './architecture-evasion.rule-set.ts';

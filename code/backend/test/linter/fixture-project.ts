@@ -10,8 +10,16 @@ export class FixtureProject {
     constructor() {
         this.root = fs.mkdtempSync(path.join(os.tmpdir(), 'backend-linter-'));
         this.writeRaw(
+            'package.json',
+            '{"private":true,"devDependencies":{"typescript":"^5.0.0"}}',
+        );
+        this.writeRaw(
             'code/backend/package.json',
             '{"dependencies":{},"devDependencies":{}}',
+        );
+        this.writeRaw(
+            'tsconfig.base.json',
+            '{"compilerOptions":{"moduleResolution":"node","allowImportingTsExtensions":true,"noEmit":true}}',
         );
         this.writeRaw(
             'code/backend/openapi/openapi.yaml',
@@ -52,7 +60,11 @@ export class FixtureProject {
             this.writeRaw(
                 entryPath,
                 `export class ${pascalName}Module extends BaseModule implements ${pascalName}ModulePort {
-    public static readonly definition = {} satisfies NamedModuleDefinition;
+    public static readonly definition = {
+        name: '${moduleName}',
+        dependencies: [],
+        create: () => new ${pascalName}Module(),
+    } satisfies NamedModuleDefinition;
 }
 export type { ${pascalName}ModulePort } from './interfaces.ts';`,
             );

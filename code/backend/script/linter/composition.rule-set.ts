@@ -15,7 +15,49 @@ export class CompositionRuleSet {
         return [
             ...this.publicEntryIssues(analysis),
             ...this.catalogAggregationIssues(analysis),
+            ...this.genericityIssues(analysis),
         ];
+    }
+
+    /** Keeps composition generic and prevents duck-typed module rewiring. */
+    private genericityIssues(analysis: SourceAnalysis): LintIssue[] {
+        const domainImport =
+            !analysis.filePath.endsWith('module.catalog.ts') &&
+            analysis.dependencies.some((dependency) => {
+                const target = this.paths.resolveDependency(
+                    analysis.filePath,
+                    dependency.source,
+                );
+                return target !== null && this.paths.moduleName(target) !== null;
+            });
+        const rewiring = analysis.methodCalls.some((method) =>
+            /^(?:setInfrastructure|setHandlers|attachHandler|wireHandlers|registerHandler)$/u.test(
+                method,
+            ),
+        );
+        if (!domainImport && !rewiring) {
+            return [];
+        }
+        const issues: LintIssue[] = [];
+        if (domainImport) {
+            issues.push({
+                ruleId: 'COMPOSITION_GENERICITY',
+                severity: 'error',
+                file: this.paths.relative(analysis.filePath),
+                message:
+                    'Composition must remain domain-agnostic; individual module entry points are owned by module.catalog.ts.',
+            });
+        }
+        if (rewiring) {
+            issues.push({
+                ruleId: 'MODULE_POST_CONSTRUCTION_WIRING',
+                severity: 'error',
+                file: this.paths.relative(analysis.filePath),
+                message:
+                    'Composition must not mutate or duck-type module instances after ModuleRegistry construction.',
+            });
+        }
+        return issues;
     }
 
     /** Restricts composition dependencies to public module entry points. */
