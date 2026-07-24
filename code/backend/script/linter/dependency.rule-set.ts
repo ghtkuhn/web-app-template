@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import type { LintIssue, SourceAnalysis } from './interfaces.ts';
+import type { LintIssueDraft, SourceAnalysis } from './interfaces.ts';
 import { PathResolver } from './path.resolver.ts';
 
 /** Ensures runtime packages are owned by the backend workspace. */
@@ -37,7 +37,7 @@ export class DependencyRuleSet {
     }
 
     /** Reports malformed dependency metadata as a fatal linter error. */
-    public configurationIssues(): LintIssue[] {
+    public configurationIssues(): LintIssueDraft[] {
         return this.manifestError
             ? [
                   {
@@ -54,8 +54,8 @@ export class DependencyRuleSet {
 
     /** Evaluates runtime package imports for one domain source file. */
     // fallow-ignore-next-line complexity -- Filters the finite npm import ownership cases.
-    public evaluate(analysis: SourceAnalysis): LintIssue[] {
-        const issues: LintIssue[] = [];
+    public evaluate(analysis: SourceAnalysis): LintIssueDraft[] {
+        const issues: LintIssueDraft[] = [];
         const reported = new Set<string>();
         for (const dependency of analysis.dependencies) {
             if (

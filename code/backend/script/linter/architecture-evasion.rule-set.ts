@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { LintIssue, SourceAnalysis } from './interfaces.ts';
+import type { LintIssueDraft, SourceAnalysis } from './interfaces.ts';
 import { PathResolver } from './path.resolver.ts';
 
 /** Rejects module contracts and wiring patterns that bypass typed composition. */
@@ -13,8 +13,8 @@ export class ArchitectureEvasionRuleSet {
 
     /** Evaluates rules that can be decided from one domain source file. */
     // fallow-ignore-next-line complexity -- Dispatches independent module contract rules.
-    public evaluate(analysis: SourceAnalysis): LintIssue[] {
-        const issues: LintIssue[] = [];
+    public evaluate(analysis: SourceAnalysis): LintIssueDraft[] {
+        const issues: LintIssueDraft[] = [];
         if (
             analysis.anyTypeCount > 0 ||
             analysis.anyAssertionCount > 0 ||
@@ -113,8 +113,8 @@ export class ArchitectureEvasionRuleSet {
     // fallow-ignore-next-line complexity -- Relates module handlers to constructor registrations.
     public evaluateFactoryCompleteness(
         analyses: readonly SourceAnalysis[],
-    ): LintIssue[] {
-        const issues: LintIssue[] = [];
+    ): LintIssueDraft[] {
+        const issues: LintIssueDraft[] = [];
         const moduleNames = new Set(
             analyses
                 .map((analysis) => this.paths.moduleName(analysis.filePath))
@@ -186,7 +186,7 @@ export class ArchitectureEvasionRuleSet {
         analysis: SourceAnalysis,
         ruleId: string,
         message: string,
-    ): LintIssue {
+    ): LintIssueDraft {
         return {
             ruleId,
             severity: 'error',

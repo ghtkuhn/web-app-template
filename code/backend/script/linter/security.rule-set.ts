@@ -1,4 +1,4 @@
-import type { LintIssue, SourceAnalysis } from './interfaces.ts';
+import type { LintIssueDraft, SourceAnalysis } from './interfaces.ts';
 import { PathResolver } from './path.resolver.ts';
 
 /** Enforces centralized configuration and safe Domain Object serialization. */
@@ -12,8 +12,8 @@ export class SecurityRuleSet {
 
     /** Evaluates security rules for one domain source file. */
     // fallow-ignore-next-line complexity -- Applies independent, fixture-tested security checks.
-    public evaluate(analysis: SourceAnalysis): LintIssue[] {
-        const issues: LintIssue[] = [];
+    public evaluate(analysis: SourceAnalysis): LintIssueDraft[] {
+        const issues: LintIssueDraft[] = [];
         if (analysis.environmentAccessCount > 0) {
             issues.push(
                 this.issue(
@@ -68,7 +68,7 @@ export class SecurityRuleSet {
         analysis: SourceAnalysis,
         ruleId: string,
         message: string,
-    ): LintIssue {
+    ): LintIssueDraft {
         return {
             ruleId,
             severity: 'error',

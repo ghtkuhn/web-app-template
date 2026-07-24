@@ -1,4 +1,4 @@
-import type { LintIssue } from './interfaces.ts';
+import type { LintIssueDraft } from './interfaces.ts';
 import { PathResolver } from './path.resolver.ts';
 import { ProjectModel } from './project.model.ts';
 
@@ -15,8 +15,8 @@ export class WorkspaceRuleSet {
 
     /** Evaluates lockfile, toolchain, compiler, and verification ownership. */
     // fallow-ignore-next-line complexity -- Evaluates four independent workspace ownership contracts.
-    public evaluate(): LintIssue[] {
-        const issues: LintIssue[] = [];
+    public evaluate(): LintIssueDraft[] {
+        const issues: LintIssueDraft[] = [];
         for (const lockfile of this.project.workspaceLockfiles()) {
             issues.push(
                 this.issue(
@@ -94,7 +94,7 @@ export class WorkspaceRuleSet {
     }
 
     /** Creates one normalized workspace finding. */
-    private issue(file: string, ruleId: string, message: string): LintIssue {
+    private issue(file: string, ruleId: string, message: string): LintIssueDraft {
         return {
             ruleId,
             severity: 'error',

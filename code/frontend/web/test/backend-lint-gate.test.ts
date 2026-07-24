@@ -57,6 +57,13 @@ class SequenceCheckRunner implements RepairCheckRunner {
 }
 
 const GREEN: BackendLintResult = { status: 'green', issues: [] };
+const ISSUE_DETAILS = {
+    fix: 'Apply the required architecture repair.',
+    location: {
+        start: { line: 2, column: 3 },
+        end: { line: 2, column: 8 },
+    },
+} as const;
 
 describe('BackendLintGate', () => {
     test('runs a focused architecture checkpoint after every mutation', () => {
@@ -104,16 +111,24 @@ describe('BackendLintGate', () => {
                 status: 'red',
                 issues: [
                     {
+                        ...ISSUE_DETAILS,
                         ruleId: 'HANDLER_DTO_INPUT',
                         file:
                             'code/backend/src/module/example/api/' +
                             'example.http.handler.ts',
-                        message: 'Use a DTO.',
+                        reason: 'Use a DTO.',
                     },
                 ],
             },
         ]);
         const gate = new BackendLintGate(runner);
+        expect(gate.instruction()).toContain(
+            'example.http.handler.ts:2:3',
+        );
+        expect(gate.instruction()).toContain('Reason: Use a DTO.');
+        expect(gate.instruction()).toContain(
+            'Fix: Apply the required architecture repair.',
+        );
 
         expect(
             gate.authorizeMutation(
@@ -150,11 +165,12 @@ describe('BackendLintGate', () => {
             status: 'red',
             issues: [
                 {
+                    ...ISSUE_DETAILS,
                     ruleId: 'HANDLER_DTO_CAST_BYPASS',
                     file:
                         'code/backend/src/module/example/api/' +
                         'example.http.handler.ts',
-                    message: 'Do not cast JSON.',
+                    reason: 'Do not cast JSON.',
                 },
             ],
         };
@@ -178,11 +194,12 @@ describe('BackendLintGate', () => {
             status: 'red',
             issues: [
                 {
+                    ...ISSUE_DETAILS,
                     ruleId: 'DOMAIN_ANY_TYPE',
                     file:
                         'code/backend/src/module/example/service/' +
                         'example.service.ts',
-                    message: 'Remove any.',
+                    reason: 'Remove any.',
                 },
             ],
         };
@@ -212,14 +229,16 @@ describe('BackendLintGate', () => {
                 status: 'red',
                 issues: [
                     {
+                        ...ISSUE_DETAILS,
                         ruleId: 'WORKSPACE_LOCKFILE_OWNERSHIP',
                         file: 'code/backend/package-lock.json',
-                        message: 'Nested lockfile.',
+                        reason: 'Nested lockfile.',
                     },
                     {
+                        ...ISSUE_DETAILS,
                         ruleId: 'ROOT_COMPILER_CONFIG_CONTRACT',
                         file: 'tsconfig.base.json',
-                        message: 'Compiler mismatch.',
+                        reason: 'Compiler mismatch.',
                     },
                 ],
             },
@@ -256,11 +275,12 @@ describe('BackendLintGate', () => {
                 status: 'red',
                 issues: [
                     {
+                        ...ISSUE_DETAILS,
                         ruleId: 'DOMAIN_ANY_TYPE',
                         file:
                             'code/backend/src/module/example/' +
                             'service/example.service.ts',
-                        message: 'Remove any.',
+                        reason: 'Remove any.',
                     },
                 ],
             },
@@ -305,17 +325,33 @@ describe('backend lint support contracts', () => {
         expect(
             parseBackendLintResult({
                 status: 0,
-                stdout: 'Backend architecture valid.',
+                stdout: JSON.stringify({
+                    schemaVersion: 1,
+                    filesChecked: 1,
+                    issues: [],
+                }),
                 stderr: '',
             }).status,
         ).toBe('green');
         expect(
             parseBackendLintResult({
                 status: 1,
-                stdout: '',
-                stderr:
-                    'ERROR [DOMAIN_ANY_TYPE] ' +
-                    'code/backend/src/module/example/types.ts: Remove any.',
+                stdout: JSON.stringify({
+                    schemaVersion: 1,
+                    filesChecked: 1,
+                    issues: [
+                        {
+                            ...ISSUE_DETAILS,
+                            ruleId: 'DOMAIN_ANY_TYPE',
+                            severity: 'error',
+                            file:
+                                'code/backend/src/module/example/' +
+                                'types.ts',
+                            reason: 'Remove any.',
+                        },
+                    ],
+                }),
+                stderr: '',
             }),
         ).toMatchObject({
             status: 'red',
@@ -337,8 +373,30 @@ describe('backend lint support contracts', () => {
         expect(
             parseBackendLintResult({
                 status: 2,
-                stdout: '',
+                stdout: JSON.stringify({
+                    schemaVersion: 1,
+                    filesChecked: 0,
+                    issues: [
+                        {
+                            ...ISSUE_DETAILS,
+                            ruleId: 'LINTER_FAILURE',
+                            severity: 'fatal',
+                            file: 'code/backend',
+                            reason: 'failed',
+                        },
+                    ],
+                }),
                 stderr: 'fatal',
+            }).status,
+        ).toBe('failed');
+        expect(
+            parseBackendLintResult({
+                status: 1,
+                stdout: JSON.stringify({
+                    schemaVersion: 2,
+                    issues: [],
+                }),
+                stderr: '',
             }).status,
         ).toBe('failed');
         expect(

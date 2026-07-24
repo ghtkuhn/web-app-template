@@ -327,6 +327,21 @@ define a shortened `verify` script.
 
 ## Verification
 
+Architecture diagnostics are read-only and separate the problem from its
+remediation:
+
+```text
+ERROR [RULE_ID] path/file.ts:line:column
+Reason: Why the current source violates the architecture.
+Fix: The concrete architecture-preserving repair.
+```
+
+Positions are one-based and identify the relevant AST evidence when the finding
+originates in TypeScript. Filesystem-only findings use `1:1`. Machine consumers
+run `node code/backend/script/linter.ts --format json` and validate
+`schemaVersion: 1`; they must not parse the human output or write diagnostic
+comments into source files.
+
 Run the complete repository verification before declaring backend work done:
 
 ```bash

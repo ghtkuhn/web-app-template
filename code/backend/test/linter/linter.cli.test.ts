@@ -61,7 +61,43 @@ test('linter CLI returns one with deterministic architecture diagnostics', () =>
             'You must Read code/backend/ARCHITECTURE.md to understand the required backend structure.',
         );
         assert.match(lines[1], /module\/alpha/);
-        assert.match(lines[2], /module\/zeta/);
+        assert.match(lines[4], /module\/zeta/);
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('linter CLI emits one versioned JSON diagnostic document', () => {
+    const fixture = new FixtureProject();
+    const stdout = new StringWriter();
+    const stderr = new StringWriter();
+    try {
+        fixture.write(
+            'code/backend/src/module/example/dto/example.dto.ts',
+            'export class ExampleDTO {}',
+        );
+        const exitCode = new LinterCli(
+            fixture.root,
+            stdout,
+            stderr,
+            'json',
+        ).run();
+        const payload = JSON.parse(stdout.value) as {
+            schemaVersion: number;
+            issues: Array<{
+                reason: string;
+                fix: string;
+                location: { start: { line: number; column: number } };
+            }>;
+        };
+
+        assert.equal(exitCode, 1);
+        assert.equal(stderr.value, '');
+        assert.equal(payload.schemaVersion, 1);
+        assert.ok(payload.issues[0].reason.length > 0);
+        assert.ok(payload.issues[0].fix.length > 0);
+        assert.ok(payload.issues[0].location.start.line >= 1);
+        assert.ok(payload.issues[0].location.start.column >= 1);
     } finally {
         fixture.dispose();
     }

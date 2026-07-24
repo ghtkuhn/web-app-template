@@ -9,4 +9,14 @@ const projectRoot = path.resolve(
     '../../..',
 );
 
-process.exitCode = new LinterCli(projectRoot).run();
+const format = process.argv.slice(2).includes('--format') &&
+    process.argv.slice(2).includes('json')
+    ? 'json'
+    : 'text';
+
+process.exitCode = new LinterCli(
+    projectRoot,
+    process.stdout,
+    process.stderr,
+    format,
+).run();

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { LintIssue, SourceAnalysis } from './interfaces.ts';
+import type { LintIssueDraft, SourceAnalysis } from './interfaces.ts';
 import { PathResolver } from './path.resolver.ts';
 
 /** Enforces typed persistence mapping and Domain Object invariants. */
@@ -14,9 +14,9 @@ export class PersistenceRuleSet {
 
     /** Evaluates persistence rules for one domain source file. */
     // fallow-ignore-next-line complexity -- Declarative dispatcher for independently tested persistence rules.
-    public evaluate(analysis: SourceAnalysis): LintIssue[] {
+    public evaluate(analysis: SourceAnalysis): LintIssueDraft[] {
         const layer = this.paths.layer(analysis.filePath);
-        const issues: LintIssue[] = [];
+        const issues: LintIssueDraft[] = [];
         if (
             analysis.filePath.endsWith('/interfaces.ts') &&
             /interface\s+[A-Za-z0-9_]*Store\b/u.test(analysis.source) &&
@@ -170,7 +170,7 @@ export class PersistenceRuleSet {
     }
 
     /** Checks BaseObject metadata on every declared database table. */
-    public evaluateDatabaseSchema(): LintIssue[] {
+    public evaluateDatabaseSchema(): LintIssueDraft[] {
         const filePath = path.join(this.paths.sourceRoot(), 'database.ts');
         if (!fs.existsSync(filePath)) {
             return [];
@@ -183,7 +183,7 @@ export class PersistenceRuleSet {
             'is_deleted',
             'deleted_at',
         ];
-        const issues: LintIssue[] = [];
+        const issues: LintIssueDraft[] = [];
         for (const match of source.matchAll(
             /interface\s+([A-Za-z0-9_]+Table)\s*\{([\s\S]*?)\}/gu,
         )) {
@@ -207,7 +207,7 @@ export class PersistenceRuleSet {
         analysis: SourceAnalysis,
         ruleId: string,
         message: string,
-    ): LintIssue {
+    ): LintIssueDraft {
         return {
             ruleId,
             severity: 'error',

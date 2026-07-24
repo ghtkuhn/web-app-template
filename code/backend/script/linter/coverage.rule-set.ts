@@ -1,6 +1,6 @@
 import type {
     HttpTestOperation,
-    LintIssue,
+    LintIssueDraft,
     SourceAnalysis,
 } from './interfaces.ts';
 import { PathResolver } from './path.resolver.ts';
@@ -27,7 +27,7 @@ export class CoverageRuleSet {
     }
 
     /** Reports a structurally unreadable OpenAPI contract. */
-    public configurationIssues(): LintIssue[] {
+    public configurationIssues(): LintIssueDraft[] {
         return this.openApiError
             ? [
                   {
@@ -44,7 +44,7 @@ export class CoverageRuleSet {
 
     /** Checks one concrete HTTP handler or Store against executable evidence. */
     // fallow-ignore-next-line complexity -- Dispatches independent HTTP and Store coverage checks.
-    public evaluate(analysis: SourceAnalysis): LintIssue[] {
+    public evaluate(analysis: SourceAnalysis): LintIssueDraft[] {
         if (analysis.filePath.endsWith('.http.handler.ts')) {
             return this.httpIssues(analysis);
         }
@@ -65,8 +65,8 @@ export class CoverageRuleSet {
 
     /** Requires OpenAPI, executable request, and documented status evidence. */
     // fallow-ignore-next-line complexity -- Correlates three independently required contract sources.
-    private httpIssues(analysis: SourceAnalysis): LintIssue[] {
-        const issues: LintIssue[] = [];
+    private httpIssues(analysis: SourceAnalysis): LintIssueDraft[] {
+        const issues: LintIssueDraft[] = [];
         const operations = analysis.httpHandlerOperations;
         if (
             operations.length === 0 &&
@@ -110,7 +110,7 @@ export class CoverageRuleSet {
                 );
                 continue;
             }
-            const assertions = matchingTests.flatMap((test) =>
+            const assertionEvidence = matchingTests.flatMap((test) =>
                 test.httpTestOperations
                     .filter(
                         (request) =>
@@ -118,44 +118,64 @@ export class CoverageRuleSet {
                             request.method === operation.method,
                     )
                     .flatMap((request) =>
-                        this.assertionsForRequest(test, request),
+                        this.assertionsForRequest(test, request).map(
+                            (assertion) => ({ assertion, test }),
+                        ),
                     ),
             );
-            if (assertions.some((assertion) => !assertion.exact)) {
+            const permissive = assertionEvidence.find(
+                ({ assertion }) => !assertion.exact,
+            );
+            if (permissive) {
                 issues.push(
-                    this.issue(
-                        analysis,
-                        'HTTP_ASSERTION_EXACT',
-                        `HTTP operation '${operation.method} ${operation.path}' uses a permissive status assertion. Fix: prepare one deterministic scenario per documented result and assert one exact status with equal() or strictEqual().`,
-                    ),
+                    {
+                        ruleId: 'HTTP_ASSERTION_EXACT',
+                        severity: 'error',
+                        file: this.paths.relative(
+                            permissive.test.filePath,
+                        ),
+                        message: `HTTP operation '${operation.method} ${operation.path}' uses a permissive status assertion. Fix: prepare one deterministic scenario per documented result and assert one exact status with equal() or strictEqual().`,
+                        location: permissive.assertion.location,
+                    },
                 );
                 issues.push(
-                    this.issue(
-                        analysis,
-                        'TEST_PERMISSIVE_ASSERTION',
-                        'Tests must not accept multiple business outcomes with logical alternatives or status ranges. Fix: use separate deterministic tests with one exact expected result.',
-                    ),
+                    {
+                        ruleId: 'TEST_PERMISSIVE_ASSERTION',
+                        severity: 'error',
+                        file: this.paths.relative(
+                            permissive.test.filePath,
+                        ),
+                        message: 'Tests must not accept multiple business outcomes with logical alternatives or status ranges. Fix: use separate deterministic tests with one exact expected result.',
+                        location: permissive.assertion.location,
+                    },
                 );
             }
-            const assertedStatuses = assertions.flatMap(
-                (assertion) => assertion.statuses,
+            const assertedStatuses = assertionEvidence.flatMap(
+                ({ assertion }) => assertion.statuses,
             );
             if (
                 assertedStatuses.includes(500) &&
                 !statuses.includes(500)
             ) {
-                issues.push(
-                    this.issue(
-                        analysis,
-                        'HTTP_UNEXPECTED_SERVER_ERROR',
-                        `HTTP operation '${operation.method} ${operation.path}' asserts status 500 although OpenAPI does not document it. Fix: make the scenario deterministic and assert its documented business status.`,
-                    ),
+                const serverError = assertionEvidence.find(
+                    ({ assertion }) => assertion.statuses.includes(500),
                 );
+                if (serverError) {
+                    issues.push({
+                        ruleId: 'HTTP_UNEXPECTED_SERVER_ERROR',
+                        severity: 'error',
+                        file: this.paths.relative(
+                            serverError.test.filePath,
+                        ),
+                        message: `HTTP operation '${operation.method} ${operation.path}' asserts status 500 although OpenAPI does not document it. Fix: make the scenario deterministic and assert its documented business status.`,
+                        location: serverError.assertion.location,
+                    });
+                }
             }
             const asserted = new Set(
-                assertions
-                    .filter((assertion) => assertion.exact)
-                    .flatMap((assertion) => assertion.statuses),
+                assertionEvidence
+                    .filter(({ assertion }) => assertion.exact)
+                    .flatMap(({ assertion }) => assertion.statuses),
             );
             const missing = statuses.filter((status) => !asserted.has(status));
             if (missing.length > 0) {
@@ -197,7 +217,7 @@ export class CoverageRuleSet {
     }
 
     /** Requires Store construction and at least one persistence method call. */
-    private storeIssues(analysis: SourceAnalysis): LintIssue[] {
+    private storeIssues(analysis: SourceAnalysis): LintIssueDraft[] {
         const className = analysis.classes[0]?.name;
         const tested = this.tests.some(
             (test) =>
@@ -249,7 +269,7 @@ export class CoverageRuleSet {
         analysis: SourceAnalysis,
         ruleId: string,
         message: string,
-    ): LintIssue {
+    ): LintIssueDraft {
         return {
             ruleId,
             severity: 'error',

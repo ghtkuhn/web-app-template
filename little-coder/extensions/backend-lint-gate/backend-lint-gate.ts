@@ -25,7 +25,12 @@ export interface BackendMutation {
 export interface BackendLintIssue {
     readonly ruleId: string;
     readonly file: string;
-    readonly message: string;
+    readonly reason: string;
+    readonly fix: string;
+    readonly location: {
+        readonly start: { readonly line: number; readonly column: number };
+        readonly end: { readonly line: number; readonly column: number };
+    };
 }
 
 /** Normalized result returned by the architecture-linter runner. */
@@ -174,7 +179,10 @@ export class BackendLintGate {
         }
         return (
             `${this.status()}. Active cause: [${this.activeCause.ruleId}] ` +
-            `${this.activeCause.file}: ${this.activeCause.message} ` +
+            `${this.activeCause.file}:` +
+            `${this.activeCause.location.start.line}:` +
+            `${this.activeCause.location.start.column}. Reason: ` +
+            `${this.activeCause.reason} Fix: ${this.activeCause.fix} ` +
             `Allowed: ${[...this.activeCause.allowedFiles].join(', ')}. ` +
             'Fix only the active lint cause. Do not silence or approximate ' +
             'the rule. Do not use casts, widened return types, permissive ' +
@@ -237,7 +245,8 @@ export class BackendLintGate {
         }
         this.lastSummary =
             `Backend gate red: [${first.ruleId}] ${first.file}: ` +
-            first.message;
+            `${first.location.start.line}:${first.location.start.column}: ` +
+            first.reason;
     }
 
     /** Runs the focused check and architecture checkpoint after a mutation. */
@@ -253,9 +262,16 @@ export class BackendLintGate {
                 this.activeCause = {
                     ruleId: 'FOCUSED_CHECK_FAILED',
                     file: mutation.file,
-                    message:
+                    reason:
                         `${check.reason}. Fix the new compile or test ` +
                         'failure in the mutated file.',
+                    fix:
+                        'Repair the focused compile or test failure in the ' +
+                        'mutated file before continuing.',
+                    location: {
+                        start: { line: 1, column: 1 },
+                        end: { line: 1, column: 1 },
+                    },
                     allowedFiles: new Set([
                         normalizeProjectPath(mutation.file),
                     ]),
@@ -337,7 +353,10 @@ export class BackendLintGate {
 
     /** Compares causes without relying on diagnostic wording. */
     private causeKey(issue: BackendLintIssue): string {
-        return `${issue.ruleId}:${normalizeProjectPath(issue.file)}`;
+        return (
+            `${issue.ruleId}:${normalizeProjectPath(issue.file)}:` +
+            `${issue.location.start.line}:${issue.location.start.column}`
+        );
     }
 
     /** Creates a stable blocked response. */

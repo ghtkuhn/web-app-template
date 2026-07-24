@@ -1,12 +1,35 @@
 /** Severity determines whether a finding is an architecture or linter failure. */
 export type LintSeverity = 'error' | 'fatal';
 
-/** Stable architecture finding returned by the linter core. */
+/** One-based source coordinate exposed to humans and tools. */
+export interface SourcePosition {
+    readonly line: number;
+    readonly column: number;
+}
+
+/** One-based, end-exclusive source range. */
+export interface SourceSpan {
+    readonly start: SourcePosition;
+    readonly end: SourcePosition;
+}
+
+/** Stable structured architecture finding returned by the linter core. */
 export interface LintIssue {
-    ruleId: string;
-    severity: LintSeverity;
-    file: string;
-    message: string;
+    readonly ruleId: string;
+    readonly severity: LintSeverity;
+    readonly file: string;
+    readonly reason: string;
+    readonly fix: string;
+    readonly location: SourceSpan;
+}
+
+/** Internal rule finding normalized by the diagnostic factory. */
+export interface LintIssueDraft {
+    readonly ruleId: string;
+    readonly severity: LintSeverity;
+    readonly file: string;
+    readonly message: string;
+    readonly location?: SourceSpan;
 }
 
 /** Complete deterministic result returned by one linter run. */
@@ -15,11 +38,19 @@ export interface LintResult {
     filesChecked: number;
 }
 
+/** Versioned JSON payload emitted by the architecture CLI. */
+export interface LintJsonResult {
+    readonly schemaVersion: 1;
+    readonly filesChecked: number;
+    readonly issues: readonly LintIssue[];
+}
+
 /** Import or re-export dependency discovered in a source file. */
 export interface SourceDependency {
     source: string;
     kind: 'import' | 'export' | 'require' | 'dynamic-import';
     typeOnly: boolean;
+    location: SourceSpan;
 }
 
 /** Architecture-relevant facts extracted for one class declaration. */
@@ -61,6 +92,7 @@ export interface HttpStatusAssertion {
     statuses: number[];
     exact: boolean;
     offset: number;
+    location: SourceSpan;
 }
 
 /** One explicit row-to-object constructor mapping. */
@@ -126,6 +158,15 @@ export interface SourceAnalysis {
     objectMappings: ObjectMapping[];
     validationCallOffsets: number[];
     persistenceCallOffsets: number[];
+    evidenceLocations: {
+        declarations: SourceSpan[];
+        imports: SourceSpan[];
+        handlerResults: SourceSpan[];
+        dtoCasts: SourceSpan[];
+        typeAssertions: SourceSpan[];
+        methodCalls: SourceSpan[];
+        httpAssertions: SourceSpan[];
+    };
 }
 
 /** Minimal output stream used by the CLI adapter and its tests. */

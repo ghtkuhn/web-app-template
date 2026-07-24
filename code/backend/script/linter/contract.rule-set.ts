@@ -1,4 +1,4 @@
-import type { LintIssue, SourceAnalysis } from './interfaces.ts';
+import type { LintIssueDraft, SourceAnalysis } from './interfaces.ts';
 import { PathResolver } from './path.resolver.ts';
 
 /** Enforces transport-neutral controllers and DTO-based public contracts. */
@@ -13,9 +13,9 @@ export class ContractRuleSet {
 
     /** Evaluates public contract rules for one domain source file. */
     // fallow-ignore-next-line complexity -- Declarative dispatcher for independently tested contract rules.
-    public evaluate(analysis: SourceAnalysis): LintIssue[] {
+    public evaluate(analysis: SourceAnalysis): LintIssueDraft[] {
         const layer = this.paths.layer(analysis.filePath);
-        const issues: LintIssue[] = [];
+        const issues: LintIssueDraft[] = [];
         if (layer === 'controller') {
             if (
                 analysis.requestBodyAccessCount > 0 ||
@@ -176,7 +176,7 @@ export class ContractRuleSet {
         analysis: SourceAnalysis,
         ruleId: string,
         message: string,
-    ): LintIssue {
+    ): LintIssueDraft {
         return {
             ruleId,
             severity: 'error',

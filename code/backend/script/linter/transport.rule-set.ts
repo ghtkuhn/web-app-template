@@ -1,4 +1,4 @@
-import type { LintIssue, SourceAnalysis } from './interfaces.ts';
+import type { LintIssueDraft, SourceAnalysis } from './interfaces.ts';
 import { PathResolver } from './path.resolver.ts';
 
 /** Enforces validated DTO boundaries and Node-compatible TypeScript syntax. */
@@ -12,8 +12,8 @@ export class TransportRuleSet {
 
     /** Evaluates one domain source file. */
     // fallow-ignore-next-line complexity -- Evaluates independent transport and syntax contracts.
-    public evaluate(analysis: SourceAnalysis): LintIssue[] {
-        const issues: LintIssue[] = [];
+    public evaluate(analysis: SourceAnalysis): LintIssueDraft[] {
+        const issues: LintIssueDraft[] = [];
         const layer = this.paths.layer(analysis.filePath);
         if (layer === 'api') {
             if (analysis.dtoCastFromJsonCount > 0) {
@@ -75,8 +75,8 @@ export class TransportRuleSet {
 
     /** Evaluates backend tests for type escapes and non-erasable syntax. */
     // fallow-ignore-next-line complexity -- Evaluates two independent test contracts.
-    public evaluateTests(tests: readonly SourceAnalysis[]): LintIssue[] {
-        const issues: LintIssue[] = [];
+    public evaluateTests(tests: readonly SourceAnalysis[]): LintIssueDraft[] {
+        const issues: LintIssueDraft[] = [];
         for (const test of tests) {
             if (
                 test.anyTypeCount > 0 ||
@@ -110,7 +110,7 @@ export class TransportRuleSet {
         analysis: SourceAnalysis,
         ruleId: string,
         message: string,
-    ): LintIssue {
+    ): LintIssueDraft {
         return {
             ruleId,
             severity: 'error',

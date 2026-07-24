@@ -5,6 +5,7 @@ import type {
     ClassMethodAnalysis,
     SourceAnalysis,
     SourceDependency,
+    SourceSpan,
 } from './interfaces.ts';
 import { PassiveConstantAnalyzer } from './passive-constant.analyzer.ts';
 
@@ -41,6 +42,10 @@ type AstNode = {
     right?: AstNode;
     static?: boolean;
     quasis?: Array<{ value?: { raw?: string } }>;
+    loc?: {
+        start?: { line?: number; column?: number };
+        end?: { line?: number; column?: number };
+    };
     [key: string]: unknown;
 };
 
@@ -84,6 +89,7 @@ export class SourceAnalyzer {
                 source: astNode.source.value,
                 kind: 'dynamic-import',
                 typeOnly: false,
+                location: this.span(astNode),
             });
         }
         if (astNode.type === 'CallExpression') {
@@ -102,12 +108,14 @@ export class SourceAnalyzer {
                     source,
                     kind: 'require',
                     typeOnly: false,
+                    location: this.span(astNode),
                 });
             } else if (source && astNode.callee?.type === 'Import') {
                 dependencies.push({
                     source,
                     kind: 'dynamic-import',
                     typeOnly: false,
+                    location: this.span(astNode),
                 });
             }
         }
@@ -173,13 +181,24 @@ export class SourceAnalyzer {
             objectMappings: [],
             validationCallOffsets: [],
             persistenceCallOffsets: [],
+            evidenceLocations: {
+                declarations: [],
+                imports: [],
+                handlerResults: [],
+                dtoCasts: [],
+                typeAssertions: [],
+                methodCalls: [],
+                httpAssertions: [],
+            },
         };
     }
 
     /** Processes only declarations that are direct children of the program. */
     private processTopLevel(node: AstNode, analysis: SourceAnalysis): void {
+        analysis.evidenceLocations.declarations.push(this.span(node));
         if (node.type === 'ImportDeclaration') {
             this.addDependency(node, 'import', analysis.dependencies);
+            analysis.evidenceLocations.imports.push(this.span(node));
             return;
         }
 
@@ -189,6 +208,9 @@ export class SourceAnalyzer {
             node.type === 'ExportAllDeclaration'
         ) {
             this.addDependency(node, 'export', analysis.dependencies);
+            if (node.source) {
+                analysis.evidenceLocations.imports.push(this.span(node));
+            }
             if (node.declaration) {
                 this.processDeclaration(node.declaration, analysis);
             }
@@ -245,6 +267,7 @@ export class SourceAnalyzer {
                 typeOnly:
                     node.importKind === 'type' ||
                     node.exportKind === 'type',
+                location: this.span(node),
             });
         }
     }
@@ -327,6 +350,9 @@ export class SourceAnalyzer {
             analysis.handlerResultPayloadNames.push(
                 parameter ? this.typeName(parameter) : null,
             );
+            analysis.evidenceLocations.handlerResults.push(
+                this.span(astNode),
+            );
         }
         if (astNode.type === 'TSInterfaceDeclaration') {
             for (const base of (astNode.extends as AstNode[] | undefined) ?? []) {
@@ -378,18 +404,27 @@ export class SourceAnalyzer {
             astNode.typeAnnotation?.type === 'TSUnknownKeyword'
         ) {
             analysis.unknownCastCount += 1;
+            analysis.evidenceLocations.typeAssertions.push(
+                this.span(astNode),
+            );
         }
         if (
             astNode.type === 'TSAsExpression' &&
             astNode.typeAnnotation?.type === 'TSAnyKeyword'
         ) {
             analysis.anyAssertionCount += 1;
+            analysis.evidenceLocations.typeAssertions.push(
+                this.span(astNode),
+            );
         }
         if (
             astNode.type === 'TSAsExpression' &&
             astNode.expression?.type === 'TSAsExpression'
         ) {
             analysis.doubleAssertionCount += 1;
+            analysis.evidenceLocations.typeAssertions.push(
+                this.span(astNode),
+            );
         }
         if (
             astNode.type === 'TSAsExpression' &&
@@ -405,6 +440,7 @@ export class SourceAnalyzer {
             )
         ) {
             analysis.dtoCastFromJsonCount += 1;
+            analysis.evidenceLocations.dtoCasts.push(this.span(astNode));
         }
         if (
             [
@@ -480,6 +516,7 @@ export class SourceAnalyzer {
             }
         }
         if (astNode.type === 'CallExpression') {
+            analysis.evidenceLocations.methodCalls.push(this.span(astNode));
             const methodName =
                 astNode.callee?.type === 'MemberExpression'
                     ? this.expressionName(astNode.callee.property ?? null)
@@ -797,6 +834,9 @@ export class SourceAnalyzer {
                 typeof expected.value === 'number'
             ) {
                 analysis.assertedHttpStatuses.push(expected.value);
+                analysis.evidenceLocations.httpAssertions.push(
+                    this.span(node),
+                );
                 const responseName = this.expressionName(
                     actual.object ?? null,
                 );
@@ -807,6 +847,7 @@ export class SourceAnalyzer {
                         exact: true,
                         offset:
                             typeof node.start === 'number' ? node.start : 0,
+                        location: this.span(node),
                     });
                 }
             }
@@ -821,6 +862,9 @@ export class SourceAnalyzer {
             );
             if (comparisons.length > 0) {
                 analysis.permissiveAssertionCount += 1;
+                analysis.evidenceLocations.httpAssertions.push(
+                    this.span(node),
+                );
                 for (const comparison of comparisons) {
                     analysis.httpStatusAssertions.push({
                         responseName: comparison.responseName,
@@ -828,6 +872,7 @@ export class SourceAnalyzer {
                         exact: false,
                         offset:
                             typeof node.start === 'number' ? node.start : 0,
+                        location: this.span(node),
                     });
                 }
             }
@@ -1103,5 +1148,17 @@ export class SourceAnalyzer {
             );
         }
         return node.type ?? null;
+    }
+
+    /** Converts a Babel location into the public one-based span contract. */
+    private span(node: AstNode): SourceSpan {
+        const startLine = node.loc?.start?.line ?? 1;
+        const startColumn = (node.loc?.start?.column ?? 0) + 1;
+        const endLine = node.loc?.end?.line ?? startLine;
+        const endColumn = (node.loc?.end?.column ?? startColumn - 1) + 1;
+        return {
+            start: { line: startLine, column: startColumn },
+            end: { line: endLine, column: endColumn },
+        };
     }
 }

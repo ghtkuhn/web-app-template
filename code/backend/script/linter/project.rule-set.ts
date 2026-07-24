@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { LintIssue, SourceAnalysis } from './interfaces.ts';
+import type { LintIssueDraft, SourceAnalysis } from './interfaces.ts';
 import { FileScanner } from './file.scanner.ts';
 import { PathResolver } from './path.resolver.ts';
 
@@ -33,8 +33,8 @@ export class ProjectRuleSet {
 
     /** Checks directory shape and mandatory module entry points. */
     // fallow-ignore-next-line complexity -- Walks independent, fixture-tested module structure rules.
-    public evaluateStructure(): LintIssue[] {
-        const issues: LintIssue[] = [];
+    public evaluateStructure(): LintIssueDraft[] {
+        const issues: LintIssueDraft[] = [];
         for (const moduleDirectory of this.scanner.listDirectDirectories(
             this.paths.moduleRoot(),
         )) {
@@ -116,8 +116,8 @@ export class ProjectRuleSet {
 
     /** Checks filename, class name, and local import extension conventions. */
     // fallow-ignore-next-line complexity -- Applies independent naming and import conventions.
-    public evaluateSource(analysis: SourceAnalysis): LintIssue[] {
-        const issues: LintIssue[] = [];
+    public evaluateSource(analysis: SourceAnalysis): LintIssueDraft[] {
+        const issues: LintIssueDraft[] = [];
         const layer = this.paths.layer(analysis.filePath);
         if (LAYERS.has(layer)) {
             if (
@@ -173,7 +173,7 @@ export class ProjectRuleSet {
     }
 
     /** Validates the public module class and port markers. */
-    private entryIssues(entryPath: string, moduleName: string): LintIssue[] {
+    private entryIssues(entryPath: string, moduleName: string): LintIssueDraft[] {
         const source = this.readOptional(entryPath);
         const interfaces = this.readOptional(
             path.join(path.dirname(entryPath), 'interfaces.ts'),
@@ -291,7 +291,7 @@ export class ProjectRuleSet {
         filePath: string,
         ruleId: string,
         message: string,
-    ): LintIssue {
+    ): LintIssueDraft {
         return {
             ruleId,
             severity: 'error',

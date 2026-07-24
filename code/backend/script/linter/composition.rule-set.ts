@@ -1,4 +1,4 @@
-import type { LintIssue, SourceAnalysis } from './interfaces.ts';
+import type { LintIssueDraft, SourceAnalysis } from './interfaces.ts';
 import { PathResolver } from './path.resolver.ts';
 
 /** Restricts composition roots to public module entry points. */
@@ -11,7 +11,7 @@ export class CompositionRuleSet {
     }
 
     /** Evaluates imports and re-exports in one composition source file. */
-    public evaluate(analysis: SourceAnalysis): LintIssue[] {
+    public evaluate(analysis: SourceAnalysis): LintIssueDraft[] {
         return [
             ...this.publicEntryIssues(analysis),
             ...this.catalogAggregationIssues(analysis),
@@ -21,7 +21,7 @@ export class CompositionRuleSet {
 
     /** Keeps composition generic and prevents duck-typed module rewiring. */
     // fallow-ignore-next-line complexity -- Evaluates two independent composition bypass patterns.
-    private genericityIssues(analysis: SourceAnalysis): LintIssue[] {
+    private genericityIssues(analysis: SourceAnalysis): LintIssueDraft[] {
         const domainImport =
             !analysis.filePath.endsWith('module.catalog.ts') &&
             analysis.dependencies.some((dependency) => {
@@ -39,7 +39,7 @@ export class CompositionRuleSet {
         if (!domainImport && !rewiring) {
             return [];
         }
-        const issues: LintIssue[] = [];
+        const issues: LintIssueDraft[] = [];
         if (domainImport) {
             issues.push({
                 ruleId: 'COMPOSITION_GENERICITY',
@@ -62,8 +62,8 @@ export class CompositionRuleSet {
     }
 
     /** Restricts composition dependencies to public module entry points. */
-    private publicEntryIssues(analysis: SourceAnalysis): LintIssue[] {
-        const issues: LintIssue[] = [];
+    private publicEntryIssues(analysis: SourceAnalysis): LintIssueDraft[] {
+        const issues: LintIssueDraft[] = [];
         for (const dependency of analysis.dependencies) {
             const target = this.paths.resolveDependency(
                 analysis.filePath,
@@ -88,7 +88,7 @@ export class CompositionRuleSet {
     /** Prevents generated catalogs from owning factories or dependencies. */
     private catalogAggregationIssues(
         analysis: SourceAnalysis,
-    ): LintIssue[] {
+    ): LintIssueDraft[] {
         if (
             !analysis.filePath.endsWith('module.catalog.ts') ||
             !/\b(?:dependencies|create)\s*:/.test(analysis.source)

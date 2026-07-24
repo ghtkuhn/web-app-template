@@ -29,17 +29,26 @@ test('source analyzer captures imports, re-exports, and top-level declarations',
         );
 
         const analysis = new SourceAnalyzer().analyze(filePath);
-        assert.deepEqual(analysis.dependencies, [
-            { source: './input.ts', kind: 'import', typeOnly: true },
-            { source: './value.ts', kind: 'export', typeOnly: false },
-            { source: './output.ts', kind: 'export', typeOnly: true },
-            { source: './required.ts', kind: 'require', typeOnly: false },
-            {
-                source: './lazy.ts',
-                kind: 'dynamic-import',
-                typeOnly: false,
-            },
-        ]);
+        assert.deepEqual(
+            analysis.dependencies.map(({ location: _location, ...item }) =>
+                item,
+            ),
+            [
+                { source: './input.ts', kind: 'import', typeOnly: true },
+                { source: './value.ts', kind: 'export', typeOnly: false },
+                { source: './output.ts', kind: 'export', typeOnly: true },
+                { source: './required.ts', kind: 'require', typeOnly: false },
+                {
+                    source: './lazy.ts',
+                    kind: 'dynamic-import',
+                    typeOnly: false,
+                },
+            ],
+        );
+        assert.deepEqual(analysis.dependencies[0].location.start, {
+            line: 2,
+            column: 17,
+        });
         assert.equal(analysis.interfaceCount, 1);
         assert.equal(analysis.typeCount, 1);
         assert.equal(analysis.constantCount, 3);

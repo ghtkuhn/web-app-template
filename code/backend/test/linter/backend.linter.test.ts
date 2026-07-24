@@ -23,17 +23,17 @@ test('backend modules must use the singular module directory', () => {
         const emptyDirectoryIssues = new BackendLinter({
             projectRoot: fixture.root,
         }).run().issues;
-        assert.deepEqual(emptyDirectoryIssues, [
-            {
-                ruleId: 'MODULE_DIRECTORY_NAME',
-                severity: 'error',
-                file: 'code/backend/src/modules',
-                message:
-                    'Backend modules must be placed in ' +
-                    'code/backend/src/module/<name>/; ' +
-                    'code/backend/src/modules/ is forbidden.',
-            },
-        ]);
+        assert.equal(emptyDirectoryIssues.length, 1);
+        assert.equal(
+            emptyDirectoryIssues[0].ruleId,
+            'MODULE_DIRECTORY_NAME',
+        );
+        assert.match(emptyDirectoryIssues[0].reason, /src\/modules/);
+        assert.ok(emptyDirectoryIssues[0].fix.length > 0);
+        assert.deepEqual(emptyDirectoryIssues[0].location, {
+            start: { line: 1, column: 1 },
+            end: { line: 1, column: 1 },
+        });
 
         fixture.write(
             'code/backend/src/modules/example/index.ts',
@@ -157,9 +157,10 @@ test('layer direction, declaration placement, and controller mapping are enforce
              }`,
         );
 
-        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+        const issues = new BackendLinter({ projectRoot: fixture.root })
             .run()
-            .issues.map((issue) => issue.ruleId);
+            .issues;
+        const ruleIds = issues.map((issue) => issue.ruleId);
         assert.ok(ruleIds.includes('LAYER_IMPORT_DIRECTION'));
         assert.ok(ruleIds.includes('DECLARATION_INTERFACE_LOCATION'));
         assert.ok(ruleIds.includes('CONTROLLER_MAPPING'));
@@ -245,7 +246,7 @@ test('unknown module directories report allowed directories and root files', () 
                     candidate.ruleId === 'MODULE_DIRECTORY_UNKNOWN',
             );
         assert.equal(
-            issue?.message,
+            issue?.reason,
             "Unsupported module-root directory 'constants'. Allowed directories: api, controller, dto, object, service, store. Module contracts and metadata must use these root files: constants.ts, index.ts, interfaces.ts, types.ts.",
         );
     } finally {
@@ -649,8 +650,12 @@ test('module entry diagnostic explains the complete required contract', () => {
                     candidate.ruleId === 'MODULE_ENTRY_CONTRACT',
             );
         assert.equal(
-            issue?.message,
-            "The example module entry is incomplete. Fix: Export ExampleModule from index.ts and extend BaseModule. ExampleModule must implement ExampleModulePort. ExampleModule must declare public static readonly definition in index.ts. The static definition must satisfy NamedModuleDefinition. Export interface ExampleModulePort from interfaces.ts. Make ExampleModulePort public from the module entry. Add this exact top-level line to index.ts: export type { ExampleModulePort } from './interfaces.ts'; An import type statement is private to index.ts and does not expose the port to consumers. Keep the interface in interfaces.ts; do not move or redeclare it.",
+            issue?.reason,
+            'The example module entry is incomplete.',
+        );
+        assert.match(
+            issue?.fix ?? '',
+            /Export ExampleModule from index\.ts/,
         );
     } finally {
         fixture.dispose();
@@ -679,8 +684,12 @@ test('module entry diagnostic reports only incorrect contract parts', () => {
                     candidate.ruleId === 'MODULE_ENTRY_CONTRACT',
             );
         assert.equal(
-            issue?.message,
-            'The example module entry is incomplete. Fix: ExampleModule must declare public static readonly definition in index.ts. The static definition must satisfy NamedModuleDefinition.',
+            issue?.reason,
+            'The example module entry is incomplete.',
+        );
+        assert.match(
+            issue?.fix ?? '',
+            /public static readonly definition/,
         );
     } finally {
         fixture.dispose();
@@ -992,9 +1001,10 @@ test('handlers reject unvalidated JSON and executable DTO schemas', () => {
             }`,
         );
 
-        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+        const issues = new BackendLinter({ projectRoot: fixture.root })
             .run()
-            .issues.map((issue) => issue.ruleId);
+            .issues;
+        const ruleIds = issues.map((issue) => issue.ruleId);
         assert.ok(ruleIds.includes('HANDLER_UNVALIDATED_INPUT'));
         assert.ok(ruleIds.includes('HANDLER_DTO_INPUT'));
         assert.ok(ruleIds.includes('DTO_EXECUTABLE_LOGIC'));
@@ -1169,9 +1179,10 @@ paths:
             assert.ok(response.status === 200 || response.status === 500);`,
         );
 
-        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+        const issues = new BackendLinter({ projectRoot: fixture.root })
             .run()
-            .issues.map((issue) => issue.ruleId);
+            .issues;
+        const ruleIds = issues.map((issue) => issue.ruleId);
         for (const expected of [
             'HANDLER_DTO_CAST_BYPASS',
             'HANDLER_CONCRETE_DTO_CONTRACT',
@@ -1181,6 +1192,21 @@ paths:
         ]) {
             assert.ok(ruleIds.includes(expected), expected);
         }
+        const castIssue = issues.find(
+            (issue) => issue.ruleId === 'HANDLER_DTO_CAST_BYPASS',
+        );
+        assert.equal(castIssue?.location.start.line, 7);
+        assert.ok((castIssue?.location.start.column ?? 0) > 1);
+        assert.match(castIssue?.reason ?? '', /type assertion/i);
+        assert.match(castIssue?.fix ?? '', /construct a concrete request DTO/i);
+        const assertionIssue = issues.find(
+            (issue) => issue.ruleId === 'HTTP_ASSERTION_EXACT',
+        );
+        assert.equal(
+            assertionIssue?.file,
+            'code/backend/test/example.http.test.ts',
+        );
+        assert.equal(assertionIssue?.location.start.line, 4);
     } finally {
         fixture.dispose();
     }

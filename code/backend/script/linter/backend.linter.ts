@@ -2,12 +2,14 @@ import { CompositionRuleSet } from './composition.rule-set.ts';
 import { ContractRuleSet } from './contract.rule-set.ts';
 import { CoverageRuleSet } from './coverage.rule-set.ts';
 import { DependencyRuleSet } from './dependency.rule-set.ts';
+import { DiagnosticFactory } from './diagnostic.factory.ts';
 import { DomainRuleSet } from './domain.rule-set.ts';
 import { FileScanner } from './file.scanner.ts';
 import { InfrastructureRuleSet } from './infrastructure.rule-set.ts';
 import type {
     BackendLinterConfig,
     LintIssue,
+    LintIssueDraft,
     LintResult,
     SourceAnalysis,
 } from './interfaces.ts';
@@ -113,14 +115,20 @@ export class BackendLinter {
             ),
         );
 
+        const factory = new DiagnosticFactory(this.paths, [
+            ...analyses,
+            ...this.project.testAnalyses(),
+        ]);
         return {
-            issues: this.sortIssues(issues),
+            issues: this.sortIssues(
+                issues.map((issue) => factory.create(issue)),
+            ),
             filesChecked: sourceFiles.length,
         };
     }
 
     /** Converts malformed workspace metadata into an existing fatal finding. */
-    private workspaceConfigurationIssues(): LintIssue[] {
+    private workspaceConfigurationIssues(): LintIssueDraft[] {
         try {
             return this.workspaceRules.evaluate();
         } catch {
@@ -131,11 +139,21 @@ export class BackendLinter {
     /** Converts parser failures into fatal lint findings. */
     private analyze(
         filePath: string,
-        issues: LintIssue[],
+        issues: LintIssueDraft[],
     ): SourceAnalysis | null {
         try {
             return this.analyzer.analyze(filePath);
         } catch (error: unknown) {
+            const parserLocation =
+                error && typeof error === 'object'
+                    ? (
+                          error as {
+                              loc?: { line?: number; column?: number };
+                          }
+                      ).loc
+                    : undefined;
+            const line = parserLocation?.line ?? 1;
+            const column = (parserLocation?.column ?? 0) + 1;
             issues.push({
                 ruleId: 'SOURCE_PARSE_ERROR',
                 severity: 'fatal',
@@ -144,13 +162,17 @@ export class BackendLinter {
                     error instanceof Error
                         ? error.message
                         : 'Unknown parser failure',
+                location: {
+                    start: { line, column },
+                    end: { line, column },
+                },
             });
             return null;
         }
     }
 
     /** Rejects the plural source directory even when it contains no files. */
-    private moduleDirectoryIssues(): LintIssue[] {
+    private moduleDirectoryIssues(): LintIssueDraft[] {
         const pluralModuleRoot = this.paths.pluralModuleRoot();
         if (!this.scanner.directoryExists(pluralModuleRoot)) {
             return [];
@@ -170,7 +192,7 @@ export class BackendLinter {
     }
 
     /** Rejects files of every type placed directly in the module root. */
-    private moduleRootFileIssues(): LintIssue[] {
+    private moduleRootFileIssues(): LintIssueDraft[] {
         return this.scanner
             .listDirectFiles(this.paths.moduleRoot())
             .map((filePath) => ({
@@ -182,7 +204,7 @@ export class BackendLinter {
     }
 
     /** Rejects non-TypeScript files inside auxiliary or deeper folders. */
-    private auxiliaryFileTypeIssues(): LintIssue[] {
+    private auxiliaryFileTypeIssues(): LintIssueDraft[] {
         return this.scanner
             .listFiles(this.paths.moduleRoot())
             .filter(
@@ -203,8 +225,10 @@ export class BackendLinter {
         return [...issues].sort((left, right) => {
             return (
                 left.file.localeCompare(right.file) ||
+                left.location.start.line - right.location.start.line ||
+                left.location.start.column - right.location.start.column ||
                 left.ruleId.localeCompare(right.ruleId) ||
-                left.message.localeCompare(right.message)
+                left.reason.localeCompare(right.reason)
             );
         });
     }

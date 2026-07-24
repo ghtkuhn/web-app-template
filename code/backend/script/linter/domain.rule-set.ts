@@ -1,6 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
-import type { LintIssue, SourceAnalysis } from './interfaces.ts';
+import type { LintIssueDraft, SourceAnalysis } from './interfaces.ts';
 import { PathResolver } from './path.resolver.ts';
 
 /** Enforces declaration, inheritance, layering, and module-boundary rules. */
@@ -13,7 +13,7 @@ export class DomainRuleSet {
     }
 
     /** Evaluates every applicable domain rule for one module source file. */
-    public evaluate(analysis: SourceAnalysis): LintIssue[] {
+    public evaluate(analysis: SourceAnalysis): LintIssueDraft[] {
         return [
             ...this.declarationIssues(analysis),
             ...this.auxiliaryPathIssues(analysis),
@@ -26,8 +26,8 @@ export class DomainRuleSet {
     }
 
     /** Checks declaration placement and regular-file structure. */
-    private declarationIssues(analysis: SourceAnalysis): LintIssue[] {
-        const issues: LintIssue[] = [];
+    private declarationIssues(analysis: SourceAnalysis): LintIssueDraft[] {
+        const issues: LintIssueDraft[] = [];
         const basename = path.basename(analysis.filePath);
         const moduleName =
             this.paths.moduleName(analysis.filePath) ?? 'unknown';
@@ -136,7 +136,7 @@ export class DomainRuleSet {
     }
 
     /** Checks required base classes for conventional architecture folders. */
-    private classIssues(analysis: SourceAnalysis): LintIssue[] {
+    private classIssues(analysis: SourceAnalysis): LintIssueDraft[] {
         if (analysis.classBaseNames.length === 0) {
             return [];
         }
@@ -192,7 +192,7 @@ export class DomainRuleSet {
     }
 
     /** Validates auxiliary depth, supported layers, and owner-file binding. */
-    private auxiliaryPathIssues(analysis: SourceAnalysis): LintIssue[] {
+    private auxiliaryPathIssues(analysis: SourceAnalysis): LintIssueDraft[] {
         const depth = this.paths.modulePathDepth(analysis.filePath);
         if (depth === null || depth <= 2) {
             return [];
@@ -255,7 +255,7 @@ export class DomainRuleSet {
     }
 
     /** Checks forbidden dependency directions between architecture layers. */
-    private layerImportIssues(analysis: SourceAnalysis): LintIssue[] {
+    private layerImportIssues(analysis: SourceAnalysis): LintIssueDraft[] {
         const sourceLayer = this.paths.layer(analysis.filePath);
         const forbiddenLayers: Record<string, readonly string[]> = {
             controller: ['store', 'object', 'api'],
@@ -269,7 +269,7 @@ export class DomainRuleSet {
             return [];
         }
 
-        const issues: LintIssue[] = [];
+        const issues: LintIssueDraft[] = [];
         for (const dependency of analysis.dependencies) {
             const target = this.paths.resolveDependency(
                 analysis.filePath,
@@ -304,8 +304,8 @@ export class DomainRuleSet {
     }
 
     /** Enforces private, one-way ownership of auxiliary implementations. */
-    private auxiliaryImportIssues(analysis: SourceAnalysis): LintIssue[] {
-        const issues: LintIssue[] = [];
+    private auxiliaryImportIssues(analysis: SourceAnalysis): LintIssueDraft[] {
+        const issues: LintIssueDraft[] = [];
         const sourceAuxiliary = this.paths.auxiliaryPath(analysis.filePath);
 
         for (const dependency of analysis.dependencies) {
@@ -362,8 +362,8 @@ export class DomainRuleSet {
     }
 
     /** Enforces public entry-point imports between modules and domain isolation. */
-    private moduleBoundaryIssues(analysis: SourceAnalysis): LintIssue[] {
-        const issues: LintIssue[] = [];
+    private moduleBoundaryIssues(analysis: SourceAnalysis): LintIssueDraft[] {
+        const issues: LintIssueDraft[] = [];
         const currentModule = this.paths.moduleName(analysis.filePath);
 
         for (const dependency of analysis.dependencies) {
@@ -405,7 +405,7 @@ export class DomainRuleSet {
     }
 
     /** Keeps object-to-DTO mapping out of controllers. */
-    private controllerMappingIssues(analysis: SourceAnalysis): LintIssue[] {
+    private controllerMappingIssues(analysis: SourceAnalysis): LintIssueDraft[] {
         if (this.paths.layer(analysis.filePath) !== 'controller') {
             return [];
         }
@@ -423,7 +423,7 @@ export class DomainRuleSet {
 
     /** Adds one issue only when a declaration count is non-zero. */
     private pushCountIssue(
-        issues: LintIssue[],
+        issues: LintIssueDraft[],
         analysis: SourceAnalysis,
         count: number,
         ruleId: string,
@@ -439,7 +439,7 @@ export class DomainRuleSet {
         analysis: SourceAnalysis,
         ruleId: string,
         message: string,
-    ): LintIssue {
+    ): LintIssueDraft {
         return {
             ruleId,
             severity: 'error',

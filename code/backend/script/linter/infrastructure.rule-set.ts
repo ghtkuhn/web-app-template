@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { LintIssue, SourceAnalysis } from './interfaces.ts';
+import type { LintIssueDraft, SourceAnalysis } from './interfaces.ts';
 import { PathResolver } from './path.resolver.ts';
 
 /** Enforces centralized database-driver and connection ownership. */
@@ -18,12 +18,12 @@ export class InfrastructureRuleSet {
     }
 
     /** Evaluates database ownership rules for one backend source file. */
-    public evaluate(analysis: SourceAnalysis): LintIssue[] {
+    public evaluate(analysis: SourceAnalysis): LintIssueDraft[] {
         if (path.basename(analysis.filePath) === 'base.database.ts') {
             return [];
         }
 
-        const issues: LintIssue[] = [];
+        const issues: LintIssueDraft[] = [];
         for (const dependency of analysis.dependencies) {
             if (this.databaseDrivers.has(dependency.source)) {
                 issues.push(
@@ -61,7 +61,7 @@ export class InfrastructureRuleSet {
         analysis: SourceAnalysis,
         ruleId: string,
         message: string,
-    ): LintIssue {
+    ): LintIssueDraft {
         return {
             ruleId,
             severity: 'error',

@@ -239,6 +239,7 @@
 * Executable backend and test TypeScript must use Node-compatible erasable syntax; parameter properties, enums, namespaces, import-equals, and export-assignment are forbidden.
 * The repository root owns the only `package-lock.json`, shared TypeScript tooling, `tsconfig.base.json`, and the complete `verify` script. Workspaces must not duplicate or shorten these contracts.
 * Module files must preserve four-space indentation and include appropriate code comments and JSDoc.
+* Backend architecture diagnostics expose separate `Reason`, `Fix`, and one-based source positions; tools must consume the JSON format instead of editing diagnostic comments into source files.
 * `npm run verify` must pass before backend work is declared complete.
 
 
