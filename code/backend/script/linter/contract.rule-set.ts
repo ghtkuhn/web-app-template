@@ -86,6 +86,24 @@ export class ContractRuleSet {
 
         if (layer === 'api') {
             if (
+                analysis.handlerResultPayloadNames.some((payload) =>
+                    [
+                        'BaseDTO',
+                        'Object',
+                        'TSObjectKeyword',
+                        'TSUnionType',
+                    ].includes(payload ?? ''),
+                )
+            ) {
+                issues.push(
+                    this.issue(
+                        analysis,
+                        'HANDLER_CONCRETE_DTO_CONTRACT',
+                        'Handler success contracts must name one concrete business Response DTO. Fix: return HandlerResult<ConcreteResponseDTO>; do not widen the contract to BaseDTO, object, or an ad hoc union.',
+                    ),
+                );
+            }
+            if (
                 analysis.handlerResultPayloadNames.some(
                     (payload) => payload === null,
                 )
@@ -94,7 +112,7 @@ export class ContractRuleSet {
                     this.issue(
                         analysis,
                         'HANDLER_DTO_OUTPUT',
-                        'Handlers must declare the DTO carried by HandlerResult.',
+                        'Handlers must declare the concrete Response DTO carried by HandlerResult. Fix: use HandlerResult<ConcreteResponseDTO>.',
                     ),
                 );
             }
@@ -108,7 +126,7 @@ export class ContractRuleSet {
                     this.issue(
                         analysis,
                         'HANDLER_DTO_OUTPUT',
-                        'HandlerResult payloads must use DTO classes.',
+                        'HandlerResult payloads must use concrete business Response DTO classes. Fix: use HandlerResult<ConcreteResponseDTO>, not a base type or anonymous payload.',
                     ),
                 );
             }

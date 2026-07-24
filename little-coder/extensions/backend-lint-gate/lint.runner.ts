@@ -1,8 +1,11 @@
 import { spawnSync } from 'node:child_process';
 import type {
+    BackendMutation,
     BackendLintIssue,
     BackendLintResult,
     BackendLintRunner,
+    RepairCheckResult,
+    RepairCheckRunner,
 } from './backend-lint-gate.ts';
 
 const DIAGNOSTIC =
@@ -40,6 +43,64 @@ export class ProcessBackendLintRunner implements BackendLintRunner {
             stderr: result.stderr ?? '',
             error: result.error,
         });
+    }
+}
+
+/** Runs the smallest deterministic compile or test check after a mutation. */
+export class ProcessRepairCheckRunner implements RepairCheckRunner {
+    private readonly projectRoot: string;
+
+    /** Creates a focused runner bound to one project root. */
+    public constructor(projectRoot: string) {
+        this.projectRoot = projectRoot;
+    }
+
+    /** Runs backend TypeScript and the mutated test file when applicable. */
+    public run(mutation: BackendMutation): RepairCheckResult {
+        const typecheck = this.execute('npm', [
+            'run',
+            'typecheck',
+            '--workspace',
+            '@app/backend',
+        ]);
+        if (typecheck) {
+            return { status: 'failed', reason: typecheck };
+        }
+        if (
+            mutation.file.startsWith('code/backend/test/') &&
+            mutation.file.endsWith('.test.ts')
+        ) {
+            const test = this.execute('node', [
+                '--test',
+                mutation.file,
+            ]);
+            if (test) {
+                return { status: 'failed', reason: test };
+            }
+            return {
+                status: 'passed',
+                summary: `typecheck and ${mutation.file} passed`,
+            };
+        }
+        return { status: 'passed', summary: 'backend typecheck passed' };
+    }
+
+    /** Returns a compact failure or null for a successful process. */
+    private execute(command: string, arguments_: string[]): string | null {
+        const result = spawnSync(command, arguments_, {
+            cwd: this.projectRoot,
+            encoding: 'utf8',
+            timeout: 30_000,
+            env: process.env,
+        });
+        if (result.error) {
+            return result.error.name === 'ETIMEDOUT'
+                ? `${command} timed out`
+                : result.error.message;
+        }
+        return result.status === 0
+            ? null
+            : `${command} exited ${result.status ?? 'without status'}`;
     }
 }
 

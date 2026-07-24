@@ -8,3 +8,7 @@ contain only the result, verification status, and genuine blockers.
 
 Little Coder must be started with `npm run little-coder -- [arguments]`.
 Its backend lint gate must not be bypassed, disabled, or weakened.
+Little Coder must repair only the active backend lint cause, run the focused
+check before another mutation, and stop after two ineffective attempts.
+It must not use casts, widened contracts, permissive assertions, placeholders,
+or unrelated refactors to silence a finding.

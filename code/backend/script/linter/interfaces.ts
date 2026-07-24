@@ -51,6 +51,16 @@ export interface HandlerRegistration {
 export interface HttpTestOperation {
     method: string;
     path: string;
+    responseName?: string;
+    offset?: number;
+}
+
+/** One status assertion tied to the response variable of an HTTP request. */
+export interface HttpStatusAssertion {
+    responseName: string;
+    statuses: number[];
+    exact: boolean;
+    offset: number;
 }
 
 /** One explicit row-to-object constructor mapping. */
@@ -107,6 +117,9 @@ export interface SourceAnalysis {
     httpTestOperations: HttpTestOperation[];
     httpHandlerOperations: HttpTestOperation[];
     assertedHttpStatuses: number[];
+    httpStatusAssertions: HttpStatusAssertion[];
+    dtoCastFromJsonCount: number;
+    permissiveAssertionCount: number;
     jsonResultVariables: string[];
     dtoResultVariables: string[];
     controllerPayloadVariables: string[];

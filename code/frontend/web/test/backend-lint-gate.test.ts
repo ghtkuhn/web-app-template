@@ -7,6 +7,8 @@ import {
     classifyBackendPath,
     type BackendLintResult,
     type BackendLintRunner,
+    type RepairCheckResult,
+    type RepairCheckRunner,
 } from '../../../../little-coder/extensions/backend-lint-gate/backend-lint-gate.ts';
 import { parseBackendLintResult } from '../../../../little-coder/extensions/backend-lint-gate/lint.runner.ts';
 import {
@@ -36,11 +38,29 @@ class SequenceRunner implements BackendLintRunner {
     }
 }
 
+class SequenceCheckRunner implements RepairCheckRunner {
+    public calls = 0;
+    private readonly results: RepairCheckResult[];
+
+    /** Creates a focused runner that returns results in order. */
+    public constructor(results: RepairCheckResult[]) {
+        this.results = results;
+    }
+
+    /** Returns the next result and repeats the final result. */
+    public run(): RepairCheckResult {
+        const result =
+            this.results[Math.min(this.calls, this.results.length - 1)];
+        this.calls += 1;
+        return result;
+    }
+}
+
 const GREEN: BackendLintResult = { status: 'green', issues: [] };
 
 describe('BackendLintGate', () => {
-    test('allows five same-phase mutations and lints before the sixth', () => {
-        const runner = new SequenceRunner([GREEN, GREEN]);
+    test('runs a focused architecture checkpoint after every mutation', () => {
+        const runner = new SequenceRunner([GREEN]);
         const gate = new BackendLintGate(runner);
         const mutation = classifyBackendPath(
             'code/backend/src/module/example/service/example.service.ts',
@@ -50,9 +70,9 @@ describe('BackendLintGate', () => {
             expect(gate.authorizeMutation(mutation).block).toBe(false);
             gate.recordSuccessfulMutation(mutation);
         }
-        expect(runner.calls).toBe(1);
+        expect(runner.calls).toBe(5);
         expect(gate.authorizeMutation(mutation).block).toBe(false);
-        expect(runner.calls).toBe(2);
+        expect(runner.calls).toBe(6);
         expect(gate.status()).toContain('mutations 0/5');
     });
 
@@ -116,6 +136,74 @@ describe('BackendLintGate', () => {
                 ),
             ).block,
         ).toBe(true);
+        expect(
+            gate.authorizeMutation(
+                classifyBackendPath(
+                    'code/backend/src/module/example/service/example.service.ts',
+                ),
+            ).block,
+        ).toBe(true);
+    });
+
+    test('blocks after two ineffective repairs of the same cause', () => {
+        const red: BackendLintResult = {
+            status: 'red',
+            issues: [
+                {
+                    ruleId: 'HANDLER_DTO_CAST_BYPASS',
+                    file:
+                        'code/backend/src/module/example/api/' +
+                        'example.http.handler.ts',
+                    message: 'Do not cast JSON.',
+                },
+            ],
+        };
+        const gate = new BackendLintGate(
+            new SequenceRunner([red, red, red]),
+        );
+        const mutation = classifyBackendPath(
+            'code/backend/src/module/example/api/example.http.handler.ts',
+        );
+
+        expect(gate.authorizeMutation(mutation).block).toBe(false);
+        gate.recordSuccessfulMutation(mutation);
+        expect(gate.authorizeMutation(mutation).block).toBe(false);
+        gate.recordSuccessfulMutation(mutation);
+        expect(gate.authorizeMutation(mutation).block).toBe(true);
+        expect(gate.status()).toContain('blocked after 2');
+    });
+
+    test('focused check failures count attempts and prevent cause drift', () => {
+        const red: BackendLintResult = {
+            status: 'red',
+            issues: [
+                {
+                    ruleId: 'DOMAIN_ANY_TYPE',
+                    file:
+                        'code/backend/src/module/example/service/' +
+                        'example.service.ts',
+                    message: 'Remove any.',
+                },
+            ],
+        };
+        const checks = new SequenceCheckRunner([
+            { status: 'failed', reason: 'typecheck failed' },
+            { status: 'failed', reason: 'typecheck failed again' },
+        ]);
+        const gate = new BackendLintGate(
+            new SequenceRunner([red]),
+            checks,
+        );
+        const mutation = classifyBackendPath(
+            'code/backend/src/module/example/service/example.service.ts',
+        );
+
+        expect(gate.authorizeMutation(mutation).block).toBe(false);
+        gate.recordSuccessfulMutation(mutation);
+        expect(gate.authorizeMutation(mutation).block).toBe(false);
+        gate.recordSuccessfulMutation(mutation);
+        expect(gate.authorizeMutation(mutation).block).toBe(true);
+        expect(checks.calls).toBe(2);
     });
 
     test('workspace repair mode permits only reported files', () => {
@@ -281,7 +369,13 @@ test('extension tracks tool results, uncertain shell mutations, and protected fi
         | undefined;
     const notices: string[] = [];
     const runner = new SequenceRunner([GREEN, GREEN, GREEN, GREEN]);
-    const extension = new BackendLintGateExtension(() => runner);
+    const extension = new BackendLintGateExtension(
+        () => runner,
+        () =>
+            new SequenceCheckRunner([
+                { status: 'passed', summary: 'focused check passed' },
+            ]),
+    );
     const api: ExtensionApi = {
         on: (event, handler) => {
             handlers.set(event, handler);

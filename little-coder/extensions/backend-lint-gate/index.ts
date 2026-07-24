@@ -8,8 +8,12 @@ import {
     type BackendMutation,
     type BackendLintRunner,
     type GateDecision,
+    type RepairCheckRunner,
 } from './backend-lint-gate.ts';
-import { ProcessBackendLintRunner } from './lint.runner.ts';
+import {
+    ProcessBackendLintRunner,
+    ProcessRepairCheckRunner,
+} from './lint.runner.ts';
 import { findProjectRoot } from '../backend-base-guard/index.ts';
 
 const STRUCTURED_MUTATION_TOOLS = new Set(['edit', 'write']);
@@ -87,6 +91,9 @@ export class BackendLintGateExtension {
     private readonly runnerFactory: (
         projectRoot: string,
     ) => BackendLintRunner;
+    private readonly checkRunnerFactory: (
+        projectRoot: string,
+    ) => RepairCheckRunner;
 
     /** Creates an extension with the production or an injected lint runner. */
     public constructor(
@@ -94,8 +101,13 @@ export class BackendLintGateExtension {
             projectRoot: string,
         ) => BackendLintRunner = (projectRoot) =>
             new ProcessBackendLintRunner(projectRoot),
+        checkRunnerFactory: (
+            projectRoot: string,
+        ) => RepairCheckRunner = (projectRoot) =>
+            new ProcessRepairCheckRunner(projectRoot),
     ) {
         this.runnerFactory = runnerFactory;
+        this.checkRunnerFactory = checkRunnerFactory;
     }
 
     /** Registers lifecycle hooks and the compact status command. */
@@ -106,7 +118,8 @@ export class BackendLintGateExtension {
                 state &&
                 !this.announcedRoots.has(state.projectRoot)
             ) {
-                context.ui.notify(state.gate.initialize(), 'info');
+                state.gate.initialize();
+                context.ui.notify(state.gate.instruction(), 'info');
                 this.announcedRoots.add(state.projectRoot);
             }
             return undefined;
@@ -122,7 +135,7 @@ export class BackendLintGateExtension {
             handler: async (_arguments, context) => {
                 const state = this.state(context.cwd);
                 context.ui.notify(
-                    state?.gate.status() ?? 'Backend gate unavailable',
+                    state?.gate.instruction() ?? 'Backend gate unavailable',
                     state ? 'info' : 'error',
                 );
             },
@@ -263,7 +276,7 @@ export class BackendLintGateExtension {
                 ],
             };
         }
-        if (gate.status().endsWith('mutations 5/5')) {
+        if (gate.status().includes('mutations 5/5')) {
             return {
                 content: [
                     ...(event.content ?? []),
@@ -272,6 +285,20 @@ export class BackendLintGateExtension {
                         text:
                             'Backend gate checkpoint reached; the next ' +
                             'backend mutation requires architecture lint.',
+                    },
+                ],
+            };
+        }
+        if (pending.mutation || changedPaths.length > 0) {
+            return {
+                content: [
+                    ...(event.content ?? []),
+                    {
+                        type: 'text',
+                        text:
+                            'Backend mutation recorded. Before another ' +
+                            `mutation the gate will run its focused check. ` +
+                            gate.instruction(),
                     },
                 ],
             };
@@ -291,6 +318,7 @@ export class BackendLintGateExtension {
         if (!gate) {
             gate = new BackendLintGate(
                 this.runnerFactory(projectRoot),
+                this.checkRunnerFactory(projectRoot),
             );
             this.gates.set(projectRoot, gate);
         }

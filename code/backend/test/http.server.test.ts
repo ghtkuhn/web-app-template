@@ -70,10 +70,10 @@ test('health module proves the complete HTTP path', async () => {
 
 test('unknown and unsupported modules return transport errors', async () => {
     await withServer({ empty: new TestModule() }, async (server) => {
-        assert.equal(
-            (await fetch(`http://127.0.0.1:${server.port}/api/missing`)).status,
-            404,
+        const unavailableHealth = await fetch(
+            `http://127.0.0.1:${server.port}/api/health`,
         );
+        assert.equal(unavailableHealth.status, 404);
         assert.equal(
             (await fetch(`http://127.0.0.1:${server.port}/api/empty`)).status,
             405,

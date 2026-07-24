@@ -164,6 +164,9 @@ export class SourceAnalyzer {
             httpTestOperations: [],
             httpHandlerOperations: [],
             assertedHttpStatuses: [],
+            httpStatusAssertions: [],
+            dtoCastFromJsonCount: 0,
+            permissiveAssertionCount: 0,
             jsonResultVariables: [],
             dtoResultVariables: [],
             controllerPayloadVariables: [],
@@ -387,6 +390,21 @@ export class SourceAnalyzer {
             astNode.expression?.type === 'TSAsExpression'
         ) {
             analysis.doubleAssertionCount += 1;
+        }
+        if (
+            astNode.type === 'TSAsExpression' &&
+            this.typeName(astNode.typeAnnotation ?? null)?.endsWith('DTO') &&
+            (
+                this.isJsonRequest(astNode.expression ?? null) ||
+                (
+                    astNode.expression?.type === 'Identifier' &&
+                    analysis.jsonResultVariables.includes(
+                        astNode.expression.name ?? '',
+                    )
+                )
+            )
+        ) {
+            analysis.dtoCastFromJsonCount += 1;
         }
         if (
             [
@@ -672,6 +690,23 @@ export class SourceAnalyzer {
             ) {
                 analysis.dtoResultVariables.push(name);
             }
+            if (name) {
+                const fetchCall = this.fetchCall(node.init ?? null);
+                const requestPath = fetchCall
+                    ? this.httpPath(fetchCall.arguments?.[0] ?? null)
+                    : null;
+                if (fetchCall && requestPath) {
+                    analysis.httpTestOperations.push({
+                        method: this.fetchMethod(
+                            fetchCall.arguments?.[1] ?? null,
+                        ),
+                        path: requestPath,
+                        responseName: name,
+                        offset:
+                            typeof node.start === 'number' ? node.start : 0,
+                    });
+                }
+            }
         }
         if (
             node.type === 'CallExpression' &&
@@ -730,9 +765,19 @@ export class SourceAnalyzer {
             node.callee.name === 'fetch'
         ) {
             const requestPath = this.httpPath(node.arguments?.[0] ?? null);
-            if (requestPath) {
+            const requestMethod = this.fetchMethod(
+                node.arguments?.[1] ?? null,
+            );
+            if (
+                requestPath &&
+                !this.hasHttpOperation(
+                    analysis,
+                    requestPath,
+                    requestMethod,
+                )
+            ) {
                 analysis.httpTestOperations.push({
-                    method: this.fetchMethod(node.arguments?.[1] ?? null),
+                    method: requestMethod,
                     path: requestPath,
                 });
             }
@@ -752,8 +797,133 @@ export class SourceAnalyzer {
                 typeof expected.value === 'number'
             ) {
                 analysis.assertedHttpStatuses.push(expected.value);
+                const responseName = this.expressionName(
+                    actual.object ?? null,
+                );
+                if (responseName) {
+                    analysis.httpStatusAssertions.push({
+                        responseName,
+                        statuses: [expected.value],
+                        exact: true,
+                        offset:
+                            typeof node.start === 'number' ? node.start : 0,
+                    });
+                }
             }
         }
+        if (
+            node.type === 'CallExpression' &&
+            node.callee?.type === 'MemberExpression' &&
+            this.expressionName(node.callee.property ?? null) === 'ok'
+        ) {
+            const comparisons = this.statusComparisons(
+                node.arguments?.[0] ?? null,
+            );
+            if (comparisons.length > 0) {
+                analysis.permissiveAssertionCount += 1;
+                for (const comparison of comparisons) {
+                    analysis.httpStatusAssertions.push({
+                        responseName: comparison.responseName,
+                        statuses: [comparison.status],
+                        exact: false,
+                        offset:
+                            typeof node.start === 'number' ? node.start : 0,
+                    });
+                }
+            }
+        }
+    }
+
+    /** Tests whether one request was already recorded by its binding. */
+    private hasHttpOperation(
+        analysis: SourceAnalysis,
+        requestPath: string,
+        requestMethod: string,
+    ): boolean {
+        for (const operation of analysis.httpTestOperations) {
+            if (
+                operation.path === requestPath &&
+                operation.method === requestMethod
+            ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Returns a fetch call through optional await and type wrappers. */
+    // fallow-ignore-next-line complexity -- Normalizes the finite Babel wrapper variants around fetch.
+    private fetchCall(node: AstNode | null): AstNode | null {
+        let current = node;
+        while (
+            current &&
+            ['AwaitExpression', 'TSAsExpression', 'TSTypeAssertion'].includes(
+                current.type ?? '',
+            )
+        ) {
+            current =
+                (current.argument as AstNode | undefined) ??
+                (current.expression as AstNode | undefined) ??
+                null;
+        }
+        return current?.type === 'CallExpression' &&
+            current.callee?.type === 'Identifier' &&
+            current.callee.name === 'fetch'
+            ? current
+            : null;
+    }
+
+    /** Detects request.json() through an optional await wrapper. */
+    // fallow-ignore-next-line complexity -- Matches the finite Babel member/call shape without source heuristics.
+    private isJsonRequest(node: AstNode | null): boolean {
+        const current =
+            node?.type === 'AwaitExpression'
+                ? ((node.argument as AstNode | undefined) ?? null)
+                : node;
+        return Boolean(
+            current?.type === 'CallExpression' &&
+                current.callee?.type === 'MemberExpression' &&
+                this.expressionName(current.callee.property ?? null) ===
+                    'json',
+        );
+    }
+
+    /** Extracts status comparisons used inside a permissive assertion. */
+    // fallow-ignore-next-line complexity -- Recursively extracts both sides of logical status alternatives.
+    private statusComparisons(
+        node: AstNode | null,
+    ): Array<{ responseName: string; status: number }> {
+        if (!node) {
+            return [];
+        }
+        if (node.type === 'LogicalExpression') {
+            return [
+                ...this.statusComparisons(node.left ?? null),
+                ...this.statusComparisons(node.right ?? null),
+            ];
+        }
+        if (
+            node.type !== 'BinaryExpression' ||
+            !['===', '=='].includes(
+                typeof node.operator === 'string' ? node.operator : '',
+            )
+        ) {
+            return [];
+        }
+        const member =
+            node.left?.type === 'MemberExpression' ? node.left : node.right;
+        const literal =
+            node.left?.type === 'NumericLiteral' ? node.left : node.right;
+        const responseName =
+            member?.type === 'MemberExpression' &&
+            this.expressionName(member.property ?? null) === 'status'
+                ? this.expressionName(member.object ?? null)
+                : null;
+        return responseName &&
+            literal?.type === 'NumericLiteral' &&
+            typeof literal.value === 'number'
+            ? [{ responseName, status: literal.value }]
+            : [];
     }
 
     /** Records literal request-method and pathname guards in HTTP handlers. */

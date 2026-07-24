@@ -45,33 +45,49 @@ export interface BackendLintRunner {
     run(): BackendLintResult;
 }
 
-type RepairScope =
-    | {
-          readonly kind: 'module';
-          readonly moduleName: string;
-          readonly files: ReadonlySet<string>;
-      }
-    | {
-          readonly kind: 'composition' | 'workspace';
-          readonly files: ReadonlySet<string>;
-      };
+/** Result of the smallest compile or test check for one mutation. */
+export type RepairCheckResult =
+    | { readonly status: 'passed'; readonly summary: string }
+    | { readonly status: 'failed'; readonly reason: string };
+
+/** Runs the focused compile or test check selected for a mutation. */
+export interface RepairCheckRunner {
+    run(mutation: BackendMutation): RepairCheckResult;
+}
+
+/** First deterministic architecture cause currently assigned for repair. */
+interface ActiveRepairCause extends BackendLintIssue {
+    readonly allowedFiles: ReadonlySet<string>;
+}
 
 const MUTATION_LIMIT = 5;
+const REPAIR_ATTEMPT_LIMIT = 2;
+const PASSING_CHECK_RUNNER: RepairCheckRunner = {
+    run: () => ({ status: 'passed', summary: 'focused check passed' }),
+};
 
 /** Enforces bounded backend mutation batches around a focused lint runner. */
 export class BackendLintGate {
     private readonly runner: BackendLintRunner;
+    private readonly checkRunner: RepairCheckRunner;
     private initialized = false;
     private lintFresh = false;
-    private mode: 'green' | 'repair' | 'failed' = 'failed';
+    private mode: 'green' | 'repair' | 'blocked' | 'failed' = 'failed';
     private mutationCount = 0;
     private currentMutation: BackendMutation | null = null;
-    private repairScope: RepairScope | null = null;
+    private pendingCheck: BackendMutation | null = null;
+    private activeCause: ActiveRepairCause | null = null;
+    private repairAttempts = 0;
+    private lastCheck = 'not run';
     private lastSummary = 'not initialized';
 
     /** Creates one in-memory gate for a Little-Coder session. */
-    public constructor(runner: BackendLintRunner) {
+    public constructor(
+        runner: BackendLintRunner,
+        checkRunner: RepairCheckRunner = PASSING_CHECK_RUNNER,
+    ) {
         this.runner = runner;
+        this.checkRunner = checkRunner;
     }
 
     /** Initializes the session from the current project lint state. */
@@ -90,6 +106,12 @@ export class BackendLintGate {
             return this.blocked(this.lastSummary);
         }
 
+        if (this.pendingCheck) {
+            this.runRepairCheckpoint(this.pendingCheck);
+        }
+        if (this.gateUnavailable()) {
+            return this.blocked(this.lastSummary);
+        }
         if (this.mustLintBefore(mutation)) {
             this.applyLintResult(this.runner.run());
         }
@@ -106,12 +128,13 @@ export class BackendLintGate {
 
     /** Avoids stale control-flow narrowing across a synchronous lint run. */
     private gateUnavailable(): boolean {
-        return this.mode === 'failed';
+        return this.mode === 'failed' || this.mode === 'blocked';
     }
 
     /** Records one successful mutation after its tool result returns. */
     public recordSuccessfulMutation(mutation: BackendMutation): void {
         this.currentMutation = mutation;
+        this.pendingCheck = mutation;
         this.mutationCount += 1;
         this.lintFresh = false;
         if (mutation.uncertain) {
@@ -136,8 +159,28 @@ export class BackendLintGate {
     public status(): string {
         this.initialize();
         return (
-            `${this.lastSummary}; mutations ${this.mutationCount}/` +
-            `${MUTATION_LIMIT}`
+            `${this.lastSummary}; attempts ${this.repairAttempts}/` +
+            `${REPAIR_ATTEMPT_LIMIT}; mutations ${this.mutationCount}/` +
+            `${MUTATION_LIMIT}; last check: ${this.lastCheck}`
+        );
+    }
+
+    /** Returns the compact repair instruction injected into the agent. */
+    // fallow-ignore-next-line unused-class-member -- Called by the dynamically loaded Little-Coder extension entry.
+    public instruction(): string {
+        this.initialize();
+        if (!this.activeCause) {
+            return this.status();
+        }
+        return (
+            `${this.status()}. Active cause: [${this.activeCause.ruleId}] ` +
+            `${this.activeCause.file}: ${this.activeCause.message} ` +
+            `Allowed: ${[...this.activeCause.allowedFiles].join(', ')}. ` +
+            'Fix only the active lint cause. Do not silence or approximate ' +
+            'the rule. Do not use casts, widened return types, permissive ' +
+            'assertions, placeholder values, or unrelated refactors. Run ' +
+            'the required focused check immediately. Stop after two failed ' +
+            'attempts and report the blocker tersely.'
         );
     }
 
@@ -159,85 +202,142 @@ export class BackendLintGate {
     private applyLintResult(result: BackendLintResult): void {
         this.mutationCount = 0;
         this.currentMutation = null;
+        this.pendingCheck = null;
         if (result.status === 'green') {
             this.mode = 'green';
             this.lintFresh = true;
-            this.repairScope = null;
+            this.activeCause = null;
+            this.repairAttempts = 0;
             this.lastSummary = 'Backend gate green';
             return;
         }
         if (result.status === 'failed') {
             this.mode = 'failed';
             this.lintFresh = false;
-            this.repairScope = null;
+            this.activeCause = null;
             this.lastSummary = `Backend gate unavailable: ${result.reason}`;
             return;
         }
 
         this.mode = 'repair';
         this.lintFresh = true;
-        this.repairScope = this.createRepairScope(result.issues);
         const first = result.issues[0];
-        this.lastSummary =
-            `Backend gate red: [${first.ruleId}] ${first.file}`;
-    }
-
-    /** Builds a repair scope from the first root-cause area. */
-    private createRepairScope(
-        issues: readonly BackendLintIssue[],
-    ): RepairScope {
-        const first = classifyBackendPath(issues[0].file);
-        if (first.moduleName) {
-            return {
-                kind: 'module',
-                moduleName: first.moduleName,
-                files: new Set(
-                    issues
-                        .filter(
-                            (issue) =>
-                                classifyBackendPath(issue.file).moduleName ===
-                                first.moduleName,
-                        )
-                        .map((issue) => normalizeProjectPath(issue.file)),
-                ),
-            };
-        }
-        const kind =
-            first.phase === 'composition' ? 'composition' : 'workspace';
-        return {
-            kind,
-            files: new Set(
-                issues
-                    .filter(
-                        (issue) => {
-                            const candidate = classifyBackendPath(issue.file);
-                            return (
-                                candidate.moduleName === null &&
-                                (kind === 'composition'
-                                    ? candidate.phase === 'composition'
-                                    : candidate.phase !== 'composition')
-                            );
-                        },
-                    )
-                    .map((issue) => normalizeProjectPath(issue.file)),
-            ),
+        const previousKey = this.activeCause
+            ? this.causeKey(this.activeCause)
+            : null;
+        this.activeCause = {
+            ...first,
+            allowedFiles: this.allowedRepairFiles(first),
         };
+        if (
+            previousKey !== null &&
+            previousKey !== this.causeKey(this.activeCause)
+        ) {
+            this.repairAttempts = 0;
+        }
+        this.lastSummary =
+            `Backend gate red: [${first.ruleId}] ${first.file}: ` +
+            first.message;
     }
 
-    /** Allows only changes capable of repairing the active root-cause area. */
+    /** Runs the focused check and architecture checkpoint after a mutation. */
+    private runRepairCheckpoint(mutation: BackendMutation): void {
+        this.pendingCheck = null;
+        const check = this.checkRunner.run(mutation);
+        this.lastCheck =
+            check.status === 'passed' ? check.summary : check.reason;
+        if (check.status === 'failed') {
+            if (!this.activeCause) {
+                this.mode = 'repair';
+                this.lintFresh = false;
+                this.activeCause = {
+                    ruleId: 'FOCUSED_CHECK_FAILED',
+                    file: mutation.file,
+                    message:
+                        `${check.reason}. Fix the new compile or test ` +
+                        'failure in the mutated file.',
+                    allowedFiles: new Set([
+                        normalizeProjectPath(mutation.file),
+                    ]),
+                };
+                this.lastSummary =
+                    `Backend gate red: [FOCUSED_CHECK_FAILED] ` +
+                    `${mutation.file}: ${check.reason}`;
+            }
+            this.registerFailedAttempt(
+                `Focused check failed: ${check.reason}`,
+            );
+            return;
+        }
+        const previousKey = this.activeCause
+            ? this.causeKey(this.activeCause)
+            : null;
+        const result = this.runner.run();
+        this.applyLintResult(result);
+        if (
+            result.status === 'red' &&
+            previousKey === this.causeKey(result.issues[0])
+        ) {
+            this.registerFailedAttempt('Active lint cause remains');
+        }
+    }
+
+    /** Counts an ineffective repair and stops after the fixed limit. */
+    private registerFailedAttempt(reason: string): void {
+        this.repairAttempts += 1;
+        this.lastSummary = `${this.lastSummary} ${reason}.`;
+        if (this.repairAttempts >= REPAIR_ATTEMPT_LIMIT) {
+            this.mode = 'blocked';
+            this.lastSummary =
+                `Backend gate blocked after ${REPAIR_ATTEMPT_LIMIT} ` +
+                'ineffective repair attempts';
+        }
+    }
+
+    /** Allows only files required by the single active root cause. */
     private repairAllows(mutation: BackendMutation): boolean {
-        if (!this.repairScope) {
+        if (!this.activeCause) {
             return false;
         }
-        if (this.repairScope.kind === 'module') {
-            return (
-                mutation.moduleName === this.repairScope.moduleName ||
-                mutation.phase === 'tests-openapi'
-            );
-        }
-        return this.repairScope.files.has(
-            normalizeProjectPath(mutation.file),
+        const file = normalizeProjectPath(mutation.file);
+        return [...this.activeCause.allowedFiles].some(
+            (allowed) =>
+                file === allowed ||
+                file.startsWith(`${allowed.replace(/\/$/u, '')}/`),
         );
+    }
+
+    /** Computes the bounded file set for one architecture cause. */
+    private allowedRepairFiles(issue: BackendLintIssue): ReadonlySet<string> {
+        const file = normalizeProjectPath(issue.file);
+        const classified = classifyBackendPath(file);
+        const allowed = new Set([file]);
+        if (!classified.moduleName) {
+            return allowed;
+        }
+        const root = `code/backend/src/module/${classified.moduleName}`;
+        for (const contract of [
+            'index.ts',
+            'interfaces.ts',
+            'types.ts',
+            'constants.ts',
+        ]) {
+            allowed.add(`${root}/${contract}`);
+        }
+        if (
+            issue.ruleId.startsWith('HANDLER_') ||
+            issue.ruleId.startsWith('HTTP_')
+        ) {
+            allowed.add(`${root}/dto`);
+            allowed.add('code/backend/test');
+            allowed.add('code/backend/openapi/openapi.yaml');
+        }
+        return allowed;
+    }
+
+    /** Compares causes without relying on diagnostic wording. */
+    private causeKey(issue: BackendLintIssue): string {
+        return `${issue.ruleId}:${normalizeProjectPath(issue.file)}`;
     }
 
     /** Creates a stable blocked response. */

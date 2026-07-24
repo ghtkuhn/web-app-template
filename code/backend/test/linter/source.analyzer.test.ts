@@ -159,9 +159,14 @@ test('source analyzer captures executable architecture evidence structurally', (
         assert.deepEqual(analysis.handlerRegistrations, [
             { transport: 'http', handlerClass: 'ExampleHttpHandler' },
         ]);
-        assert.deepEqual(analysis.httpTestOperations, [
-            { method: 'POST', path: '/api/example' },
-        ]);
+        assert.equal(analysis.httpTestOperations.length, 1);
+        assert.equal(analysis.httpTestOperations[0].method, 'POST');
+        assert.equal(analysis.httpTestOperations[0].path, '/api/example');
+        assert.equal(
+            analysis.httpTestOperations[0].responseName,
+            'response',
+        );
+        assert.ok((analysis.httpTestOperations[0].offset ?? 0) > 0);
         assert.deepEqual(analysis.assertedHttpStatuses, [201]);
         assert.deepEqual(analysis.jsonResultVariables, ['payload']);
         assert.deepEqual(analysis.dtoResultVariables, ['dto']);

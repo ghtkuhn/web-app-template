@@ -284,6 +284,34 @@ success and controlled error status. Comments and string references do not
 count. Store coverage likewise constructs the Store and executes a persistence
 method. Node, CLI, and WebSocket operations are not OpenAPI operations.
 
+Request JSON is untrusted at runtime. A TypeScript assertion does not validate
+it:
+
+```ts
+// Incorrect: this only changes the compiler's view.
+const requestDTO = await request.json() as CreateRequestDTO;
+
+// Correct: construct a concrete DTO or call a typed validator returning it.
+const requestDTO = new CreateRequestDTO(await request.json());
+```
+
+Handler success contracts name concrete Response DTOs. Do not widen them to
+`BaseDTO`, `object`, anonymous payloads, or ad hoc unions.
+
+HTTP tests create one deterministic scenario per documented result and assert
+one exact status:
+
+```ts
+// Incorrect: several incompatible outcomes are accepted.
+assert.ok(response.status === 200 || response.status === 500);
+
+// Correct: this scenario has one documented result.
+assert.equal(response.status, 200);
+```
+
+An asserted `500` must be explicitly documented by the matching OpenAPI
+operation. Unexpected server errors never count as acceptable business output.
+
 ## TypeScript and Workspace Ownership
 
 Domain modules and backend tests must not use `any`, `as any`, or chained type
@@ -313,3 +341,6 @@ npm run lint:architecture --workspace @app/backend
 
 Architecture findings include stable rule IDs. Fix the reported structure or
 dependency violation instead of suppressing or working around the rule.
+Little Coder works on only the first active cause. It runs a focused TypeScript
+or test check before the next mutation and then reruns the architecture linter.
+If the same cause remains after two attempts, it stops for an external review.

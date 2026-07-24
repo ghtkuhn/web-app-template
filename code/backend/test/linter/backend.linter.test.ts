@@ -1132,6 +1132,60 @@ paths:
     }
 });
 
+test('handler casts and permissive HTTP assertions cannot satisfy contracts', () => {
+    const fixture = new FixtureProject();
+    try {
+        fixture.write(
+            'code/backend/openapi/openapi.yaml',
+            `openapi: 3.1.0
+info:
+    title: Fixture
+    version: 1.0.0
+paths:
+    /api/example:
+        post:
+            responses:
+                "200":
+                    description: Success`,
+        );
+        fixture.write(
+            'code/backend/src/module/example/api/example.http.handler.ts',
+            `export class ExampleHttpHandler extends HttpHandler {
+                protected async processRequest(request: Request): Promise<HandlerResult<BaseDTO>> {
+                    const url = new URL(request.url);
+                    if (request.method !== 'POST' || url.pathname !== '/api/example') {
+                        return { success: false, error: 'Not found' };
+                    }
+                    const body = await request.json() as ExampleRequestDTO;
+                    return this.controller.create(body);
+                }
+            }`,
+        );
+        fixture.write(
+            'code/backend/test/example.http.test.ts',
+            `const response = await fetch('http://test/api/example', {
+                method: 'POST',
+            });
+            assert.ok(response.status === 200 || response.status === 500);`,
+        );
+
+        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+            .run()
+            .issues.map((issue) => issue.ruleId);
+        for (const expected of [
+            'HANDLER_DTO_CAST_BYPASS',
+            'HANDLER_CONCRETE_DTO_CONTRACT',
+            'HTTP_ASSERTION_EXACT',
+            'HTTP_UNEXPECTED_SERVER_ERROR',
+            'TEST_PERMISSIVE_ASSERTION',
+        ]) {
+            assert.ok(ruleIds.includes(expected), expected);
+        }
+    } finally {
+        fixture.dispose();
+    }
+});
+
 test('test files reject type escapes and non-erasable TypeScript', () => {
     const fixture = new FixtureProject();
     try {

@@ -110,8 +110,52 @@ export class CoverageRuleSet {
                 );
                 continue;
             }
+            const assertions = matchingTests.flatMap((test) =>
+                test.httpTestOperations
+                    .filter(
+                        (request) =>
+                            request.path === operation.path &&
+                            request.method === operation.method,
+                    )
+                    .flatMap((request) =>
+                        this.assertionsForRequest(test, request),
+                    ),
+            );
+            if (assertions.some((assertion) => !assertion.exact)) {
+                issues.push(
+                    this.issue(
+                        analysis,
+                        'HTTP_ASSERTION_EXACT',
+                        `HTTP operation '${operation.method} ${operation.path}' uses a permissive status assertion. Fix: prepare one deterministic scenario per documented result and assert one exact status with equal() or strictEqual().`,
+                    ),
+                );
+                issues.push(
+                    this.issue(
+                        analysis,
+                        'TEST_PERMISSIVE_ASSERTION',
+                        'Tests must not accept multiple business outcomes with logical alternatives or status ranges. Fix: use separate deterministic tests with one exact expected result.',
+                    ),
+                );
+            }
+            const assertedStatuses = assertions.flatMap(
+                (assertion) => assertion.statuses,
+            );
+            if (
+                assertedStatuses.includes(500) &&
+                !statuses.includes(500)
+            ) {
+                issues.push(
+                    this.issue(
+                        analysis,
+                        'HTTP_UNEXPECTED_SERVER_ERROR',
+                        `HTTP operation '${operation.method} ${operation.path}' asserts status 500 although OpenAPI does not document it. Fix: make the scenario deterministic and assert its documented business status.`,
+                    ),
+                );
+            }
             const asserted = new Set(
-                matchingTests.flatMap((test) => test.assertedHttpStatuses),
+                assertions
+                    .filter((assertion) => assertion.exact)
+                    .flatMap((assertion) => assertion.statuses),
             );
             const missing = statuses.filter((status) => !asserted.has(status));
             if (missing.length > 0) {
@@ -119,12 +163,37 @@ export class CoverageRuleSet {
                     this.issue(
                         analysis,
                         'HTTP_STATUS_CONTRACT',
-                        `Executable tests for '${operation.method} ${operation.path}' must assert documented statuses: ${missing.join(', ')}.`,
+                        `Executable tests for '${operation.method} ${operation.path}' must assert documented statuses: ${missing.join(', ')}. Fix: create one deterministic test per status and assert it exactly with equal() or strictEqual().`,
                     ),
                 );
             }
         }
         return issues;
+    }
+
+    /** Correlates assertions with the nearest preceding fetch binding. */
+    private assertionsForRequest(
+        test: SourceAnalysis,
+        request: HttpTestOperation,
+    ) {
+        if (!request.responseName) {
+            return [];
+        }
+        const nextOffset = test.httpTestOperations
+            .filter(
+                (candidate) =>
+                    candidate.responseName === request.responseName &&
+                    (candidate.offset ?? 0) > (request.offset ?? 0),
+            )
+            .map((candidate) => candidate.offset ?? Number.MAX_SAFE_INTEGER)
+            .sort((left, right) => left - right)[0] ??
+            Number.MAX_SAFE_INTEGER;
+        return test.httpStatusAssertions.filter(
+            (assertion) =>
+                assertion.responseName === request.responseName &&
+                assertion.offset > (request.offset ?? 0) &&
+                assertion.offset < nextOffset,
+        );
     }
 
     /** Requires Store construction and at least one persistence method call. */

@@ -75,6 +75,9 @@
 * Little Coder backend changes must remain within the active lint-gate batch or repair scope.
 * You must not bypass a red backend lint gate, weaken its rules, or modify protected architecture controls to make it green.
 * You must run backend work in small lintable batches; the gate enforces a layer/module check and a maximum of five successful file mutations.
+* Little Coder must repair only the first active backend lint cause and run the focused check before another backend mutation.
+* Little Coder must stop and report the blocker after two ineffective repairs of the same cause.
+* You must not silence a finding with type casts, widened contracts, permissive assertions, placeholder values, or unrelated refactors.
 * You must not invoke `rm`, `rmdir`, `unlink`, or another direct system deletion command.
 * You must delete project files and directories only with `npm run rm -- <project-relative-path>`.
 * You should run `npm run rm -- <project-relative-path> --dry-run` first when the target contains multiple files or directories.

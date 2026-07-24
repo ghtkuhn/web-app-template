@@ -16,6 +16,15 @@ export class TransportRuleSet {
         const issues: LintIssue[] = [];
         const layer = this.paths.layer(analysis.filePath);
         if (layer === 'api') {
+            if (analysis.dtoCastFromJsonCount > 0) {
+                issues.push(
+                    this.issue(
+                        analysis,
+                        'HANDLER_DTO_CAST_BYPASS',
+                        'A type assertion does not validate request.json() data. Fix: construct a concrete request DTO or call a typed validator that returns that DTO before invoking the Controller.',
+                    ),
+                );
+            }
             const unvalidated = analysis.jsonResultVariables.filter(
                 (name) =>
                     analysis.controllerPayloadVariables.includes(name) &&
@@ -26,14 +35,14 @@ export class TransportRuleSet {
                     this.issue(
                         analysis,
                         'HANDLER_UNVALIDATED_INPUT',
-                        `request.json() data (${unvalidated.join(', ')}) must be converted to a declared request DTO or validated before reaching a Controller or Service.`,
+                        `request.json() data (${unvalidated.join(', ')}) must be converted to a declared request DTO or validated before reaching a Controller or Service. Fix: construct the request DTO or use a typed validator; do not cast the JSON value.`,
                     ),
                 );
                 issues.push(
                     this.issue(
                         analysis,
                         'HANDLER_DTO_INPUT',
-                        'HTTP and Node business payloads must cross the Handler boundary as request DTOs.',
+                        'HTTP and Node business payloads must cross the Handler boundary as request DTOs. Fix: pass the concrete request DTO returned by construction or validation.',
                     ),
                 );
             }
