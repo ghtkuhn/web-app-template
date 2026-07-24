@@ -66,10 +66,43 @@ Dependencies must not point back toward a higher layer:
 Every module requires `module/<name>/index.ts`. It must:
 
 - export a `<Name>Module` extending `BaseModule`;
-- implement and export a `<Name>ModulePort`;
+- implement a `<Name>ModulePort` declared in `interfaces.ts`;
+- publicly re-export that port from `index.ts`;
 - expose a static `definition` satisfying `NamedModuleDefinition`;
 - compose its private Handler → Controller → Service → Store chain;
 - remain free of business logic.
+
+The port interface stays in the module-level `interfaces.ts` file:
+
+```ts
+export interface ExampleModulePort {
+    dispatch(
+        type: 'node',
+        input: ExampleNodeRequest,
+    ): Promise<HandlerResult<ExampleResponseDTO>>;
+}
+```
+
+The module class may import that interface so it can implement the contract:
+
+```ts
+import type { ExampleModulePort } from './interfaces.ts';
+```
+
+That import is private to `index.ts`; it does not make the port available to
+consumers. The same `index.ts` must therefore also contain this separate,
+top-level public re-export:
+
+```ts
+export type { ExampleModulePort } from './interfaces.ts';
+```
+
+Do not move or redeclare the interface in `index.ts`. Other modules import the
+port only through the public module entry:
+
+```ts
+import type { ExampleModulePort } from '../example/index.ts';
+```
 
 The generated `module.catalog.ts` imports modules only through their public
 `index.ts` files. Other modules must also import only from those public entry

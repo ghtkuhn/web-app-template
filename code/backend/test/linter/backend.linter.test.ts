@@ -650,7 +650,7 @@ test('module entry diagnostic explains the complete required contract', () => {
             );
         assert.equal(
             issue?.message,
-            "The example module entry is incomplete. Fix: Export ExampleModule from index.ts and extend BaseModule. ExampleModule must implement ExampleModulePort. ExampleModule must declare public static readonly definition in index.ts. The static definition must satisfy NamedModuleDefinition. Export interface ExampleModulePort from interfaces.ts. Re-export ExampleModulePort from index.ts with export type { ExampleModulePort } from './interfaces.ts'.",
+            "The example module entry is incomplete. Fix: Export ExampleModule from index.ts and extend BaseModule. ExampleModule must implement ExampleModulePort. ExampleModule must declare public static readonly definition in index.ts. The static definition must satisfy NamedModuleDefinition. Export interface ExampleModulePort from interfaces.ts. Make ExampleModulePort public from the module entry. Add this exact top-level line to index.ts: export type { ExampleModulePort } from './interfaces.ts'; An import type statement is private to index.ts and does not expose the port to consumers. Keep the interface in interfaces.ts; do not move or redeclare it.",
         );
     } finally {
         fixture.dispose();

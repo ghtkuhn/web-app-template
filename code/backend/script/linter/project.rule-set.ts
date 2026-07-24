@@ -214,7 +214,7 @@ export class ProjectRuleSet {
                     `export\\s+type\\s+\\{\\s*${pascalName}ModulePort\\s*\\}`,
                     'u',
                 ).test(source),
-                fix: `Re-export ${pascalName}ModulePort from index.ts with export type { ${pascalName}ModulePort } from './interfaces.ts'.`,
+                fix: `Make ${pascalName}ModulePort public from the module entry. Add this exact top-level line to index.ts: export type { ${pascalName}ModulePort } from './interfaces.ts'; An import type statement is private to index.ts and does not expose the port to consumers. Keep the interface in interfaces.ts; do not move or redeclare it.`,
             },
         ];
         const fixes = checks
