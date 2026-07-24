@@ -261,6 +261,7 @@ function blockedDecision(target: string): ToolCallDecision {
 }
 
 /** Registers the backend Base mutation guard with Little Coder. */
+// fallow-ignore-next-line unused-export -- Little Coder loads this entry dynamically.
 export default function backendBaseGuard(extension: ExtensionApi): void {
     extension.on('tool_call', async (event, context) => {
         const projectRoot = findProjectRoot(context.cwd);

@@ -5,6 +5,8 @@
     },
     "include": [
         "little-coder/**/*.ts",
+        "script/little-coder.ts",
+        "script/little-coder/**/*.ts",
         "script/deployment/**/*.ts",
         "script/memory-check.ts",
         "script/memory-check/**/*.ts",
