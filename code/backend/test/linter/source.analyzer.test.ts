@@ -107,3 +107,70 @@ test('source analyzer captures contracts, casts, errors, and persistence order',
         fixture.dispose();
     }
 });
+
+test('source analyzer captures executable architecture evidence structurally', () => {
+    const fixture = new FixtureProject();
+    try {
+        const filePath = fixture.write(
+            'evidence.ts',
+            `interface ExamplePort extends BaseModule {}
+            type ExampleNodeRequest =
+                | { operation: 'create'; payload: CreateDTO }
+                | { operation: 'read'; payload: ReadDTO };
+            class Example {
+                public static readonly definition = {
+                    name: 'example',
+                    dependencies: [],
+                    create: () => new Example(),
+                } satisfies NamedModuleDefinition;
+
+                constructor(private readonly hidden: string) {}
+
+                async run(request: Request, row: Row) {
+                    this.registerHandler('http', new ExampleHttpHandler());
+                    const payload = await request.json();
+                    const dto = new CreateDTO(payload);
+                    this.controller.create(dto);
+                    const response = await fetch('https://test/api/example', {
+                        method: 'POST',
+                    });
+                    assert.equal(response.status, 201);
+                    return new ExampleObject({
+                        id: row.id,
+                        createdAt: row.created_at,
+                    });
+                }
+            }`,
+        );
+        const analysis = new SourceAnalyzer().analyze(filePath);
+
+        assert.deepEqual(analysis.interfaceBaseNames, ['BaseModule']);
+        assert.equal(
+            analysis.typeAliasOperationKinds[0].operationLiteralCount,
+            2,
+        );
+        assert.equal(analysis.ownedModuleDefinitionCount, 1);
+        assert.deepEqual(analysis.ownedModuleDefinitionProperties, [
+            'name',
+            'dependencies',
+            'create',
+        ]);
+        assert.equal(analysis.nonErasableSyntaxCount, 1);
+        assert.deepEqual(analysis.handlerRegistrations, [
+            { transport: 'http', handlerClass: 'ExampleHttpHandler' },
+        ]);
+        assert.deepEqual(analysis.httpTestOperations, [
+            { method: 'POST', path: '/api/example' },
+        ]);
+        assert.deepEqual(analysis.assertedHttpStatuses, [201]);
+        assert.deepEqual(analysis.jsonResultVariables, ['payload']);
+        assert.deepEqual(analysis.dtoResultVariables, ['dto']);
+        assert.deepEqual(analysis.controllerPayloadVariables, ['dto']);
+        assert.deepEqual(analysis.objectMappings[0].sourceProperties, [
+            'id',
+            'created_at',
+        ]);
+    } finally {
+        fixture.dispose();
+    }
+});

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import { parse } from '@babel/parser';
 import type {
     ClassAnalysis,
+    ClassMethodAnalysis,
     SourceAnalysis,
     SourceDependency,
 } from './interfaces.ts';
@@ -34,6 +35,12 @@ type AstNode = {
     callee?: AstNode;
     arguments?: AstNode[];
     value?: unknown;
+    properties?: AstNode[];
+    init?: AstNode | null;
+    left?: AstNode;
+    right?: AstNode;
+    static?: boolean;
+    quasis?: Array<{ value?: { raw?: string } }>;
     [key: string]: unknown;
 };
 
@@ -132,6 +139,12 @@ export class SourceAnalyzer {
             functionCount: 0,
             classBaseNames: [],
             classes: [],
+            classMethods: [],
+            interfaceBaseNames: [],
+            typeAliasOperationKinds: [],
+            ownedModuleDefinitionCount: 0,
+            ownedModuleDefinitionHasSpread: false,
+            ownedModuleDefinitionProperties: [],
             methodCalls: [],
             constructorCalls: [],
             parameterNames: [],
@@ -142,7 +155,18 @@ export class SourceAnalyzer {
             environmentAccessCount: 0,
             requestBodyAccessCount: 0,
             unknownCastCount: 0,
+            anyAssertionCount: 0,
+            doubleAssertionCount: 0,
+            nonErasableSyntaxCount: 0,
             throwMessageAccessCount: 0,
+            handlerRegistrations: [],
+            httpTestOperations: [],
+            httpHandlerOperations: [],
+            assertedHttpStatuses: [],
+            jsonResultVariables: [],
+            dtoResultVariables: [],
+            controllerPayloadVariables: [],
+            objectMappings: [],
             validationCallOffsets: [],
             persistenceCallOffsets: [],
         };
@@ -284,6 +308,19 @@ export class SourceAnalyzer {
         }
 
         const astNode = node as AstNode;
+        if (astNode.type === 'TSInterfaceDeclaration') {
+            for (const base of (astNode.extends as AstNode[] | undefined) ?? []) {
+                const name = this.expressionName(
+                    (base.expression as AstNode | undefined) ?? base,
+                );
+                if (name) {
+                    analysis.interfaceBaseNames.push(name);
+                }
+            }
+        }
+        if (astNode.type === 'TSTypeAliasDeclaration') {
+            this.collectTypeAlias(astNode, analysis);
+        }
         if (astNode.type === 'TSAnyKeyword') {
             analysis.anyTypeCount += 1;
         }
@@ -322,6 +359,33 @@ export class SourceAnalyzer {
         ) {
             analysis.unknownCastCount += 1;
         }
+        if (
+            astNode.type === 'TSAsExpression' &&
+            astNode.typeAnnotation?.type === 'TSAnyKeyword'
+        ) {
+            analysis.anyAssertionCount += 1;
+        }
+        if (
+            astNode.type === 'TSAsExpression' &&
+            astNode.expression?.type === 'TSAsExpression'
+        ) {
+            analysis.doubleAssertionCount += 1;
+        }
+        if (
+            [
+                'TSParameterProperty',
+                'TSEnumDeclaration',
+                'TSModuleDeclaration',
+                'TSImportEqualsDeclaration',
+                'TSExportAssignment',
+            ].includes(astNode.type ?? '')
+        ) {
+            analysis.nonErasableSyntaxCount += 1;
+        }
+        this.collectVariableFlow(astNode, analysis);
+        this.collectHandlerRegistration(astNode, analysis);
+        this.collectHttpTestEvidence(astNode, analysis);
+        this.collectHttpHandlerEvidence(astNode, analysis);
         if (astNode.type === 'NewExpression') {
             analysis.constructorCalls.push({
                 className: this.expressionName(astNode.callee ?? null),
@@ -329,12 +393,16 @@ export class SourceAnalyzer {
                     astNode.arguments?.[0] ?? null,
                 ),
             });
+            this.collectObjectMapping(astNode, analysis);
         }
         if (
             ['ClassMethod', 'ClassPrivateMethod', 'TSDeclareMethod'].includes(
                 astNode.type ?? '',
             )
         ) {
+            analysis.classMethods.push(
+                this.classMethodAnalysis(astNode, analysis.classes),
+            );
             for (const parameter of astNode.params ?? []) {
                 const parameterName = this.expressionName(parameter);
                 if (parameterName) {
@@ -344,6 +412,36 @@ export class SourceAnalyzer {
             const returnTypeName = this.typeName(astNode.returnType ?? null);
             if (returnTypeName) {
                 analysis.returnTypeNames.push(returnTypeName);
+            }
+        }
+        if (
+            astNode.type === 'ClassProperty' &&
+            Boolean(astNode.static) &&
+            this.expressionName(astNode.key ?? null) === 'definition'
+        ) {
+            analysis.ownedModuleDefinitionCount += 1;
+            const value = astNode.value as AstNode | undefined;
+            const object =
+                value?.type === 'TSSatisfiesExpression'
+                    ? value.expression
+                    : value;
+            if (object?.type === 'ObjectExpression') {
+                analysis.ownedModuleDefinitionHasSpread =
+                    (object.properties ?? []).some(
+                        (property) => property.type === 'SpreadElement',
+                    );
+                analysis.ownedModuleDefinitionProperties.push(
+                    ...(object.properties ?? [])
+                        .filter((property) =>
+                            ['ObjectProperty', 'ObjectMethod'].includes(
+                                property.type ?? '',
+                            ),
+                        )
+                        .map((property) =>
+                            this.expressionName(property.key ?? null),
+                        )
+                        .filter((name): name is string => Boolean(name)),
+                );
             }
         }
         if (astNode.type === 'CallExpression') {
@@ -374,6 +472,126 @@ export class SourceAnalyzer {
         }
     }
 
+    /** Describes one class method and its Kysely-style call chain. */
+    private classMethodAnalysis(
+        node: AstNode,
+        classes: ClassAnalysis[],
+    ): ClassMethodAnalysis {
+        const calledMethods: string[] = [];
+        this.collectMethodCalls(node.body ?? null, calledMethods);
+        const stringArguments: string[] = [];
+        const setProperties: string[] = [];
+        this.collectCallArguments(node.body ?? null, stringArguments, setProperties);
+        return {
+            className: classes.at(-1)?.name ?? null,
+            name: this.expressionName(node.key ?? null),
+            calledMethods,
+            stringArguments,
+            setProperties,
+        };
+    }
+
+    /** Collects literal query arguments and update-object property names. */
+    private collectCallArguments(
+        node: unknown,
+        stringArguments: string[],
+        setProperties: string[],
+    ): void {
+        if (!node || typeof node !== 'object') {
+            return;
+        }
+        if (Array.isArray(node)) {
+            for (const child of node) {
+                this.collectCallArguments(child, stringArguments, setProperties);
+            }
+            return;
+        }
+        const astNode = node as AstNode;
+        if (astNode.type === 'CallExpression') {
+            for (const argument of astNode.arguments ?? []) {
+                if (
+                    argument.type === 'StringLiteral' &&
+                    typeof argument.value === 'string'
+                ) {
+                    stringArguments.push(argument.value);
+                }
+            }
+            if (
+                astNode.callee?.type === 'MemberExpression' &&
+                this.expressionName(astNode.callee.property ?? null) === 'set'
+            ) {
+                const object = astNode.arguments?.[0];
+                if (object?.type === 'ObjectExpression') {
+                    setProperties.push(
+                        ...(object.properties ?? [])
+                            .map((property) =>
+                                this.expressionName(property.key ?? null),
+                            )
+                            .filter((name): name is string => Boolean(name)),
+                    );
+                }
+            }
+        }
+        for (const [key, value] of Object.entries(astNode)) {
+            if (!['loc', 'start', 'end'].includes(key)) {
+                this.collectCallArguments(value, stringArguments, setProperties);
+            }
+        }
+    }
+
+    /** Records whether a Node request is a properly discriminated union. */
+    private collectTypeAlias(
+        node: AstNode,
+        analysis: SourceAnalysis,
+    ): void {
+        const annotation = node.typeAnnotation as AstNode | undefined;
+        const members =
+            annotation?.type === 'TSUnionType'
+                ? ((annotation.types as AstNode[] | undefined) ?? [])
+                : annotation
+                  ? [annotation]
+                  : [];
+        let operationLiteralCount = 0;
+        let operationUnionInsideMember = false;
+        let payloadUnionInsideMember = false;
+        for (const member of members) {
+            if (member.type !== 'TSTypeLiteral') {
+                continue;
+            }
+            for (const property of (member.members as AstNode[] | undefined) ?? []) {
+                if (property.type !== 'TSPropertySignature') {
+                    continue;
+                }
+                const key = this.expressionName(property.key ?? null);
+                const value = (property.typeAnnotation as AstNode | undefined)
+                    ?.typeAnnotation as AstNode | undefined;
+                if (key === 'operation') {
+                    if (value?.type === 'TSLiteralType') {
+                        operationLiteralCount += 1;
+                    }
+                    if (value?.type === 'TSUnionType') {
+                        operationUnionInsideMember = true;
+                    }
+                }
+                if (
+                    !['operation', 'context'].includes(key ?? '') &&
+                    value?.type === 'TSUnionType'
+                ) {
+                    payloadUnionInsideMember = true;
+                }
+            }
+        }
+        if ((this.expressionName(node.id ?? null) ?? '').endsWith('NodeRequest')) {
+            analysis.typeAliasOperationKinds.push({
+                aliasName: this.expressionName(node.id ?? null),
+                unionMemberCount: members.length,
+                operationLiteralCount,
+                operationUnionInsideMember,
+                payloadUnionInsideMember,
+            });
+        }
+    }
+
     /** Describes one top-level class without interpreting its implementation. */
     // fallow-ignore-next-line complexity -- Declarative extraction covers independent class-member kinds.
     private classAnalysis(node: AstNode): ClassAnalysis {
@@ -397,7 +615,271 @@ export class SourceAnalyzer {
                 'ClassProperty',
                 'ClassPrivateProperty',
             ]),
+            staticExecutablePropertyCount: members.filter(
+                (member) =>
+                    Boolean(member.static) &&
+                    ['CallExpression', 'NewExpression'].includes(
+                        (member.value as AstNode | undefined)?.type ?? '',
+                    ),
+            ).length,
         };
+    }
+
+    /** Records JSON variables, DTO construction, and controller arguments. */
+    private collectVariableFlow(
+        node: AstNode,
+        analysis: SourceAnalysis,
+    ): void {
+        if (node.type === 'VariableDeclarator') {
+            const name = this.expressionName(node.id ?? null);
+            const initializer = this.unwrapAwait(node.init ?? null);
+            if (
+                name &&
+                initializer?.type === 'CallExpression' &&
+                initializer.callee?.type === 'MemberExpression' &&
+                this.expressionName(initializer.callee.property ?? null) ===
+                    'json'
+            ) {
+                analysis.jsonResultVariables.push(name);
+            }
+            if (
+                name &&
+                initializer?.type === 'NewExpression' &&
+                this.expressionName(initializer.callee ?? null)?.endsWith(
+                    'DTO',
+                )
+            ) {
+                analysis.dtoResultVariables.push(name);
+            }
+        }
+        if (
+            node.type === 'CallExpression' &&
+            node.callee?.type === 'MemberExpression' &&
+            /(?:controller|service)/iu.test(
+                this.expressionName(node.callee.object ?? null) ?? '',
+            )
+        ) {
+            const argumentName = this.expressionName(
+                node.arguments?.[0] ?? null,
+            );
+            if (argumentName) {
+                analysis.controllerPayloadVariables.push(argumentName);
+            }
+        }
+    }
+
+    /** Records transport-to-handler registration performed by a module. */
+    private collectHandlerRegistration(
+        node: AstNode,
+        analysis: SourceAnalysis,
+    ): void {
+        if (
+            node.type !== 'CallExpression' ||
+            node.callee?.type !== 'MemberExpression' ||
+            this.expressionName(node.callee.property ?? null) !==
+                'registerHandler'
+        ) {
+            return;
+        }
+        const transport = node.arguments?.[0];
+        const handler = node.arguments?.[1];
+        analysis.handlerRegistrations.push({
+            transport:
+                transport?.type === 'StringLiteral' &&
+                typeof transport.value === 'string'
+                    ? transport.value
+                    : null,
+            handlerClass:
+                handler?.type === 'NewExpression'
+                    ? this.expressionName(handler.callee ?? null)
+                    : null,
+        });
+    }
+
+    /** Records executable fetch operations and response-status assertions. */
+    private collectHttpTestEvidence(
+        node: AstNode,
+        analysis: SourceAnalysis,
+    ): void {
+        if (
+            node.type === 'CallExpression' &&
+            node.callee?.type === 'Identifier' &&
+            node.callee.name === 'fetch'
+        ) {
+            const requestPath = this.httpPath(node.arguments?.[0] ?? null);
+            if (requestPath) {
+                analysis.httpTestOperations.push({
+                    method: this.fetchMethod(node.arguments?.[1] ?? null),
+                    path: requestPath,
+                });
+            }
+        }
+        if (
+            node.type === 'CallExpression' &&
+            node.callee?.type === 'MemberExpression' &&
+            ['equal', 'strictEqual'].includes(
+                this.expressionName(node.callee.property ?? null) ?? '',
+            )
+        ) {
+            const [actual, expected] = node.arguments ?? [];
+            if (
+                actual?.type === 'MemberExpression' &&
+                this.expressionName(actual.property ?? null) === 'status' &&
+                expected?.type === 'NumericLiteral' &&
+                typeof expected.value === 'number'
+            ) {
+                analysis.assertedHttpStatuses.push(expected.value);
+            }
+        }
+    }
+
+    /** Records literal request-method and pathname guards in HTTP handlers. */
+    private collectHttpHandlerEvidence(
+        node: AstNode,
+        analysis: SourceAnalysis,
+    ): void {
+        if (node.type !== 'IfStatement') {
+            return;
+        }
+        const test = node.test as AstNode | undefined;
+        const method = test ? this.comparedLiteral(test, 'method') : null;
+        const route = test ? this.comparedLiteral(test, 'pathname') : null;
+        if (route?.startsWith('/api/')) {
+            analysis.httpHandlerOperations.push({
+                method: (method ?? 'GET').toUpperCase(),
+                path: route,
+            });
+        }
+    }
+
+    /** Finds a string literal compared to one member property in a condition. */
+    private comparedLiteral(node: AstNode, propertyName: string): string | null {
+        if (
+            node.type === 'BinaryExpression' ||
+            node.type === 'LogicalExpression'
+        ) {
+            if (node.type === 'BinaryExpression') {
+                const sides = [node.left, node.right];
+                const member = sides.find(
+                    (side) =>
+                        side?.type === 'MemberExpression' &&
+                        this.expressionName(side.property ?? null) ===
+                            propertyName,
+                );
+                const literal = sides.find(
+                    (side) =>
+                        side?.type === 'StringLiteral' &&
+                        typeof side.value === 'string',
+                );
+                if (member && typeof literal?.value === 'string') {
+                    return literal.value;
+                }
+            }
+            return (
+                (node.left && this.comparedLiteral(node.left, propertyName)) ||
+                (node.right && this.comparedLiteral(node.right, propertyName)) ||
+                null
+            );
+        }
+        if (node.type === 'UnaryExpression' && node.argument) {
+            return this.comparedLiteral(node.argument, propertyName);
+        }
+        return null;
+    }
+
+    /** Records explicit object-literal mappings from one row variable. */
+    private collectObjectMapping(
+        node: AstNode,
+        analysis: SourceAnalysis,
+    ): void {
+        const className = this.expressionName(node.callee ?? null);
+        const object = node.arguments?.[0];
+        if (
+            !className?.endsWith('Object') ||
+            object?.type !== 'ObjectExpression'
+        ) {
+            return;
+        }
+        const entries = (object.properties ?? []).filter(
+            (property) => property.type === 'ObjectProperty',
+        );
+        const sourceNames = entries
+            .map((property) => {
+                const value = property.value as AstNode | undefined;
+                return value?.type === 'MemberExpression'
+                    ? this.expressionName(value.object ?? null)
+                    : null;
+            })
+            .filter((name): name is string => Boolean(name));
+        const sourceName = sourceNames[0];
+        if (!sourceName) {
+            return;
+        }
+        analysis.objectMappings.push({
+            objectClass: className,
+            sourceName,
+            sourceProperties: entries
+                .map((property) => {
+                    const value = property.value as AstNode | undefined;
+                    return value?.type === 'MemberExpression'
+                        ? this.expressionName(
+                              value.property ?? null,
+                          )
+                        : null;
+                })
+                .filter((name): name is string => Boolean(name)),
+            targetProperties: entries
+                .map((property) =>
+                    this.expressionName(property.key ?? null),
+                )
+                .filter((name): name is string => Boolean(name)),
+        });
+    }
+
+    /** Removes one await wrapper from an initializer. */
+    private unwrapAwait(node: AstNode | null): AstNode | null {
+        return node?.type === 'AwaitExpression'
+            ? node.argument ?? null
+            : node;
+    }
+
+    /** Extracts an API path from a fetch string or template literal. */
+    private httpPath(node: AstNode | null): string | null {
+        if (
+            node?.type === 'StringLiteral' &&
+            typeof node.value === 'string'
+        ) {
+            return this.pathFromUrl(node.value);
+        }
+        if (node?.type === 'TemplateLiteral') {
+            const text = (node.quasis ?? [])
+                .map((quasi) => quasi.value?.raw ?? '')
+                .join('{}');
+            return this.pathFromUrl(text);
+        }
+        return null;
+    }
+
+    /** Returns a normalized literal API path from a URL fragment. */
+    private pathFromUrl(value: string): string | null {
+        const match = value.match(/(\/api\/[A-Za-z0-9_./{}:-]+)/u);
+        return match?.[1] ?? null;
+    }
+
+    /** Reads the literal fetch method from an options object. */
+    private fetchMethod(node: AstNode | null): string {
+        if (node?.type !== 'ObjectExpression') {
+            return 'GET';
+        }
+        const method = (node.properties ?? []).find(
+            (property) =>
+                property.type === 'ObjectProperty' &&
+                this.expressionName(property.key ?? null) === 'method',
+        )?.value as AstNode | undefined;
+        return method?.type === 'StringLiteral' &&
+            typeof method.value === 'string'
+            ? method.value.toUpperCase()
+            : 'GET';
     }
 
     /** Extracts named class members for an explicit set of Babel node kinds. */

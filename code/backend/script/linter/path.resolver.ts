@@ -150,6 +150,26 @@ export class PathResolver {
         return path.join(this.projectRoot, 'code/backend/package.json');
     }
 
+    /** Returns the root package manifest. */
+    public rootPackageManifest(): string {
+        return path.join(this.projectRoot, 'package.json');
+    }
+
+    /** Returns the shared TypeScript compiler configuration. */
+    public compilerConfig(): string {
+        return path.join(this.projectRoot, 'tsconfig.base.json');
+    }
+
+    /** Returns the backend workspace root. */
+    public backendRoot(): string {
+        return path.join(this.projectRoot, 'code/backend');
+    }
+
+    /** Returns the frontend workspace root. */
+    public frontendRoot(): string {
+        return path.join(this.projectRoot, 'code/frontend/web');
+    }
+
     /** Returns the checked-in OpenAPI document. */
     public openApiDocument(): string {
         return path.join(this.projectRoot, 'code/backend/openapi/openapi.yaml');
