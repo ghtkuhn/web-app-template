@@ -179,28 +179,53 @@ export class ProjectRuleSet {
             path.join(path.dirname(entryPath), 'interfaces.ts'),
         );
         const pascalName = this.pascal(moduleName);
-        const missing = [
-            !new RegExp(
-                `class\\s+${pascalName}Module\\s+[\\s\\S]*extends\\s+BaseModule`,
-            ).test(source),
-            !source.includes(`implements ${pascalName}ModulePort`),
-            !source.includes('static readonly definition'),
-            !new RegExp(
-                'satisfies\\s+(Named)?ModuleDefinition|:\\s*(Named)?ModuleDefinition',
-                'u',
-            ).test(source),
-            !interfaces.includes(`interface ${pascalName}ModulePort`),
-            !new RegExp(
-                `export\\s+type\\s+\\{\\s*${pascalName}ModulePort\\s*\\}`,
-                'u',
-            ).test(source),
+        const checks = [
+            {
+                valid: new RegExp(
+                    `export\\s+class\\s+${pascalName}Module\\s+[\\s\\S]*extends\\s+BaseModule`,
+                ).test(source),
+                fix: `Export ${pascalName}Module from index.ts and extend BaseModule.`,
+            },
+            {
+                valid: source.includes(
+                    `implements ${pascalName}ModulePort`,
+                ),
+                fix: `${pascalName}Module must implement ${pascalName}ModulePort.`,
+            },
+            {
+                valid: source.includes('static readonly definition'),
+                fix: `${pascalName}Module must declare public static readonly definition in index.ts.`,
+            },
+            {
+                valid: new RegExp(
+                    'satisfies\\s+(Named)?ModuleDefinition|:\\s*(Named)?ModuleDefinition',
+                    'u',
+                ).test(source),
+                fix: 'The static definition must satisfy NamedModuleDefinition.',
+            },
+            {
+                valid: interfaces.includes(
+                    `interface ${pascalName}ModulePort`,
+                ),
+                fix: `Export interface ${pascalName}ModulePort from interfaces.ts.`,
+            },
+            {
+                valid: new RegExp(
+                    `export\\s+type\\s+\\{\\s*${pascalName}ModulePort\\s*\\}`,
+                    'u',
+                ).test(source),
+                fix: `Re-export ${pascalName}ModulePort from index.ts with export type { ${pascalName}ModulePort } from './interfaces.ts'.`,
+            },
         ];
-        return missing.some(Boolean)
+        const fixes = checks
+            .filter((check) => !check.valid)
+            .map((check) => check.fix);
+        return fixes.length > 0
             ? [
                   this.issue(
                       entryPath,
                       'MODULE_ENTRY_CONTRACT',
-                      `Required contract: index.ts exports ${pascalName}Module extending BaseModule and implementing ${pascalName}ModulePort; ${pascalName}Module owns public static readonly definition satisfying NamedModuleDefinition; interfaces.ts exports interface ${pascalName}ModulePort; index.ts re-exports that port with export type { ${pascalName}ModulePort } from './interfaces.ts'.`,
+                      `The ${moduleName} module entry is incomplete. Fix: ${fixes.join(' ')}`,
                   ),
               ]
             : [];

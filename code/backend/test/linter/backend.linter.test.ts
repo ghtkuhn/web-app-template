@@ -637,6 +637,10 @@ test('module entry diagnostic explains the complete required contract', () => {
             'code/backend/src/module/example/index.ts',
             'export class IncorrectModule {}',
         );
+        fixture.write(
+            'code/backend/src/module/example/interfaces.ts',
+            'export interface IncorrectPort {}',
+        );
 
         const issue = new BackendLinter({ projectRoot: fixture.root })
             .run()
@@ -646,7 +650,37 @@ test('module entry diagnostic explains the complete required contract', () => {
             );
         assert.equal(
             issue?.message,
-            "Required contract: index.ts exports ExampleModule extending BaseModule and implementing ExampleModulePort; ExampleModule owns public static readonly definition satisfying NamedModuleDefinition; interfaces.ts exports interface ExampleModulePort; index.ts re-exports that port with export type { ExampleModulePort } from './interfaces.ts'.",
+            "The example module entry is incomplete. Fix: Export ExampleModule from index.ts and extend BaseModule. ExampleModule must implement ExampleModulePort. ExampleModule must declare public static readonly definition in index.ts. The static definition must satisfy NamedModuleDefinition. Export interface ExampleModulePort from interfaces.ts. Re-export ExampleModulePort from index.ts with export type { ExampleModulePort } from './interfaces.ts'.",
+        );
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('module entry diagnostic reports only incorrect contract parts', () => {
+    const fixture = new FixtureProject();
+    try {
+        fixture.write(
+            'code/backend/src/module/example/interfaces.ts',
+            'export interface ExampleModulePort {}',
+        );
+        fixture.write(
+            'code/backend/src/module/example/index.ts',
+            `export type { ExampleModulePort } from './interfaces.ts';
+             export class ExampleModule
+                 extends BaseModule
+                 implements ExampleModulePort {}`,
+        );
+
+        const issue = new BackendLinter({ projectRoot: fixture.root })
+            .run()
+            .issues.find(
+                (candidate) =>
+                    candidate.ruleId === 'MODULE_ENTRY_CONTRACT',
+            );
+        assert.equal(
+            issue?.message,
+            'The example module entry is incomplete. Fix: ExampleModule must declare public static readonly definition in index.ts. The static definition must satisfy NamedModuleDefinition.',
         );
     } finally {
         fixture.dispose();
