@@ -258,7 +258,11 @@ test('catalog regeneration preserves module-owned dependency metadata', () => {
         create: (dependencies: unknown) => new HealthModule(dependencies),
     };
 
-    public constructor(public readonly dependencies: unknown) {}
+    public readonly dependencies: unknown;
+
+    public constructor(dependencies: unknown) {
+        this.dependencies = dependencies;
+    }
 }
 `;
     try {

@@ -20,7 +20,11 @@ test('linter CLI returns zero and writes a success summary', () => {
         fixture.write(
             'code/backend/src/module/example/index.ts',
             `export class ExampleModule extends BaseModule implements ExampleModulePort {
-                public static readonly definition = {} satisfies NamedModuleDefinition;
+                public static readonly definition = {
+                    name: 'example',
+                    dependencies: [],
+                    create: () => new ExampleModule(),
+                } satisfies NamedModuleDefinition;
             }
             export type { ExampleModulePort } from './interfaces.ts';`,
         );

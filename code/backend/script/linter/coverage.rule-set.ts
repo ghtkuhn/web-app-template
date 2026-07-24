@@ -1,36 +1,32 @@
-import fs from 'node:fs';
-import type { LintIssue, SourceAnalysis } from './interfaces.ts';
-import { FileScanner } from './file.scanner.ts';
+import type {
+    HttpTestOperation,
+    LintIssue,
+    SourceAnalysis,
+} from './interfaces.ts';
 import { PathResolver } from './path.resolver.ts';
+import { ProjectModel } from './project.model.ts';
 
-/** Relates concrete HTTP adapters to OpenAPI and backend tests. */
+/** Relates concrete HTTP and persistence adapters to executable tests. */
 export class CoverageRuleSet {
-    private readonly testSource: string;
     private readonly openApiSource: string;
     private readonly paths: PathResolver;
+    private readonly tests: SourceAnalysis[];
     private readonly openApiError: string | null;
 
-    /** Loads checked-in contract and test sources once. */
-    // fallow-ignore-next-line complexity -- Validates two independent project contracts during construction.
-    constructor(paths: PathResolver) {
+    /** Loads parsed tests and the checked-in API contract once. */
+    constructor(paths: PathResolver, project?: ProjectModel) {
         this.paths = paths;
-        const scanner = new FileScanner();
-        this.testSource = scanner
-            .listTypeScriptFiles(paths.testRoot())
-            .map((filePath) => fs.readFileSync(filePath, 'utf8'))
-            .join('\n');
-        this.openApiSource = fs.existsSync(paths.openApiDocument())
-            ? fs.readFileSync(paths.openApiDocument(), 'utf8')
-            : '';
+        const model = project ?? new ProjectModel(paths);
+        this.tests = model.testAnalyses();
+        this.openApiSource = model.openApiSource();
         this.openApiError =
-            this.openApiSource &&
             /^openapi:\s+3\.\d+\.\d+/mu.test(this.openApiSource) &&
             /^paths:\s*(?:\{\})?\s*$/mu.test(this.openApiSource)
                 ? null
                 : 'openapi.yaml must contain a valid OpenAPI version and paths map.';
     }
 
-    /** Reports a missing or structurally unreadable OpenAPI contract. */
+    /** Reports a structurally unreadable OpenAPI contract. */
     public configurationIssues(): LintIssue[] {
         return this.openApiError
             ? [
@@ -46,97 +42,82 @@ export class CoverageRuleSet {
             : [];
     }
 
-    /** Checks one HTTP handler or concrete store for coverage. */
-    // fallow-ignore-next-line complexity -- Coordinates independently tested HTTP and Store coverage rules.
+    /** Checks one concrete HTTP handler or Store against executable evidence. */
     public evaluate(analysis: SourceAnalysis): LintIssue[] {
-        const issues: LintIssue[] = [];
         if (analysis.filePath.endsWith('.http.handler.ts')) {
-            const routes = [
-                ...analysis.source.matchAll(
-                    /['"](\/api\/[A-Za-z0-9_./{}:-]+)['"]/gu,
-                ),
-            ].map((match) => match[1]);
-            if (
-                routes.length === 0 &&
-                analysis.classes.some((classAnalysis) =>
-                    classAnalysis.methodNames.includes('processRequest'),
-                )
-            ) {
-                issues.push(
-                    this.issue(
-                        analysis,
-                        'HTTP_OPENAPI_COVERAGE',
-                        'Concrete HTTP handlers must declare a literal /api route.',
-                    ),
-                );
-            }
-            const method =
-                analysis.source
-                    .match(
-                        /(?:request|req)\.method\s*!==?\s*['"]([A-Z]+)['"]/u,
-                    )?.[1]
-                    ?.toLowerCase() ?? null;
-            for (const route of new Set(routes)) {
-                const routeOffset = this.openApiSource.search(
-                    new RegExp(
-                        `^\\s{4}${this.escape(route)}:\\s*$`,
-                        'mu',
-                    ),
-                );
-                const routeTail =
-                    routeOffset >= 0
-                        ? this.openApiSource.slice(routeOffset + 1)
-                        : '';
-                const nextRouteOffset = routeTail.search(/^ {4}\//mu);
-                const routeBlock =
-                    routeOffset >= 0
-                        ? this.openApiSource.slice(
-                              routeOffset,
-                              nextRouteOffset >= 0
-                                  ? routeOffset + 1 + nextRouteOffset
-                                  : undefined,
-                          )
-                        : '';
-                if (
-                    routeOffset < 0 ||
-                    (method &&
-                        !new RegExp(`^\\s{8}${method}:\\s*$`, 'mu').test(
-                            routeBlock,
-                        ))
-                ) {
-                    issues.push(
-                        this.issue(
-                            analysis,
-                            'HTTP_OPENAPI_COVERAGE',
-                            `HTTP operation '${method ?? 'unknown'} ${route}' is missing from openapi.yaml.`,
-                        ),
-                    );
-                }
-                if (!this.testSource.includes(route)) {
-                    issues.push(
-                        this.issue(
-                            analysis,
-                            'MODULE_TEST_COVERAGE',
-                            `HTTP route '${route}' has no backend test coverage.`,
-                        ),
-                    );
-                }
-            }
+            return this.httpIssues(analysis);
         }
         if (
             this.paths.layer(analysis.filePath) === 'store' &&
             !this.paths.auxiliaryPath(analysis.filePath) &&
-            /\.(selectFrom|insertInto|updateTable|deleteFrom)\s*\(/u.test(
-                analysis.source,
+            analysis.classes[0]?.name &&
+            analysis.methodCalls.some((method) =>
+                ['selectFrom', 'insertInto', 'updateTable', 'deleteFrom'].includes(
+                    method,
+                ),
             )
         ) {
-            const className = analysis.classes[0]?.name;
-            if (className && !this.testSource.includes(className)) {
+            return this.storeIssues(analysis);
+        }
+        return [];
+    }
+
+    /** Requires OpenAPI, executable request, and documented status evidence. */
+    private httpIssues(analysis: SourceAnalysis): LintIssue[] {
+        const issues: LintIssue[] = [];
+        const operations = analysis.httpHandlerOperations;
+        if (
+            operations.length === 0 &&
+            analysis.classes.some((candidate) =>
+                candidate.methodNames.includes('processRequest'),
+            )
+        ) {
+            return [
+                this.issue(
+                    analysis,
+                    'HTTP_OPENAPI_COVERAGE',
+                    'Concrete HTTP handlers must guard one literal /api route and method.',
+                ),
+            ];
+        }
+        for (const operation of operations) {
+            const statuses = this.openApiStatuses(operation);
+            if (statuses.length === 0) {
                 issues.push(
                     this.issue(
                         analysis,
-                        'MODULE_TEST_COVERAGE',
-                        `Store '${className}' has no backend test coverage.`,
+                        'HTTP_OPENAPI_COVERAGE',
+                        `HTTP operation '${operation.method.toLowerCase()} ${operation.path}' is missing from openapi.yaml.`,
+                    ),
+                );
+            }
+            const matchingTests = this.tests.filter((test) =>
+                test.httpTestOperations.some(
+                    (request) =>
+                        request.path === operation.path &&
+                        request.method === operation.method,
+                ),
+            );
+            if (matchingTests.length === 0) {
+                issues.push(
+                    this.issue(
+                        analysis,
+                        'HTTP_TEST_EXECUTABLE_COVERAGE',
+                        `HTTP operation '${operation.method} ${operation.path}' requires an executable fetch() test; comments and string references do not count.`,
+                    ),
+                );
+                continue;
+            }
+            const asserted = new Set(
+                matchingTests.flatMap((test) => test.assertedHttpStatuses),
+            );
+            const missing = statuses.filter((status) => !asserted.has(status));
+            if (missing.length > 0) {
+                issues.push(
+                    this.issue(
+                        analysis,
+                        'HTTP_STATUS_CONTRACT',
+                        `Executable tests for '${operation.method} ${operation.path}' must assert documented statuses: ${missing.join(', ')}.`,
                     ),
                 );
             }
@@ -144,9 +125,52 @@ export class CoverageRuleSet {
         return issues;
     }
 
-    /** Escapes one route for use in a regular expression. */
-    private escape(value: string): string {
-        return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+    /** Requires Store construction and at least one persistence method call. */
+    private storeIssues(analysis: SourceAnalysis): LintIssue[] {
+        const className = analysis.classes[0]?.name;
+        const tested = this.tests.some(
+            (test) =>
+                test.constructorCalls.some(
+                    (call) => call.className === className,
+                ) &&
+                test.methodCalls.some((method) =>
+                    /^(?:save|create|insert|update|delete|find)/u.test(method),
+                ),
+        );
+        return tested
+            ? []
+            : [
+                  this.issue(
+                      analysis,
+                      'STORE_TEST_EXECUTABLE_COVERAGE',
+                      `Store '${className ?? 'unknown'}' must be constructed and execute a persistence method in a backend test.`,
+                  ),
+              ];
+    }
+
+    /** Returns documented statuses for one path and method. */
+    private openApiStatuses(operation: HttpTestOperation): number[] {
+        const escaped = operation.path.replace(
+            /[.*+?^${}()|[\]\\]/gu,
+            '\\$&',
+        );
+        const pathMatch = this.openApiSource.match(
+            new RegExp(
+                `^ {4}${escaped}:\\n([\\s\\S]*?)(?=^ {4}\\/|^components:|(?![\\s\\S]))`,
+                'mu',
+            ),
+        );
+        const methodMatch = pathMatch?.[1].match(
+            new RegExp(
+                `^ {8}${operation.method.toLowerCase()}:\\n([\\s\\S]*?)(?=^ {8}[a-z]+:|(?![\\s\\S]))`,
+                'mu',
+            ),
+        );
+        return [
+            ...(methodMatch?.[1] ?? '').matchAll(
+                /^ {16}["']?([1-5][0-9]{2})["']?:/gmu,
+            ),
+        ].map((match) => Number(match[1]));
     }
 
     /** Creates one normalized issue. */

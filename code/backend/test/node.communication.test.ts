@@ -11,10 +11,7 @@ import type { Kysely } from 'kysely';
 import type { Database } from '../src/database.ts';
 import { NodeHandler } from '../src/base/node.handler.ts';
 import { ModuleRegistry } from '../src/module.registry.ts';
-import type {
-    HealthModulePort,
-    HealthNodeRequest,
-} from '../src/module/health/index.ts';
+import type { HealthModulePort } from '../src/module/health/index.ts';
 import { HealthModule, HealthStatusDTO } from '../src/module/health/index.ts';
 
 type ConsumerNodeRequest = {
@@ -78,9 +75,11 @@ test('health rejects an unknown in-process operation at runtime', async () => {
     const invalidRequest = {
         operation: 'missing',
         context: { caller: 'test' },
-    } as unknown as HealthNodeRequest;
-
-    const result = await health.dispatch('node', invalidRequest);
+    };
+    const result = await Reflect.apply(health.dispatch, health, [
+        'node',
+        invalidRequest,
+    ]);
     assert.deepEqual(result, {
         success: false,
         error: 'Unknown health operation',
@@ -95,10 +94,12 @@ test('registry injects only the public health module port into a consumer', asyn
         },
         consumer: {
             dependencies: ['health'],
-            create: (dependencies) =>
-                new ConsumerModule(
-                    dependencies.health as unknown as HealthModulePort,
-                ),
+            create: (dependencies) => {
+                if (!(dependencies.health instanceof HealthModule)) {
+                    throw new Error('Health dependency is invalid.');
+                }
+                return new ConsumerModule(dependencies.health);
+            },
         },
     };
     const modules = new ModuleRegistry(

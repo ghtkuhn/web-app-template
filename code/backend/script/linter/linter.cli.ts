@@ -6,7 +6,7 @@ const ARCHITECTURE_GUIDANCE =
 
 /** Formats linter results for command-line execution and maps exit codes. */
 export class LinterCli {
-    private readonly linter: BackendLinter;
+    private readonly projectRoot: string;
     private readonly stdout: LintWriter;
     private readonly stderr: LintWriter;
 
@@ -16,7 +16,7 @@ export class LinterCli {
         stdout: LintWriter = process.stdout,
         stderr: LintWriter = process.stderr,
     ) {
-        this.linter = new BackendLinter({ projectRoot });
+        this.projectRoot = projectRoot;
         this.stdout = stdout;
         this.stderr = stderr;
     }
@@ -24,7 +24,9 @@ export class LinterCli {
     /** Runs the linter, writes deterministic diagnostics, and returns an exit code. */
     public run(): number {
         try {
-            const result = this.linter.run();
+            const result = new BackendLinter({
+                projectRoot: this.projectRoot,
+            }).run();
             this.writeResult(result);
             if (result.issues.some((issue) => issue.severity === 'fatal')) {
                 return 2;

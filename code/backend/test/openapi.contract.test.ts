@@ -43,9 +43,10 @@ class HealthContract {
             path.dirname(fileURLToPath(import.meta.url)),
             '..',
         );
-        const document = (await SwaggerParser.dereference(
+        const dereferenced: unknown = await SwaggerParser.dereference(
             path.join(backendRoot, 'openapi/openapi.yaml'),
-        )) as unknown as HealthContractDocument;
+        );
+        const document = dereferenced as HealthContractDocument;
         const schema =
             document.paths['/api/health'].get.responses['200'].content[
                 'application/json'

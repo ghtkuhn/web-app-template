@@ -888,11 +888,14 @@ test('HTTP routes require OpenAPI and integration-test coverage', () => {
     const fixture = new FixtureProject();
     try {
         fixture.write(
-            'code/backend/src/module/example/api/auth.http.handler.ts',
-            `export class AuthHttpHandler extends HttpHandler {
-                protected processRequest(): Promise<HandlerResult<AuthDTO>> {
-                    const path = '/api/auth/login';
-                    return this.controller.login(path);
+            'code/backend/src/module/example/api/session.http.handler.ts',
+            `export class SessionHttpHandler extends HttpHandler {
+                protected processRequest(request: Request): Promise<HandlerResult<SessionDTO>> {
+                    const url = new URL(request.url);
+                    if (request.method !== 'POST' || url.pathname !== '/api/session/login') {
+                        return Promise.resolve({ success: false, error: 'Not found' });
+                    }
+                    return this.controller.login();
                 }
             }`,
         );
@@ -901,7 +904,7 @@ test('HTTP routes require OpenAPI and integration-test coverage', () => {
             .run()
             .issues.map((issue) => issue.ruleId);
         assert.ok(ruleIds.includes('HTTP_OPENAPI_COVERAGE'));
-        assert.ok(ruleIds.includes('MODULE_TEST_COVERAGE'));
+        assert.ok(ruleIds.includes('MODULE_FACTORY_COMPLETENESS'));
     } finally {
         fixture.dispose();
     }
@@ -920,6 +923,249 @@ test('malformed package and OpenAPI contracts are fatal linter errors', () => {
             ['OPENAPI_PARSE_ERROR', 'PACKAGE_MANIFEST_PARSE_ERROR'],
         );
         assert.ok(issues.every((issue) => issue.severity === 'fatal'));
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('module contracts reject post-wiring, concrete ports, any, and bad node unions', () => {
+    const fixture = new FixtureProject();
+    try {
+        fixture.write(
+            'code/backend/src/module/example/interfaces.ts',
+            'export interface ExampleModulePort extends BaseModule {}',
+        );
+        fixture.write(
+            'code/backend/src/module/example/types.ts',
+            `export type ExampleNodeRequest = {
+                operation: 'create' | 'read';
+                payload: CreateDTO | ReadDTO;
+            };`,
+        );
+        fixture.write(
+            'code/backend/src/module/example/index.ts',
+            `export class ExampleModule extends BaseModule implements ExampleModulePort {
+                public static readonly definition = {
+                    ...EXAMPLE_DEFINITION,
+                    create: (dependencies: any) => new ExampleModule(),
+                } satisfies NamedModuleDefinition;
+
+                public setInfrastructure(value: any): void {}
+            }
+            export type { ExampleModulePort } from './interfaces.ts';`,
+        );
+
+        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+            .run()
+            .issues.map((issue) => issue.ruleId);
+        for (const expected of [
+            'DOMAIN_ANY_TYPE',
+            'MODULE_DEFINITION_OWNERSHIP',
+            'MODULE_INFRASTRUCTURE_CONTRACT',
+            'MODULE_PORT_CONCRETE_BASE',
+            'MODULE_POST_CONSTRUCTION_WIRING',
+            'NODE_REQUEST_DISCRIMINATION',
+        ]) {
+            assert.ok(ruleIds.includes(expected), expected);
+        }
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('handlers reject unvalidated JSON and executable DTO schemas', () => {
+    const fixture = new FixtureProject();
+    try {
+        fixture.write(
+            'code/backend/src/module/example/api/input.http.handler.ts',
+            `export class InputHttpHandler extends HttpHandler {
+                protected async processRequest(request: Request): Promise<HandlerResult<InputResponseDTO>> {
+                    const payload = await request.json();
+                    return this.controller.create(payload);
+                }
+            }`,
+        );
+        fixture.write(
+            'code/backend/src/module/example/dto/input.dto.ts',
+            `export class InputDTO extends BaseDTO {
+                public static readonly schema = validator.object({});
+            }`,
+        );
+
+        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+            .run()
+            .issues.map((issue) => issue.ruleId);
+        assert.ok(ruleIds.includes('HANDLER_UNVALIDATED_INPUT'));
+        assert.ok(ruleIds.includes('HANDLER_DTO_INPUT'));
+        assert.ok(ruleIds.includes('DTO_EXECUTABLE_LOGIC'));
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('store semantics require metadata mapping, active filters, and soft delete', () => {
+    const fixture = new FixtureProject();
+    try {
+        fixture.write(
+            'code/backend/src/module/example/store/example.store.ts',
+            `export class ExampleStore extends BaseStore {
+                public findById(id: string) {
+                    return this.db.selectFrom('examples').where('id', '=', id)
+                        .selectAll().executeTakeFirst();
+                }
+
+                public map(row: ExampleRow) {
+                    return new ExampleObject({ id: row.id });
+                }
+
+                public delete(id: string) {
+                    return this.db.deleteFrom('examples').where('id', '=', id).execute();
+                }
+            }`,
+        );
+        fixture.write(
+            'code/backend/test/example.store.test.ts',
+            `const store = new ExampleStore(database);
+            void store.findById('one');`,
+        );
+        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+            .run()
+            .issues.map((issue) => issue.ruleId);
+        assert.ok(ruleIds.includes('STORE_OBJECT_METADATA_MAPPING'));
+        assert.ok(ruleIds.includes('STORE_ACTIVE_READ_FILTER'));
+        assert.ok(ruleIds.includes('STORE_SOFT_DELETE_CONTRACT'));
+        assert.ok(!ruleIds.includes('STORE_TEST_EXECUTABLE_COVERAGE'));
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('workspace ownership rejects nested locks, local TypeScript, and verify shortcuts', () => {
+    const fixture = new FixtureProject();
+    try {
+        fixture.write(
+            'code/backend/package.json',
+            JSON.stringify({
+                scripts: { verify: 'tsc' },
+                dependencies: {},
+                devDependencies: { typescript: '^5.0.0' },
+            }),
+        );
+        fixture.write('code/backend/package-lock.json', '{}');
+        fixture.write(
+            'tsconfig.base.json',
+            '{"compilerOptions":{"moduleResolution":"bundler","allowImportingTsExtensions":false,"noEmit":false}}',
+        );
+        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+            .run()
+            .issues.map((issue) => issue.ruleId);
+        assert.ok(ruleIds.includes('WORKSPACE_LOCKFILE_OWNERSHIP'));
+        assert.ok(ruleIds.includes('TOOLCHAIN_DEPENDENCY_OWNERSHIP'));
+        assert.ok(ruleIds.includes('ROOT_COMPILER_CONFIG_CONTRACT'));
+        assert.ok(ruleIds.includes('WORKSPACE_VERIFY_OWNERSHIP'));
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('HTTP coverage requires executable requests and documented status assertions', () => {
+    const fixture = new FixtureProject();
+    try {
+        fixture.write(
+            'code/backend/openapi/openapi.yaml',
+            `openapi: 3.1.0
+info:
+    title: Fixture
+    version: 1.0.0
+paths:
+    /api/example:
+        post:
+            responses:
+                "201":
+                    description: Created
+                "400":
+                    description: Invalid`,
+        );
+        fixture.write(
+            'code/backend/src/module/example/api/example.http.handler.ts',
+            `export class ExampleHttpHandler extends HttpHandler {
+                protected processRequest(request: Request): Promise<HandlerResult<ExampleDTO>> {
+                    const url = new URL(request.url);
+                    if (request.method !== 'POST' || url.pathname !== '/api/example') {
+                        return Promise.resolve({ success: false, error: 'Not found' });
+                    }
+                    return this.controller.create();
+                }
+            }`,
+        );
+        fixture.write(
+            'code/backend/test/example.http.test.ts',
+            `// fetch('/api/example') is not executable coverage.
+            const response = await fetch('http://test/api/example', {
+                method: 'POST',
+            });
+            assert.equal(response.status, 201);`,
+        );
+        const issues = new BackendLinter({ projectRoot: fixture.root }).run()
+            .issues;
+        assert.ok(
+            issues.some(
+                (issue) => issue.ruleId === 'HTTP_STATUS_CONTRACT',
+            ),
+        );
+
+        fixture.write(
+            'code/backend/test/example.http.test.ts',
+            `// /api/example`,
+        );
+        const missingRequest = new BackendLinter({
+            projectRoot: fixture.root,
+        }).run().issues;
+        assert.ok(
+            missingRequest.some(
+                (issue) =>
+                    issue.ruleId === 'HTTP_TEST_EXECUTABLE_COVERAGE',
+            ),
+        );
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('test files reject type escapes and non-erasable TypeScript', () => {
+    const fixture = new FixtureProject();
+    try {
+        fixture.write(
+            'code/backend/test/escape.test.ts',
+            `class Example {
+                constructor(public readonly value: string) {}
+            }
+            const value = {} as unknown as Example;`,
+        );
+        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+            .run()
+            .issues.map((issue) => issue.ruleId);
+        assert.ok(ruleIds.includes('TEST_TYPE_ESCAPE'));
+        assert.ok(ruleIds.includes('NODE_ERASABLE_TYPES_ONLY'));
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('composition remains generic and cannot post-wire modules', () => {
+    const fixture = new FixtureProject();
+    try {
+        fixture.write(
+            'code/backend/src/index.ts',
+            `import { ExampleModule } from './module/example/index.ts';
+            const module = new ExampleModule();
+            module.setInfrastructure(infrastructure);`,
+        );
+        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+            .run()
+            .issues.map((issue) => issue.ruleId);
+        assert.ok(ruleIds.includes('COMPOSITION_GENERICITY'));
+        assert.ok(ruleIds.includes('MODULE_POST_CONSTRUCTION_WIRING'));
     } finally {
         fixture.dispose();
     }
