@@ -58,6 +58,78 @@ export class PersistenceRuleSet {
                     ),
                 );
             }
+            const requiredSource = [
+                'id',
+                'created_at',
+                'updated_at',
+                'is_deleted',
+                'deleted_at',
+            ];
+            const requiredTarget = [
+                'id',
+                'createdAt',
+                'updatedAt',
+                'isDeleted',
+                'deletedAt',
+            ];
+            for (const mapping of analysis.objectMappings) {
+                const missing =
+                    requiredSource.some(
+                        (property) =>
+                            !mapping.sourceProperties.includes(property),
+                    ) ||
+                    requiredTarget.some(
+                        (property) =>
+                            !mapping.targetProperties.includes(property),
+                    );
+                if (missing) {
+                    issues.push(
+                        this.issue(
+                            analysis,
+                            'STORE_OBJECT_METADATA_MAPPING',
+                            'Row-to-Object mapping must explicitly map id, created_at, updated_at, is_deleted, and deleted_at to the corresponding Domain Object metadata fields.',
+                        ),
+                    );
+                }
+            }
+            const deleteMethod = analysis.classMethods.find(
+                (method) => method.name === 'delete',
+            );
+            if (
+                deleteMethod &&
+                (deleteMethod.calledMethods.includes('deleteFrom') ||
+                    !['is_deleted', 'deleted_at', 'updated_at'].every(
+                        (property) =>
+                            deleteMethod.setProperties.includes(property),
+                    ))
+            ) {
+                issues.push(
+                    this.issue(
+                        analysis,
+                        'STORE_SOFT_DELETE_CONTRACT',
+                        'delete() must soft-delete by updating is_deleted, deleted_at, and updated_at; deleteFrom() is forbidden.',
+                    ),
+                );
+            }
+            for (const method of analysis.classMethods.filter(
+                (candidate) =>
+                    candidate.name === 'findById' ||
+                    candidate.name === 'findAll' ||
+                    candidate.name?.startsWith('find'),
+            )) {
+                if (
+                    !method.calledMethods.includes('where') ||
+                    !method.stringArguments.includes('is_deleted')
+                ) {
+                    issues.push(
+                        this.issue(
+                            analysis,
+                            'STORE_ACTIVE_READ_FILTER',
+                            `${method.name ?? 'Finder'} must explicitly exclude soft-deleted rows with an is_deleted filter.`,
+                        ),
+                    );
+                }
+            }
             const saveBody = analysis.source.match(
                 /\bsave\s*\([^)]*\)[^{]*\{([\s\S]*?)\n\s*\}/u,
             )?.[1];
