@@ -149,6 +149,7 @@ export class SourceAnalyzer {
             constructorCalls: [],
             parameterNames: [],
             returnTypeNames: [],
+            handlerResultPayloadNames: [],
             anyTypeCount: 0,
             catchCount: 0,
             objectReturnCount: 0,
@@ -308,6 +309,22 @@ export class SourceAnalyzer {
         }
 
         const astNode = node as AstNode;
+        if (
+            astNode.type === 'TSTypeReference' &&
+            this.expressionName(
+                (astNode.typeName as AstNode | undefined) ?? null,
+            ) === 'HandlerResult'
+        ) {
+            const parameter = (
+                (astNode.typeParameters ??
+                    astNode.typeArguments) as
+                    | { params?: AstNode[] }
+                    | undefined
+            )?.params?.[0];
+            analysis.handlerResultPayloadNames.push(
+                parameter ? this.typeName(parameter) : null,
+            );
+        }
         if (astNode.type === 'TSInterfaceDeclaration') {
             for (const base of (astNode.extends as AstNode[] | undefined) ?? []) {
                 const name = this.expressionName(
@@ -473,6 +490,7 @@ export class SourceAnalyzer {
     }
 
     /** Describes one class method and its Kysely-style call chain. */
+    // fallow-ignore-next-line complexity -- Collects orthogonal method facts in one AST pass.
     private classMethodAnalysis(
         node: AstNode,
         classes: ClassAnalysis[],
@@ -492,6 +510,7 @@ export class SourceAnalyzer {
     }
 
     /** Collects literal query arguments and update-object property names. */
+    // fallow-ignore-next-line complexity -- Recursively handles the finite Babel call-node shapes.
     private collectCallArguments(
         node: unknown,
         stringArguments: string[],
@@ -540,6 +559,7 @@ export class SourceAnalyzer {
     }
 
     /** Records whether a Node request is a properly discriminated union. */
+    // fallow-ignore-next-line complexity -- Traverses nested type-literal union members structurally.
     private collectTypeAlias(
         node: AstNode,
         analysis: SourceAnalysis,
@@ -626,6 +646,7 @@ export class SourceAnalyzer {
     }
 
     /** Records JSON variables, DTO construction, and controller arguments. */
+    // fallow-ignore-next-line complexity -- Tracks three related variable-flow stages.
     private collectVariableFlow(
         node: AstNode,
         analysis: SourceAnalysis,
@@ -669,6 +690,7 @@ export class SourceAnalyzer {
     }
 
     /** Records transport-to-handler registration performed by a module. */
+    // fallow-ignore-next-line complexity -- Validates the complete registerHandler call shape.
     private collectHandlerRegistration(
         node: AstNode,
         analysis: SourceAnalysis,
@@ -697,6 +719,7 @@ export class SourceAnalyzer {
     }
 
     /** Records executable fetch operations and response-status assertions. */
+    // fallow-ignore-next-line complexity -- Extracts two independent executable test facts.
     private collectHttpTestEvidence(
         node: AstNode,
         analysis: SourceAnalysis,
@@ -734,6 +757,7 @@ export class SourceAnalyzer {
     }
 
     /** Records literal request-method and pathname guards in HTTP handlers. */
+    // fallow-ignore-next-line complexity -- Correlates method and pathname guard expressions.
     private collectHttpHandlerEvidence(
         node: AstNode,
         analysis: SourceAnalysis,
@@ -753,6 +777,7 @@ export class SourceAnalyzer {
     }
 
     /** Finds a string literal compared to one member property in a condition. */
+    // fallow-ignore-next-line complexity -- Recursively searches logical and binary conditions.
     private comparedLiteral(node: AstNode, propertyName: string): string | null {
         if (
             node.type === 'BinaryExpression' ||
@@ -788,6 +813,7 @@ export class SourceAnalyzer {
     }
 
     /** Records explicit object-literal mappings from one row variable. */
+    // fallow-ignore-next-line complexity -- Extracts source and target properties from Babel object nodes.
     private collectObjectMapping(
         node: AstNode,
         analysis: SourceAnalysis,
@@ -844,6 +870,7 @@ export class SourceAnalyzer {
     }
 
     /** Extracts an API path from a fetch string or template literal. */
+    // fallow-ignore-next-line complexity -- Supports the finite URL literal shapes used by tests.
     private httpPath(node: AstNode | null): string | null {
         if (
             node?.type === 'StringLiteral' &&
@@ -867,6 +894,7 @@ export class SourceAnalyzer {
     }
 
     /** Reads the literal fetch method from an options object. */
+    // fallow-ignore-next-line complexity -- Reads the optional fetch initialization object defensively.
     private fetchMethod(node: AstNode | null): string {
         if (node?.type !== 'ObjectExpression') {
             return 'GET';

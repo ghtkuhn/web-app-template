@@ -92,6 +92,7 @@ export interface SourceAnalysis {
     }>;
     parameterNames: string[];
     returnTypeNames: string[];
+    handlerResultPayloadNames: Array<string | null>;
     anyTypeCount: number;
     catchCount: number;
     objectReturnCount: number;

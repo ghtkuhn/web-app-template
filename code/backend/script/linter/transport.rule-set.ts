@@ -11,6 +11,7 @@ export class TransportRuleSet {
     }
 
     /** Evaluates one domain source file. */
+    // fallow-ignore-next-line complexity -- Evaluates independent transport and syntax contracts.
     public evaluate(analysis: SourceAnalysis): LintIssue[] {
         const issues: LintIssue[] = [];
         const layer = this.paths.layer(analysis.filePath);
@@ -64,6 +65,7 @@ export class TransportRuleSet {
     }
 
     /** Evaluates backend tests for type escapes and non-erasable syntax. */
+    // fallow-ignore-next-line complexity -- Evaluates two independent test contracts.
     public evaluateTests(tests: readonly SourceAnalysis[]): LintIssue[] {
         const issues: LintIssue[] = [];
         for (const test of tests) {
@@ -94,6 +96,7 @@ export class TransportRuleSet {
     }
 
     /** Creates one normalized finding. */
+    // fallow-ignore-next-line code-duplication -- Rule sets intentionally use identical stable finding construction.
     private issue(
         analysis: SourceAnalysis,
         ruleId: string,

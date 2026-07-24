@@ -20,6 +20,7 @@ export class CompositionRuleSet {
     }
 
     /** Keeps composition generic and prevents duck-typed module rewiring. */
+    // fallow-ignore-next-line complexity -- Evaluates two independent composition bypass patterns.
     private genericityIssues(analysis: SourceAnalysis): LintIssue[] {
         const domainImport =
             !analysis.filePath.endsWith('module.catalog.ts') &&

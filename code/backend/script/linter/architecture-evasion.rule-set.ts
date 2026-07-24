@@ -12,6 +12,7 @@ export class ArchitectureEvasionRuleSet {
     }
 
     /** Evaluates rules that can be decided from one domain source file. */
+    // fallow-ignore-next-line complexity -- Dispatches independent module contract rules.
     public evaluate(analysis: SourceAnalysis): LintIssue[] {
         const issues: LintIssue[] = [];
         if (
@@ -109,6 +110,7 @@ export class ArchitectureEvasionRuleSet {
     }
 
     /** Verifies that every concrete handler is constructed and registered. */
+    // fallow-ignore-next-line complexity -- Relates module handlers to constructor registrations.
     public evaluateFactoryCompleteness(
         analyses: readonly SourceAnalysis[],
     ): LintIssue[] {

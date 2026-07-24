@@ -129,6 +129,7 @@
 1. **API Handlers (`api/`)**
    - Must extend `HttpHandler`, `WebSocketHandler`, `CliHandler`, `NodeHandler`, or another approved `BaseHandler` specialization.
    - Translate transport-specific input into controller calls.
+   - Convert parsed payloads to declared request DTOs or validate them with a typed validator before calling a Controller or Service.
    - Must not import Services or Stores directly.
 2. **Controllers (`controller/`)**
    - Must extend `BaseController`.
@@ -155,6 +156,7 @@
 6. **DTOs (`dto/`)**
    - Must extend `BaseDTO` or `EntityDTO`.
    - Define transported application data without depending on Handlers, Controllers, Services, Stores, or database drivers.
+   - Must remain passive; executable schemas, validator instances, and business logic belong in Services or owner-bound Service Aux classes.
 
 ### Auxiliary Classes
 
@@ -173,10 +175,15 @@
 * Consumers may import only the public contract exported by `code/backend/src/module/<name>/index.ts`.
 * Required module ports are supplied through constructor injection by `ModuleRegistry`.
 * Each module owns its durable registry metadata in the static `definition` exposed by its public module class.
+* The module class must directly own `name`, `dependencies`, and `create`; spreads and external metadata objects are forbidden.
+* Every concrete Handler must be constructed and registered by the module factory or constructor before the factory returns.
+* Modules must not expose post-construction infrastructure or Handler setters.
 * Each module entry point must publicly re-export its typed module port and expose a typed `ModuleDefinition`; every module must be present in the generated catalog.
 * Application infrastructure follows `Application → DatabaseManager → ModuleRegistry → Module Factory → Store`; it must not be modeled as a domain-module dependency.
 * In-process communication uses the injected module port and typed `dispatch('node', request)` calls.
 * Node requests use a discriminated `operation` field and a `NodeRequestContext` containing the required `caller` and optional `correlationId`.
+* Multiple Node operations must be a union of complete request objects; an operation union paired with an independent payload union is forbidden.
+* Public module ports use a typed `IBaseModule` or explicit Node `dispatch()` contract and must not extend `BaseModule`.
 * Business response data uses DTOs; Node callers must not use `HandlerResult.statusCode` for business decisions.
 * Missing active dependencies and direct or indirect dependency cycles must fail during registry construction.
 
@@ -198,12 +205,15 @@
 * Large data backfills must be implemented as idempotent, restartable jobs rather than blocking startup migrations.
 * The application must not start when a pending migration fails.
 * Database row types, Domain Objects, and DTOs must remain separate representations.
+* Row-to-Object mappings must explicitly map identity, timestamps, and soft-delete metadata.
+* Normal Store finders must exclude soft-deleted rows, and Store deletion must update `is_deleted`, `deleted_at`, and `updated_at` instead of using hard deletion.
 
 ### HTTP API Contracts
 
 * `code/backend/openapi/openapi.yaml` is the central OpenAPI 3.1 contract for the public HTTP API.
-* Every new or changed HTTP endpoint must update the OpenAPI document and include a matching contract test.
+* Every new or changed HTTP endpoint must update the OpenAPI document and include executable request tests for every documented success and controlled error status.
 * Concrete HTTP handlers must declare literal `/api` routes that are covered by the matching OpenAPI method and backend tests.
+* Comments and arbitrary route strings do not count as HTTP coverage; tests must execute `fetch()` or the standardized HTTP test helper.
 * DTOs and OpenAPI schemas must describe the same public JSON representation without making database row types public.
 * Node, CLI, and WebSocket contracts must not be documented as OpenAPI operations.
 * OpenAPI linting and HTTP contract tests must pass through the root `npm run verify` command.
@@ -216,6 +226,9 @@
 * Regular module and auxiliary files must not declare more than one class; auxiliary files must declare exactly one.
 * Architecture filenames and class names must follow their scaffolded layer conventions.
 * Runtime packages imported by backend domain code must be declared in `code/backend/package.json` dependencies.
+* Domain modules and backend tests must not use `any`, `as any`, or chained assertions to bypass contracts; negative type tests use `@ts-expect-error`.
+* Executable backend and test TypeScript must use Node-compatible erasable syntax; parameter properties, enums, namespaces, import-equals, and export-assignment are forbidden.
+* The repository root owns the only `package-lock.json`, shared TypeScript tooling, `tsconfig.base.json`, and the complete `verify` script. Workspaces must not duplicate or shorten these contracts.
 * Module files must preserve four-space indentation and include appropriate code comments and JSDoc.
 * `npm run verify` must pass before backend work is declared complete.
 

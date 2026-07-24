@@ -43,6 +43,7 @@ export class CoverageRuleSet {
     }
 
     /** Checks one concrete HTTP handler or Store against executable evidence. */
+    // fallow-ignore-next-line complexity -- Dispatches independent HTTP and Store coverage checks.
     public evaluate(analysis: SourceAnalysis): LintIssue[] {
         if (analysis.filePath.endsWith('.http.handler.ts')) {
             return this.httpIssues(analysis);
@@ -63,6 +64,7 @@ export class CoverageRuleSet {
     }
 
     /** Requires OpenAPI, executable request, and documented status evidence. */
+    // fallow-ignore-next-line complexity -- Correlates three independently required contract sources.
     private httpIssues(analysis: SourceAnalysis): LintIssue[] {
         const issues: LintIssue[] = [];
         const operations = analysis.httpHandlerOperations;

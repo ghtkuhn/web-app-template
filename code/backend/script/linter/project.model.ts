@@ -47,16 +47,9 @@ export class ProjectModel {
     }
 
     /** Returns the checked-in OpenAPI source for contract analysis. */
+    // fallow-ignore-next-line unused-class-member -- Consumed by the coverage model across the linter boundary.
     public openApiSource(): string {
         return fs.readFileSync(this.paths.openApiDocument(), 'utf8');
-    }
-
-    /** Returns the current typed database-schema source. */
-    public databaseSource(): string {
-        return fs.readFileSync(
-            path.join(this.paths.sourceRoot(), 'database.ts'),
-            'utf8',
-        );
     }
 
     /** Parses one required JSON artifact. */

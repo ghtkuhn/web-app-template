@@ -126,7 +126,8 @@ Handlers live in `api/` and extend the matching `HttpHandler`,
 They:
 
 - parse and validate transport-specific input;
-- convert that input into DTOs or typed requests;
+- convert `request.json()` data into declared request DTOs or pass it through
+  a typed validator before calling application code;
 - call exactly the module Controller boundary;
 - return a typed `HandlerResult<DTO>`.
 
@@ -183,7 +184,9 @@ exclude those fields from serialization.
 
 DTOs live in `dto/` and extend `BaseDTO` or `EntityDTO`. They define public or
 inter-layer transported data and must not expose database rows or sensitive
-Domain Object fields.
+Domain Object fields. DTOs remain passive: validator instances, executable
+schemas, and business rules belong in Services or owner-bound Service Aux
+classes.
 
 ## Auxiliary Classes
 
@@ -228,6 +231,24 @@ required `caller` and optional `correlationId`. Module dependencies are declared
 in the module's static definition and resolved by `ModuleRegistry`. Missing
 active dependencies and dependency cycles fail during registry construction.
 
+Every operation is one complete union member:
+
+```ts
+type ExampleNodeRequest =
+    | { operation: 'create'; context: NodeRequestContext; input: CreateDTO }
+    | { operation: 'read'; context: NodeRequestContext; id: string };
+```
+
+Do not combine an operation union with an unrelated payload union. Public ports
+use `IBaseModule<Input, Output>` or an explicit typed Node `dispatch()` contract;
+they never extend the concrete `BaseModule` class.
+
+The public module class directly owns `public static readonly definition` with
+`name`, `dependencies`, and `create`. The factory and constructor must construct
+and register every concrete Handler before returning. Modules expose no
+post-construction setters for infrastructure or handlers, and the definition
+must not be assembled in `constants.ts`.
+
 ## Configuration and Secrets
 
 Only `src/config.ts` may read `process.env`. Domain modules receive validated
@@ -248,11 +269,33 @@ Every schema change requires both:
 Stores use the injected database client. Driver imports and connection creation
 belong exclusively to `src/base/base.database.ts`.
 
+Every row-to-Object mapping explicitly maps `id`, `created_at`, `updated_at`,
+`is_deleted`, and `deleted_at`. Normal finders exclude soft-deleted rows.
+`delete()` updates `is_deleted`, `deleted_at`, and `updated_at`; it never performs
+a hard `deleteFrom()` for Domain Object tables.
+
 ## HTTP and OpenAPI
 
 The public HTTP contract lives at `openapi/openapi.yaml`. Every concrete HTTP
 handler requires a matching path, method, DTO-compatible schema, and backend
-test coverage. Node, CLI, and WebSocket operations are not OpenAPI operations.
+test coverage. Coverage means an executable `fetch()` (or the standardized HTTP
+test helper) with the same method and route plus assertions for every documented
+success and controlled error status. Comments and string references do not
+count. Store coverage likewise constructs the Store and executes a persistence
+method. Node, CLI, and WebSocket operations are not OpenAPI operations.
+
+## TypeScript and Workspace Ownership
+
+Domain modules and backend tests must not use `any`, `as any`, or chained type
+assertions to bypass contracts. Compile-time negative tests use
+`@ts-expect-error`. Executable backend TypeScript uses Node-compatible erasable
+syntax only: parameter properties, enums, namespaces, import-equals, and
+export-assignment are forbidden.
+
+The repository root owns the only `package-lock.json`, shared TypeScript
+tooling, `tsconfig.base.json`, and the complete `npm run verify` pipeline.
+Workspace packages must not add nested lockfiles, duplicate TypeScript, or
+define a shortened `verify` script.
 
 ## Verification
 

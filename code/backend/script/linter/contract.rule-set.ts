@@ -86,11 +86,8 @@ export class ContractRuleSet {
 
         if (layer === 'api') {
             if (
-                /\bHandlerResult\b(?!\s*<)/u.test(
-                    analysis.source.replace(
-                        /import\s+type\s+\{[\s\S]*?\}\s+from\s+['"][^'"]+['"];?/gu,
-                        '',
-                    ),
+                analysis.handlerResultPayloadNames.some(
+                    (payload) => payload === null,
                 )
             ) {
                 issues.push(
@@ -102,8 +99,9 @@ export class ContractRuleSet {
                 );
             }
             if (
-                /HandlerResult\s*<\s*(?![A-Za-z0-9_]*DTO\b)[A-Za-z0-9_]+/u.test(
-                    analysis.source,
+                analysis.handlerResultPayloadNames.some(
+                    (payload) =>
+                        payload !== null && !payload.endsWith('DTO'),
                 )
             ) {
                 issues.push(
@@ -115,7 +113,9 @@ export class ContractRuleSet {
                 );
             }
             if (
-                /HandlerResult\s*<[^>]*Object/u.test(analysis.source) ||
+                analysis.handlerResultPayloadNames.some((payload) =>
+                    payload?.endsWith('Object'),
+                ) ||
                 /from\s+['"][^'"]*\/object\//u.test(analysis.source)
             ) {
                 issues.push(
