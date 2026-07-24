@@ -200,7 +200,7 @@ export class ProjectRuleSet {
                   this.issue(
                       entryPath,
                       'MODULE_ENTRY_CONTRACT',
-                      `index.ts must expose ${pascalName}Module, ${pascalName}ModulePort, and a static definition.`,
+                      `Required contract: index.ts exports ${pascalName}Module extending BaseModule and implementing ${pascalName}ModulePort; ${pascalName}Module owns public static readonly definition satisfying NamedModuleDefinition; interfaces.ts exports interface ${pascalName}ModulePort; index.ts re-exports that port with export type { ${pascalName}ModulePort } from './interfaces.ts'.`,
                   ),
               ]
             : [];

@@ -630,6 +630,29 @@ test('module roots, entries, registration, and local imports are strict', () => 
     }
 });
 
+test('module entry diagnostic explains the complete required contract', () => {
+    const fixture = new FixtureProject();
+    try {
+        fixture.write(
+            'code/backend/src/module/example/index.ts',
+            'export class IncorrectModule {}',
+        );
+
+        const issue = new BackendLinter({ projectRoot: fixture.root })
+            .run()
+            .issues.find(
+                (candidate) =>
+                    candidate.ruleId === 'MODULE_ENTRY_CONTRACT',
+            );
+        assert.equal(
+            issue?.message,
+            "Required contract: index.ts exports ExampleModule extending BaseModule and implementing ExampleModulePort; ExampleModule owns public static readonly definition satisfying NamedModuleDefinition; interfaces.ts exports interface ExampleModulePort; index.ts re-exports that port with export type { ExampleModulePort } from './interfaces.ts'.",
+        );
+    } finally {
+        fixture.dispose();
+    }
+});
+
 test('controllers, handlers, DTO boundaries, and architecture casts are strict', () => {
     const fixture = new FixtureProject();
     try {
