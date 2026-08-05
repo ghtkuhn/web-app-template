@@ -18,5 +18,6 @@ export const BACKEND_TEST_FILES = [
     'test/openapi.contract.test.ts',
     'test/scaffold.module.test.ts',
     'test/test.catalog.test.ts',
+    'test/test.scaffold.test.ts',
     'test/websocket.server.test.ts',
 ] as const;

@@ -22,6 +22,7 @@ code/backend/src/
             store/          Persistence and row/Object mapping
             object/         Persistent Domain Objects
             dto/            Transported application data
+            test/           Direct module-local Node tests
     cli.ts                  CLI composition entry point
     config.ts               Validated environment configuration
     database.ts             Current typed database schema
@@ -38,6 +39,7 @@ Only the following directories are allowed directly inside a module:
 - `object`
 - `service`
 - `store`
+- `test`
 
 Module contracts and metadata are files, not directories. They must be named
 `index.ts`, `interfaces.ts`, `types.ts`, and `constants.ts` and live directly
@@ -115,6 +117,34 @@ npm run scaffold:module -- <kebab-case-name>
 ```
 
 to create and register a new module.
+
+## Tests
+
+Executable modules own direct tests under
+`src/module/<name>/test/*.test.ts`. A module becomes executable when it owns a
+concrete Handler, Controller, Service, or Store. Contract-only, DTO-only, and
+Object-only modules do not require a test directory.
+
+Module tests may import their own private implementation, Base infrastructure,
+Node built-ins, and declared dependencies. They must import another module only
+through that module's public `index.ts`. Production files must never import or
+re-export tests. Test directories must be non-empty, contain only direct
+`*.test.ts` files, and have no nested directories.
+
+Use:
+
+```bash
+npm run scaffold:test -- <existing-module>
+```
+
+to create the baseline public module-definition test. Additional module tests
+may be added manually. Then run `npm run generate:test-catalog` and commit the
+updated `code/backend/test.catalog.ts`.
+
+Global Base, Composition, Registry, scaffold, OpenAPI, and transport-integration
+tests remain under `code/backend/test/`. `npm test` first checks catalog drift
+and then the central runner executes exactly the cataloged files. Never bypass
+the catalog with a competing test command.
 
 ## Layer Contracts
 

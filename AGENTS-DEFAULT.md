@@ -116,6 +116,7 @@
 * `npm run scaffold:file`: Creates one architecture-compliant class file in an existing backend module.
 * `npm run scaffold:module`: Creates, registers, and activates a minimal backend module.
 * `npm run scaffold:route`: Creates and registers one route adapter plus Desktop, Tablet, and Mobile views.
+* `npm run scaffold:test`: Creates, catalogs, and verifies the baseline test for an existing backend module.
 * `npm run template:check`: Reports the installed and latest stable template versions and pending updater state.
 * `npm run template:init`: Initializes explicit template metadata for a legacy application.
 * `npm run template:update`: Installs or continues a stable template update and supports conflict continuation or abort.
@@ -128,12 +129,16 @@
 
 * Domain modules live in `code/backend/src/module/<name>/`.
 * Backend modules must use the singular `module` directory. The plural path `code/backend/src/modules/` is forbidden.
-* A module may contain the layers it actually needs: `api`, `controller`, `service`, `store`, `object`, and `dto`.
+* A module may contain the layers it actually needs: `api`, `controller`, `service`, `store`, `object`, `dto`, and `test`.
 * The strict dependency flow is **API Handler** → **Controller** → **Service** → **Store** → **Database**.
 * Interfaces, type aliases, and constants must be declared in the module-level `interfaces.ts`, `types.ts`, and `constants.ts` files.
 * Public module contracts must be exported exclusively through `code/backend/src/module/<name>/index.ts`.
 * Module roots may contain only `index.ts`, `interfaces.ts`, `types.ts`, `constants.ts`, and the supported layer directories. Loose implementation files, empty layers, unknown directories, and non-TypeScript artifacts are forbidden.
 * Local TypeScript imports and re-exports must include the `.ts` extension.
+* A module with a concrete Handler, Controller, Service, or Store must contain an executable direct `test/*.test.ts` file.
+* Module-test directories may contain only direct `*.test.ts` files and must not be empty or nested.
+* Module tests may inspect their own internals, but must import foreign modules only through their public `index.ts`; production code must never import or re-export tests.
+* Create the baseline module test with `npm run scaffold:test -- <module>`, regenerate the catalog after adding tests, and run tests only through the central backend test command.
 
 ### Layer Responsibilities and Constraints
 
