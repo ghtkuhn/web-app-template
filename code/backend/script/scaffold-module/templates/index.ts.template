@@ -13,10 +13,12 @@ export class {{PASCAL_NAME}}Module
     extends BaseModule<{{PASCAL_NAME}}NodeRequest, never>
     implements {{PASCAL_NAME}}ModulePort
 {
-    /** Durable registry metadata consumed by the generated module catalog. */
+    // module-sync:start
+    /** Generated registry metadata. Change module.manifest.json, then run module:sync. */
     public static readonly definition = {
         name: {{CONSTANT_NAME}}_MODULE_NAME,
         dependencies: [],
         create: () => new {{PASCAL_NAME}}Module(),
     } satisfies NamedModuleDefinition;
+    // module-sync:end
 }

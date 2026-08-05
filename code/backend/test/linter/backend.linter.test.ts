@@ -360,7 +360,7 @@ test('unknown module directories report allowed directories and root files', () 
             );
         assert.equal(
             issue?.reason,
-            "Unsupported module-root directory 'constants'. Allowed directories: api, controller, dto, object, service, store, test. Module contracts and metadata must use these root files: constants.ts, index.ts, interfaces.ts, types.ts.",
+            "Unsupported module-root directory 'constants'. Allowed directories: api, controller, dto, object, service, store, test. Module contracts and metadata must use these root files: constants.ts, index.ts, interfaces.ts, module.manifest.json, types.ts.",
         );
     } finally {
         fixture.dispose();

@@ -24,12 +24,14 @@ export class HealthModule
     extends BaseModule<HealthNodeRequest, HealthStatusDTO>
     implements HealthModulePort
 {
-    /** Durable registry metadata consumed by the generated module catalog. */
+    // module-sync:start
+    /** Generated registry metadata. Change module.manifest.json, then run module:sync. */
     public static readonly definition = {
         name: HEALTH_MODULE_NAME,
         dependencies: [],
         create: () => new HealthModule(),
     } satisfies NamedModuleDefinition;
+    // module-sync:end
 
     /** Creates the stateless health dependency chain. */
     constructor() {

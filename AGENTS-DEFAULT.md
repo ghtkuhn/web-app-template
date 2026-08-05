@@ -95,6 +95,7 @@
 * `npm run build`: Builds every workspace that defines a build command.
 * `npm run check:api`: Verifies that generated frontend OpenAPI types match the backend contract.
 * `npm run check:memory`: Rejects a missing or oversized `data/ai/MEMORY.md`.
+* `npm run check:modules`: Rejects drift between module manifests and generated registry metadata.
 * `npm run check:test-catalog`: Verifies that the checked-in backend test catalog matches all discovered global and module-local tests.
 * `npm run deployment:build`: Builds deployable backend and frontend artifacts for a deployment profile.
 * `npm run deployment:database:list`: Lists SQLite migration backups for a deployment profile.
@@ -111,6 +112,8 @@
 * `npm run lint:backend`: Runs the backend architecture and OpenAPI linters.
 * `npm run little-coder`: Starts Little Coder with Base protection and the incremental backend architecture lint gate.
 * `npm run module:status`: Reports the first actionable architecture state for one backend module.
+* `npm run module:sync`: Regenerates manifest-owned module registry metadata without changing fach files.
+* `npm run module:dependency`: Adds one public module dependency to a consumer manifest and synchronizes it.
 * `npm run rm`: Safely removes explicit project-relative files, directories, or symlinks; pass targets after `--` and use `--dry-run` for preview.
 * `npm run scaffold:component`: Creates one presentation-local Vue component.
 * `npm run scaffold:feature`: Creates a frontend Model, Service, and Composable feature skeleton.

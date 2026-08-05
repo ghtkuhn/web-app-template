@@ -26,10 +26,13 @@
     "lint:backend": "npm run lint --workspace @app/backend",
     "little-coder": "node script/little-coder.ts",
     "module:status": "node code/backend/script/module-tools.ts status",
+    "module:sync": "node code/backend/script/module-tools.ts sync",
+    "module:dependency": "node code/backend/script/module-tools.ts dependency",
     "rm": "node script/safe-remove.ts",
     "generate:api": "npm run generate:api --workspace @app/web",
     "check:api": "npm run check:api --workspace @app/web",
     "check:memory": "node script/memory-check.ts",
+    "check:modules": "node code/backend/script/module-tools.ts check",
     "generate:test-catalog": "npm run generate:test-catalog --workspace @app/backend",
     "check:test-catalog": "npm run check:test-catalog --workspace @app/backend",
     "scaffold:file": "node code/backend/script/scaffold-file.ts",
@@ -54,7 +57,7 @@
     "typecheck": "tsc --project tsconfig.deployment.json && npm run typecheck --workspaces --if-present",
     "test": "npm test --workspaces --if-present",
     "audit": "node script/fallow.ts",
-    "verify": "npm run check:memory && npm run deployment:validate -- --all && npm run check:api && npm run lint && npm run typecheck && npm test && npm run build && npm run test:e2e --workspace @app/web && npm run audit",
+    "verify": "npm run check:memory && npm run check:modules && npm run deployment:validate -- --all && npm run check:api && npm run lint && npm run typecheck && npm test && npm run build && npm run test:e2e --workspace @app/web && npm run audit",
     "verify:module": "node code/backend/script/module-tools.ts verify"
   },
   "devDependencies": {

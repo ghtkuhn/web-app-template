@@ -7,7 +7,7 @@ const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(scriptDirectory, '../../..');
 const arguments_ = process.argv.slice(2);
 const command = arguments_[0];
-const normalized = command === 'status' || command === 'verify'
+const normalized = ['status', 'verify', 'sync', 'dependency', 'check'].includes(command)
     ? arguments_
     : [path.basename(process.argv[1]).includes('verify') ? 'verify' : 'status', ...arguments_];
 

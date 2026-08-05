@@ -10,6 +10,7 @@ import type {
 import { ModuleInspector } from '../script/module-tools/module.inspector.ts';
 import { ModuleToolsCli } from '../script/module-tools/module-tools.cli.ts';
 import { ModuleVerifier } from '../script/module-tools/module.verifier.ts';
+import { ModuleManifestManager } from '../script/module-tools/module-manifest.manager.ts';
 
 /** Captures focused verifier commands. */
 class RecordingRunner implements ModuleCommandRunner {
@@ -71,4 +72,14 @@ test('module CLI documents commands and maps invalid input', () => {
     assert.match(stdout.value, /module:status/u);
     assert.equal(cli.run(['status', 'missing']), 1);
     assert.match(stderr.value, /does not exist/u);
+});
+
+test('module manifest check and sync preserve current Health fach wiring', () => {
+    const manager = new ModuleManifestManager(projectRoot);
+    assert.deepEqual(manager.check(), []);
+    assert.equal(manager.sync('health'), false);
+    assert.throws(
+        () => manager.addDependency('health', 'health'),
+        /cannot depend on itself/u,
+    );
 });

@@ -184,7 +184,7 @@ test('scaffold creates, registers, activates, and lints a typed module', () => {
             .scaffold('user-profile');
 
         assert.equal(result.moduleName, 'user-profile');
-        assert.equal(result.files.length, 4);
+        assert.equal(result.files.length, 5);
         assert.equal(verification.calls, 1);
         assert.match(
             fixture.read(
@@ -201,6 +201,12 @@ test('scaffold creates, registers, activates, and lints a typed module', () => {
         assert.match(
             fixture.read('code/backend/src/module/user-profile/types.ts'),
             /type UserProfileNodeRequest = never/,
+        );
+        assert.match(
+            fixture.read(
+                'code/backend/src/module/user-profile/module.manifest.json',
+            ),
+            /"name": "user-profile"/u,
         );
         assert.match(
             fixture.read(

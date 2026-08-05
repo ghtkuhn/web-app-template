@@ -9,6 +9,7 @@ const ROOT_FILES = new Set([
     'interfaces.ts',
     'types.ts',
     'constants.ts',
+    'module.manifest.json',
 ]);
 const LAYERS = new Set([
     'api',
@@ -68,7 +69,7 @@ export class ProjectRuleSet {
                                 : 'MODULE_NON_SOURCE_FILE',
                             filePath.endsWith('.ts')
                                 ? 'Classes and implementation files belong in an architecture layer.'
-                                : 'Module directories may contain TypeScript source files only.',
+                                : 'Module roots may contain only declared TypeScript contracts and module.manifest.json.',
                         ),
                     );
                 }

@@ -25,6 +25,7 @@ export class TemplateRenderer {
             'constants.ts',
             'index.ts',
             'interfaces.ts',
+            'module.manifest.json',
             'types.ts',
         ]) {
             const templatePath = path.join(
