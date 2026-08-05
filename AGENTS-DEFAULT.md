@@ -95,6 +95,7 @@
 * `npm run build`: Builds every workspace that defines a build command.
 * `npm run check:api`: Verifies that generated frontend OpenAPI types match the backend contract.
 * `npm run check:memory`: Rejects a missing or oversized `data/ai/MEMORY.md`.
+* `npm run check:test-catalog`: Verifies that the checked-in backend test catalog matches all discovered global and module-local tests.
 * `npm run deployment:build`: Builds deployable backend and frontend artifacts for a deployment profile.
 * `npm run deployment:database:list`: Lists SQLite migration backups for a deployment profile.
 * `npm run deployment:database:restore`: Restores one explicitly selected SQLite backup.
@@ -105,6 +106,7 @@
 * `npm run deployment:stop`: Stops selected deployed services without deleting persistent infrastructure.
 * `npm run deployment:validate`: Validates one or all deployment profiles against the schema.
 * `npm run generate:api`: Regenerates checked-in frontend TypeScript contracts from OpenAPI.
+* `npm run generate:test-catalog`: Regenerates the deterministic checked-in backend test catalog.
 * `npm run lint`: Runs every workspace linter.
 * `npm run lint:backend`: Runs the backend architecture and OpenAPI linters.
 * `npm run little-coder`: Starts Little Coder with Base protection and the incremental backend architecture lint gate.

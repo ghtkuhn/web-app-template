@@ -1,0 +1,13 @@
+{
+    "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+    "entry": [
+        "code/backend/test/**/*.test.ts",
+        "code/backend/src/module/*/test/*.test.ts"
+    ],
+    "workspaces": {
+        "patterns": [
+            "code/backend",
+            "code/frontend/web"
+        ]
+    }
+}

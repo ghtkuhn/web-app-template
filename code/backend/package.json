@@ -34,6 +34,8 @@
         "scaffold:file": "node script/scaffold-file.ts",
         "scaffold:module": "node script/scaffold-module.ts",
         "typecheck": "tsc --project tsconfig.json",
-        "test": "node --test test/*.test.ts test/**/*.test.ts"
+    "generate:test-catalog": "node script/test-catalog.ts generate",
+    "check:test-catalog": "node script/test-catalog.ts check",
+    "test": "npm run check:test-catalog && node script/test-runner.ts"
     }
 }
