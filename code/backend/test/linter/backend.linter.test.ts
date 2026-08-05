@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
@@ -13,6 +14,118 @@ test('real backend satisfies all architecture rules', () => {
     const result = new BackendLinter({ projectRoot }).run();
     assert.deepEqual(result.issues, []);
     assert.ok(result.filesChecked > 0);
+});
+
+test('executable modules require direct executable local tests', () => {
+    const fixture = new FixtureProject();
+    try {
+        fixture.write(
+            'code/backend/src/module/example/service/example.service.ts',
+            'export class ExampleService extends BaseService {}',
+        );
+        assert.ok(
+            !new BackendLinter({ projectRoot: fixture.root })
+                .run()
+                .issues.some((issue) => issue.ruleId === 'MODULE_TEST_COVERAGE'),
+        );
+
+        fixture.remove('code/backend/src/module/example/test');
+        const missing = new BackendLinter({ projectRoot: fixture.root }).run()
+            .issues;
+        assert.ok(
+            missing.some((issue) => issue.ruleId === 'MODULE_TEST_COVERAGE'),
+        );
+
+        fixture.write(
+            'code/backend/src/module/contract/service/contract.service.ts',
+            'export abstract class ContractService extends BaseService {}',
+        );
+        fixture.remove('code/backend/src/module/contract/test');
+        const abstractOnly = new BackendLinter({
+            projectRoot: fixture.root,
+        }).run().issues;
+        assert.ok(
+            !abstractOnly.some(
+                (issue) =>
+                    issue.ruleId === 'MODULE_TEST_COVERAGE' &&
+                    issue.file.includes('/contract/'),
+            ),
+        );
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('module-local tests enforce flat structure and private imports', () => {
+    const fixture = new FixtureProject();
+    try {
+        fixture.write(
+            'code/backend/src/module/alpha/service/alpha.service.ts',
+            `import '../test/alpha.module.test.ts';
+export class AlphaService extends BaseService {}`,
+        );
+        fixture.write(
+            'code/backend/src/module/beta/service/beta.service.ts',
+            'export class BetaService extends BaseService {}',
+        );
+        fixture.write(
+            'code/backend/src/module/alpha/test/cross.test.ts',
+            `import { test } from 'node:test';
+import '../../beta/service/beta.service.ts';
+export { AlphaModule } from '../index.ts';
+test('cross boundary', () => {});`,
+        );
+        fixture.write(
+            'code/backend/src/module/alpha/test/not-a-test.ts',
+            'export const value = true;',
+        );
+        fixture.write(
+            'code/backend/src/module/alpha/test/nested/nested.test.ts',
+            `import { test } from 'node:test';
+test('nested', () => {});`,
+        );
+
+        const issues = new BackendLinter({ projectRoot: fixture.root }).run()
+            .issues;
+        const ruleIds = issues.map((issue) => issue.ruleId);
+        assert.ok(ruleIds.includes('MODULE_TEST_PRODUCTION_IMPORT'));
+        assert.ok(ruleIds.includes('MODULE_TEST_CROSS_IMPORT'));
+        assert.ok(ruleIds.includes('MODULE_TEST_REEXPORT'));
+        assert.equal(
+            ruleIds.filter((ruleId) => ruleId === 'MODULE_TEST_STRUCTURE')
+                .length,
+            2,
+        );
+        assert.ok(!ruleIds.includes('MODULE_FREE_FUNCTION'));
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('backend linter reports deterministic test catalog drift', () => {
+    const fixture = new FixtureProject();
+    try {
+        fixture.write(
+            'code/backend/src/module/example/dto/example.dto.ts',
+            'export class ExampleDTO extends BaseDTO {}',
+        );
+        const uncatalogued = path.join(
+            fixture.root,
+            'code/backend/test/uncatalogued.test.ts',
+        );
+        fs.mkdirSync(path.dirname(uncatalogued), { recursive: true });
+        fs.writeFileSync(uncatalogued, "import { test } from 'node:test';\n", 'utf8');
+
+        const issues = new BackendLinter({ projectRoot: fixture.root }).run()
+            .issues;
+        assert.deepEqual(
+            issues.filter((issue) => issue.ruleId === 'TEST_CATALOG_DRIFT')
+                .map((issue) => issue.file),
+            ['code/backend/test.catalog.ts'],
+        );
+    } finally {
+        fixture.dispose();
+    }
 });
 
 test('backend modules must use the singular module directory', () => {
@@ -247,7 +360,7 @@ test('unknown module directories report allowed directories and root files', () 
             );
         assert.equal(
             issue?.reason,
-            "Unsupported module-root directory 'constants'. Allowed directories: api, controller, dto, object, service, store. Module contracts and metadata must use these root files: constants.ts, index.ts, interfaces.ts, types.ts.",
+            "Unsupported module-root directory 'constants'. Allowed directories: api, controller, dto, object, service, store, test. Module contracts and metadata must use these root files: constants.ts, index.ts, interfaces.ts, types.ts.",
         );
     } finally {
         fixture.dispose();

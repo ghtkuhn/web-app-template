@@ -59,6 +59,23 @@ export class PathResolver {
         return moduleName || null;
     }
 
+    /** Returns true for any path owned by a module-local test directory. */
+    public isModuleTestPath(filePath: string): boolean {
+        const segments = this.moduleSegments(filePath);
+        return Boolean(segments && segments[1] === 'test');
+    }
+
+    /** Returns true for a direct module-local TypeScript test file. */
+    public isModuleTestFile(filePath: string): boolean {
+        const segments = this.moduleSegments(filePath);
+        return Boolean(
+            segments &&
+                segments.length === 3 &&
+                segments[1] === 'test' &&
+                segments[2].endsWith('.test.ts'),
+        );
+    }
+
     /** Returns the architecture layer containing a module file. */
     public layer(filePath: string): string {
         const segments = this.moduleSegments(filePath);
@@ -178,6 +195,11 @@ export class PathResolver {
     /** Returns the backend test root. */
     public testRoot(): string {
         return path.join(this.projectRoot, 'code/backend/test');
+    }
+
+    /** Returns the checked-in backend test catalog. */
+    public testCatalog(): string {
+        return path.join(this.backendRoot(), 'test.catalog.ts');
     }
 
     /** Returns the generated module catalog. */

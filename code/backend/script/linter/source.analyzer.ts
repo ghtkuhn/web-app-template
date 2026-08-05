@@ -41,6 +41,7 @@ type AstNode = {
     left?: AstNode;
     right?: AstNode;
     static?: boolean;
+    abstract?: boolean;
     quasis?: Array<{ value?: { raw?: string } }>;
     loc?: {
         start?: { line?: number; column?: number };
@@ -175,6 +176,7 @@ export class SourceAnalyzer {
             httpStatusAssertions: [],
             dtoCastFromJsonCount: 0,
             permissiveAssertionCount: 0,
+            testCallCount: 0,
             jsonResultVariables: [],
             dtoResultVariables: [],
             controllerPayloadVariables: [],
@@ -306,7 +308,6 @@ export class SourceAnalyzer {
                 methodCalls.push(methodName);
             }
         }
-
         for (const [key, value] of Object.entries(astNode)) {
             if (key === 'loc' || key === 'start' || key === 'end') {
                 continue;
@@ -335,6 +336,13 @@ export class SourceAnalyzer {
         }
 
         const astNode = node as AstNode;
+        if (
+            astNode.type === 'CallExpression' &&
+            astNode.callee?.type === 'Identifier' &&
+            astNode.callee.name === 'test'
+        ) {
+            analysis.testCallCount += 1;
+        }
         if (
             astNode.type === 'TSTypeReference' &&
             this.expressionName(
@@ -674,6 +682,7 @@ export class SourceAnalyzer {
         return {
             name: this.expressionName(node.id ?? null),
             baseName: this.expressionName(node.superClass ?? null),
+            isAbstract: Boolean(node.abstract),
             implementedNames: (node.implements ?? [])
                 .map((item) =>
                     this.expressionName(

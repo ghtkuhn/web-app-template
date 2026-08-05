@@ -19,6 +19,20 @@ const FIXES: Readonly<Record<string, string>> = {
         'Replace alternative or ranged outcomes with separate deterministic tests and exact assertions.',
     MODULE_ENTRY_CONTRACT:
         'Apply every reported module-entry Fix statement exactly at the public module entry point.',
+    MODULE_TEST_COVERAGE:
+        'Add a direct module test/*.test.ts file with an executable node:test test() and regenerate the test catalog.',
+    MODULE_TEST_CROSS_IMPORT:
+        'Import another module only through its public index.ts entry point.',
+    MODULE_TEST_DIRECTORY_EMPTY:
+        'Add an executable direct *.test.ts file or remove the empty test directory.',
+    MODULE_TEST_PRODUCTION_IMPORT:
+        'Remove the test dependency from production code; tests are private and runner-owned.',
+    MODULE_TEST_REEXPORT:
+        'Replace the re-export with a test-local import.',
+    MODULE_TEST_STRUCTURE:
+        'Keep lowercase *.test.ts files directly inside the module test directory without nesting.',
+    TEST_CATALOG_DRIFT:
+        'Run npm run generate:test-catalog and commit the deterministic catalog update.',
 };
 
 /** Owns stable remediation guidance for backend architecture rules. */

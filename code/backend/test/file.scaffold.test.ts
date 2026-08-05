@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { BackendLinter } from '../script/linter/backend.linter.ts';
+import { TestCatalogManager } from '../script/test-catalog/test-catalog.manager.ts';
 import { FileScaffoldCli } from '../script/scaffold-module/file-scaffold.cli.ts';
 import { FileScaffolder } from '../script/scaffold-module/file.scaffolder.ts';
 import type {
@@ -280,6 +281,12 @@ test('all architecture file types generate exact lintable and typed classes', ()
             assert.match(source, new RegExp(`extends ${expected.baseClass}`));
         }
         assert.equal(verification.calls, expectedFiles.length);
+        fixture.write(
+            'src/module/example/test/example.module.test.ts',
+            `import { test } from 'node:test';
+             test('example module contract is executable', () => {});`,
+        );
+        new TestCatalogManager(fixture.backendRoot).generate();
         assert.deepEqual(
             new BackendLinter({ projectRoot: fixture.root }).run().issues,
             [],

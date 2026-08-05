@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { BackendLinter } from '../script/linter/backend.linter.ts';
+import { TestCatalogManager } from '../script/test-catalog/test-catalog.manager.ts';
 import { BaseModule } from '../src/base/base.module.ts';
 import { CatalogRenderer } from '../script/scaffold-module/catalog.renderer.ts';
 import { ConfigEditor } from '../script/scaffold-module/config.editor.ts';
@@ -215,6 +216,9 @@ test('scaffold creates, registers, activates, and lints a typed module', () => {
             fs.readFileSync(fixture.catalogPath, 'utf8'),
             /UserProfileModule\.definition/,
         );
+        new TestCatalogManager(
+            path.join(fixture.root, 'code/backend'),
+        ).generate();
         assert.deepEqual(
             new BackendLinter({ projectRoot: fixture.root }).run().issues,
             [],

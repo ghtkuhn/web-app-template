@@ -6,6 +6,7 @@ import { DiagnosticFactory } from './diagnostic.factory.ts';
 import { DomainRuleSet } from './domain.rule-set.ts';
 import { FileScanner } from './file.scanner.ts';
 import { InfrastructureRuleSet } from './infrastructure.rule-set.ts';
+import { ModuleTestRuleSet } from './module-test.rule-set.ts';
 import type {
     BackendLinterConfig,
     LintIssue,
@@ -39,6 +40,7 @@ export class BackendLinter {
     private readonly architectureEvasionRules: ArchitectureEvasionRuleSet;
     private readonly transportRules: TransportRuleSet;
     private readonly workspaceRules: WorkspaceRuleSet;
+    private readonly moduleTestRules: ModuleTestRuleSet;
     private readonly project: ProjectModel;
 
     /** Creates a reusable linter core without output side effects. */
@@ -62,13 +64,18 @@ export class BackendLinter {
             this.paths,
             this.project,
         );
+        this.moduleTestRules = new ModuleTestRuleSet(this.paths);
     }
 
     /** Analyzes the backend and returns deterministically sorted findings. */
     public run(): LintResult {
-        const sourceFiles = this.scanner.listTypeScriptFiles(
+        const discoveredSourceFiles = this.scanner.listTypeScriptFiles(
             this.paths.sourceRoot(),
         );
+        const sourceFiles = discoveredSourceFiles.filter(
+            (filePath) => !this.paths.isModuleTestPath(filePath),
+        );
+        const testAnalyses = this.project.testAnalyses();
         const issues = [
             ...this.moduleDirectoryIssues(),
             ...this.moduleRootFileIssues(),
@@ -78,6 +85,7 @@ export class BackendLinter {
             ...this.dependencyRules.configurationIssues(),
             ...this.coverageRules.configurationIssues(),
             ...this.workspaceConfigurationIssues(),
+            ...this.moduleTestRules.configurationIssues(),
         ];
         const analyses: SourceAnalysis[] = [];
 
@@ -101,6 +109,7 @@ export class BackendLinter {
                     ...this.architectureEvasionRules.evaluate(analysis),
                 );
                 issues.push(...this.transportRules.evaluate(analysis));
+                issues.push(...this.moduleTestRules.evaluateProduction(analysis));
             }
             if (this.paths.isCompositionFile(filePath)) {
                 issues.push(...this.compositionRules.evaluate(analysis));
@@ -110,20 +119,24 @@ export class BackendLinter {
             ...this.architectureEvasionRules.evaluateFactoryCompleteness(
                 analyses,
             ),
-            ...this.transportRules.evaluateTests(
-                this.project.testAnalyses(),
+            ...this.transportRules.evaluateTests(testAnalyses),
+            ...testAnalyses.flatMap((analysis) =>
+                this.paths.isModuleTestFile(analysis.filePath)
+                    ? this.moduleTestRules.evaluateTest(analysis)
+                    : [],
             ),
+            ...this.moduleTestRules.coverageIssues(analyses, testAnalyses),
         );
 
         const factory = new DiagnosticFactory(this.paths, [
             ...analyses,
-            ...this.project.testAnalyses(),
+            ...testAnalyses,
         ]);
         return {
             issues: this.sortIssues(
                 issues.map((issue) => factory.create(issue)),
             ),
-            filesChecked: sourceFiles.length,
+            filesChecked: sourceFiles.length + testAnalyses.length,
         };
     }
 
@@ -210,6 +223,7 @@ export class BackendLinter {
             .filter(
                 (filePath) =>
                     (this.paths.modulePathDepth(filePath) ?? 0) >= 3 &&
+                    !this.paths.isModuleTestPath(filePath) &&
                     !filePath.endsWith('.ts'),
             )
             .map((filePath) => ({

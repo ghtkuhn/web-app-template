@@ -57,6 +57,7 @@ export interface SourceDependency {
 export interface ClassAnalysis {
     name: string | null;
     baseName: string | null;
+    isAbstract: boolean;
     implementedNames: string[];
     methodNames: string[];
     propertyNames: string[];
@@ -152,6 +153,7 @@ export interface SourceAnalysis {
     httpStatusAssertions: HttpStatusAssertion[];
     dtoCastFromJsonCount: number;
     permissiveAssertionCount: number;
+    testCallCount: number;
     jsonResultVariables: string[];
     dtoResultVariables: string[];
     controllerPayloadVariables: string[];

@@ -18,8 +18,13 @@ export class ProjectModel {
 
     /** Returns structured analyses for every backend test file. */
     public testAnalyses(): SourceAnalysis[] {
-        return this.scanner
-            .listTypeScriptFiles(this.paths.testRoot())
+        return [
+            ...this.scanner.listTypeScriptFiles(this.paths.testRoot()),
+            ...this.scanner
+                .listTypeScriptFiles(this.paths.moduleRoot())
+                .filter((filePath) => this.paths.isModuleTestFile(filePath)),
+        ]
+            .sort((left, right) => left.localeCompare(right))
             .map((filePath) => this.analyzer.analyze(filePath));
     }
 

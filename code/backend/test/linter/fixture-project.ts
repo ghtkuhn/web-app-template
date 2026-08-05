@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { TestCatalogManager } from '../../script/test-catalog/test-catalog.manager.ts';
 
 /** Creates and removes an isolated backend source tree for linter tests. */
 export class FixtureProject {
@@ -25,6 +26,7 @@ export class FixtureProject {
             'code/backend/openapi/openapi.yaml',
             'openapi: 3.1.0\ninfo:\n    title: Fixture\n    version: 1.0.0\npaths: {}\n',
         );
+        new TestCatalogManager(path.join(this.root, 'code/backend')).generate();
     }
 
     /** Creates a fixture directory relative to the project root. */
@@ -34,10 +36,21 @@ export class FixtureProject {
         return directoryPath;
     }
 
+    /** Removes one fixture path and regenerates test-catalog ownership. */
+    public remove(relativePath: string): void {
+        fs.rmSync(path.join(this.root, relativePath), {
+            recursive: true,
+            force: true,
+        });
+        new TestCatalogManager(path.join(this.root, 'code/backend')).generate();
+    }
+
     /** Writes a UTF-8 fixture file relative to the project root. */
     public write(relativePath: string, source: string): string {
         this.ensureModuleContract(relativePath);
-        return this.writeRaw(relativePath, source);
+        const filePath = this.writeRaw(relativePath, source);
+        new TestCatalogManager(path.join(this.root, 'code/backend')).generate();
+        return filePath;
     }
 
     /** Creates a valid module shell around focused source fixtures. */
@@ -71,6 +84,11 @@ export type { ${pascalName}ModulePort } from './interfaces.ts';`,
             this.writeRaw(
                 `code/backend/src/module/${moduleName}/interfaces.ts`,
                 `export interface ${pascalName}ModulePort {}`,
+            );
+            this.writeRaw(
+                `code/backend/src/module/${moduleName}/test/${moduleName}.module.test.ts`,
+                `import { test } from 'node:test';
+test('${moduleName} module contract', () => {});`,
             );
         }
         const catalogPath = 'code/backend/src/module.catalog.ts';
