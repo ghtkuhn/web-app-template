@@ -110,6 +110,7 @@
 * `npm run lint`: Runs every workspace linter.
 * `npm run lint:backend`: Runs the backend architecture and OpenAPI linters.
 * `npm run little-coder`: Starts Little Coder with Base protection and the incremental backend architecture lint gate.
+* `npm run module:status`: Reports the first actionable architecture state for one backend module.
 * `npm run rm`: Safely removes explicit project-relative files, directories, or symlinks; pass targets after `--` and use `--dry-run` for preview.
 * `npm run scaffold:component`: Creates one presentation-local Vue component.
 * `npm run scaffold:feature`: Creates a frontend Model, Service, and Composable feature skeleton.
@@ -123,6 +124,7 @@
 * `npm run test`: Runs all workspace unit, integration, and component tests.
 * `npm run typecheck`: Typechecks root tooling and all workspaces.
 * `npm run verify`: Runs the complete required validation, lint, typecheck, test, build, browser-smoke, and Fallow pipeline.
+* `npm run verify:module`: Runs focused architecture, type, OpenAPI, and local-test checks for one backend module.
 
 
 ## Backend Programming Rules (Strict Layered Architecture)
