@@ -14,6 +14,7 @@
         "**/test/module.tools.test.ts",
         "**/test/test.catalog.test.ts",
         "**/test/little-coder*.test.ts",
+        "**/test/thinking-loop-guard.test.ts",
         "**/test/backend-lint-gate.test.ts",
         "**/test/safe-project.remover.test.ts",
         "**/test/deployment.test.ts",

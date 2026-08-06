@@ -22,6 +22,11 @@ describe('Little Coder launcher', () => {
                 projectRoot,
                 'little-coder/extensions/backend-lint-gate/index.ts',
             ),
+            '--extension',
+            path.join(
+                projectRoot,
+                'little-coder/extensions/thinking-loop-guard/index.ts',
+            ),
             '--session',
             'auth-work',
         ]);

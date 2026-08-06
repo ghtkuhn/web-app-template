@@ -72,6 +72,7 @@
 * You must not install new dependencies without user consent.
 * You must not create, edit, move, rename, or delete files or directories below `code/backend/src/base/`.
 * When using Little Coder, you must start it with `npm run little-coder -- [arguments]` so the project mutation guards are loaded.
+* Little Coder automatically interrupts ten exact consecutive repetitions in model thinking, retries once with thinking disabled, and stops instead of retrying indefinitely if the loop returns. Use `/thinking-loop` to inspect this guard.
 * Little Coder backend changes must remain within the active lint-gate batch or repair scope.
 * You must not bypass a red backend lint gate, weaken its rules, or modify protected architecture controls to make it green.
 * You must run backend work in small lintable batches; the gate enforces a layer/module check and a maximum of five successful file mutations.

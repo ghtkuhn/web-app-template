@@ -35,6 +35,11 @@ export class LittleCoderLauncher {
                     this.projectRoot,
                     'little-coder/extensions/backend-lint-gate/index.ts',
                 ),
+                '--extension',
+                path.join(
+                    this.projectRoot,
+                    'little-coder/extensions/thinking-loop-guard/index.ts',
+                ),
                 ...arguments_,
             ],
             options: {
