@@ -4,6 +4,21 @@
         "code/backend/test/**/*.test.ts",
         "code/backend/src/module/*/test/*.test.ts"
     ],
+    "ignorePatterns": [
+        "**/script/**",
+        "script/**",
+        "little-coder/**",
+        "**/test/linter/**",
+        "**/test/*linter*.test.ts",
+        "**/test/*scaffold*.test.ts",
+        "**/test/module.tools.test.ts",
+        "**/test/test.catalog.test.ts",
+        "**/test/little-coder*.test.ts",
+        "**/test/backend-lint-gate.test.ts",
+        "**/test/safe-project.remover.test.ts",
+        "**/test/deployment.test.ts",
+        "**/generated/**"
+    ],
     "workspaces": {
         "patterns": [
             "code/backend",
