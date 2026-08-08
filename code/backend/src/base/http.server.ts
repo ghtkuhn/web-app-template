@@ -6,7 +6,11 @@ import {
 } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { BaseModule } from './base.module.ts';
-import type { HandlerResult, HttpServerConfig } from './interfaces.ts';
+import type {
+    HandlerResult,
+    HttpDispatchResult,
+    HttpServerConfig,
+} from './interfaces.ts';
 
 /**
  * Binds the module gateway to a native Node HTTP transport.
@@ -109,7 +113,7 @@ export class HttpServer {
     ): Promise<void> {
         try {
             if (!this.applyOriginPolicy(request, response)) {
-                this.writeResult(
+                await this.writeResult(
                     response,
                     { success: false, error: 'Forbidden', statusCode: 403 },
                     request.method,
@@ -126,7 +130,7 @@ export class HttpServer {
             const segments = url.pathname.split('/').filter(Boolean);
 
             if (segments[0] !== 'api' || !segments[1]) {
-                this.writeResult(
+                await this.writeResult(
                     response,
                     { success: false, error: 'Not found', statusCode: 404 },
                     request.method,
@@ -137,7 +141,7 @@ export class HttpServer {
             // The transport selects only the module; the handler owns the remaining path.
             const module = this.modules.get(segments[1]);
             if (!module) {
-                this.writeResult(
+                await this.writeResult(
                     response,
                     { success: false, error: 'Not found', statusCode: 404 },
                     request.method,
@@ -147,7 +151,7 @@ export class HttpServer {
 
             const webRequest = await this.createWebRequest(request, url);
             const result = await module.dispatch('http', webRequest);
-            this.writeResult(response, result, request.method);
+            await this.writeResult(response, result, request.method);
         } catch (error: unknown) {
             // Do not attempt a second response after a socket-level failure or disconnect.
             if (response.headersSent || response.destroyed) {
@@ -159,7 +163,7 @@ export class HttpServer {
                 statusCode === 413
                     ? 'Request body too large'
                     : 'Invalid request';
-            this.writeResult(
+            await this.writeResult(
                 response,
                 { success: false, error: message, statusCode },
                 request.method,
@@ -182,6 +186,7 @@ export class HttpServer {
         response.setHeader('Access-Control-Allow-Origin', origin);
         response.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS');
         response.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+        response.setHeader('Access-Control-Expose-Headers', 'set-auth-token');
         response.setHeader('Vary', 'Origin');
         return true;
     }
@@ -252,11 +257,15 @@ export class HttpServer {
     /**
      * Serializes a transport-neutral handler result into the public JSON envelope.
      */
-    private writeResult(
+    private async writeResult(
         response: ServerResponse,
-        result: HandlerResult,
+        result: HttpDispatchResult,
         method?: string,
-    ): void {
+    ): Promise<void> {
+        if (result instanceof Response) {
+            await this.writeFetchResponse(response, result, method);
+            return;
+        }
         const statusCode = result.statusCode ?? (result.success ? 200 : 500);
         response.statusCode = statusCode;
         response.setHeader('X-Content-Type-Options', 'nosniff');
@@ -277,5 +286,42 @@ export class HttpServer {
             };
         }
         response.end(JSON.stringify(payload));
+    }
+
+    /** Writes a delegated Fetch response without replacing protocol semantics. */
+    private async writeFetchResponse(
+        response: ServerResponse,
+        result: Response,
+        method?: string,
+    ): Promise<void> {
+        response.statusCode = result.status;
+        this.copyFetchHeaders(response, result.headers);
+        response.setHeader('X-Content-Type-Options', 'nosniff');
+        if (this.hasNoResponseBody(result, method)) {
+            response.end();
+            return;
+        }
+        response.end(Buffer.from(await result.arrayBuffer()));
+    }
+
+    /** Copies Fetch headers while preserving multiple Set-Cookie values. */
+    private copyFetchHeaders(
+        response: ServerResponse,
+        headers: Headers,
+    ): void {
+        for (const [name, value] of headers) {
+            if (name.toLowerCase() !== 'set-cookie') {
+                response.setHeader(name, value);
+            }
+        }
+        const cookies = headers.getSetCookie();
+        if (cookies.length > 0) {
+            response.setHeader('Set-Cookie', cookies);
+        }
+    }
+
+    /** Determines whether HTTP semantics prohibit a response body. */
+    private hasNoResponseBody(result: Response, method?: string): boolean {
+        return result.status === 204 || method === 'HEAD' || !result.body;
     }
 }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router';
+import { authComposable } from '../../../core/composables/auth.composable.ts';
 </script>
 
 <template>
@@ -9,6 +10,12 @@ import { RouterLink } from 'vue-router';
             <nav class="desktop-navigation" aria-label="Desktop navigation">
                 <RouterLink to="/">Home</RouterLink>
                 <RouterLink to="/about">About</RouterLink>
+                <RouterLink
+                    v-if="authComposable.enabled"
+                    :to="authComposable.data.value ? '/account' : '/sign-in'"
+                >
+                    {{ authComposable.data.value ? 'Account' : 'Sign in' }}
+                </RouterLink>
             </nav>
         </header>
         <main class="desktop-content">

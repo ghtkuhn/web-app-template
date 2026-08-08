@@ -218,10 +218,17 @@ export interface HandlerResult<T = unknown> {
     statusCode?: number;
 }
 
+/** HTTP dispatch output supporting normal envelopes and delegated Fetch responses. */
+export type HttpDispatchResult = HandlerResult | Response;
+
 /** Base contract for a transport-specific module entry point. */
-export interface IHandler<TInput = unknown, TOutput = unknown> {
+export interface IHandler<
+    TInput = unknown,
+    TOutput = unknown,
+    TResult = HandlerResult<TOutput>,
+> {
     /** Processes one input and returns a normalized result without throwing. */
-    handle(input: TInput): Promise<HandlerResult<TOutput>>;
+    handle(input: TInput): Promise<TResult>;
 }
 
 /** Contract implemented by HTTP handlers receiving Fetch API requests. */
@@ -248,13 +255,18 @@ export interface IBaseModule<TNodeInput = unknown, TNodeOutput = unknown> {
     ): Promise<HandlerResult<TNodeOutput>>;
     /** Dispatches input through an external transport handler. */
     dispatch(
-        type: Exclude<TransportType, 'node'>,
+        type: 'http',
+        input: Request,
+    ): Promise<HttpDispatchResult>;
+    /** Dispatches input through a non-HTTP external transport handler. */
+    dispatch(
+        type: Exclude<TransportType, 'node' | 'http'>,
         input: unknown,
     ): Promise<HandlerResult>;
     /** Registers the private handler used by one transport during composition. */
-    registerHandler<TInput, TOutput>(
+    registerHandler<TInput, TOutput, TResult = HandlerResult<TOutput>>(
         type: TransportType,
-        handler: IHandler<TInput, TOutput>,
+        handler: IHandler<TInput, TOutput, TResult>,
     ): void;
 }
 

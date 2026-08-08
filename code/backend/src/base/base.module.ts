@@ -2,6 +2,7 @@ import type {
     IBaseModule,
     IHandler,
     HandlerResult,
+    HttpDispatchResult,
     TransportType,
 } from './interfaces.ts';
 
@@ -27,7 +28,7 @@ export abstract class BaseModule<
     TNodeInput = unknown,
     TNodeOutput = unknown,
 > implements IBaseModule<TNodeInput, TNodeOutput> {
-    protected handlers: Map<TransportType, IHandler<unknown, unknown>> =
+    protected handlers: Map<TransportType, IHandler<unknown, unknown, unknown>> =
         new Map();
 
     /**
@@ -36,11 +37,14 @@ export abstract class BaseModule<
      * @param type Transport gateway owned by the handler.
      * @param handler Handler implementation to invoke for that transport.
      */
-    registerHandler<TInput, TOutput>(
+    registerHandler<TInput, TOutput, TResult = HandlerResult<TOutput>>(
         type: TransportType,
-        handler: IHandler<TInput, TOutput>,
+        handler: IHandler<TInput, TOutput, TResult>,
     ): void {
-        this.handlers.set(type, handler as IHandler<unknown, unknown>);
+        this.handlers.set(
+            type,
+            handler as IHandler<unknown, unknown, unknown>,
+        );
     }
 
     /**
@@ -58,13 +62,17 @@ export abstract class BaseModule<
         input: TNodeInput,
     ): Promise<HandlerResult<TNodeOutput>>;
     async dispatch(
-        type: Exclude<TransportType, 'node'>,
+        type: 'http',
+        input: Request,
+    ): Promise<HttpDispatchResult>;
+    async dispatch(
+        type: Exclude<TransportType, 'node' | 'http'>,
         input: unknown,
     ): Promise<HandlerResult>;
     async dispatch(
         type: TransportType,
         input: TNodeInput | unknown,
-    ): Promise<HandlerResult> {
+    ): Promise<HandlerResult | Response> {
         const handler = this.handlers.get(type);
         if (!handler) {
             return {
@@ -75,7 +83,10 @@ export abstract class BaseModule<
         }
 
         try {
-            return await handler.handle(input);
+            const result = await handler.handle(input);
+            return result instanceof Response
+                ? result
+                : result as HandlerResult;
         } catch {
             return {
                 success: false,

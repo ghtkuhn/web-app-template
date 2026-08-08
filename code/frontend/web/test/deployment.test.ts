@@ -102,6 +102,24 @@ test('deployment profiles reject backup retention below one', () => {
     expect(() => profiles.load('dev')).toThrow(/must be >= 1/);
 });
 
+test('Auth deployment requires aligned runtime flags and its secret contract', () => {
+    const profiles = repository();
+    const filePath = profiles.scaffold('dev');
+    const profile = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    profile.backend.activeModules.push('auth');
+    profile.frontend.runtime.authEnabled = true;
+    fs.writeFileSync(filePath, JSON.stringify(profile));
+    expect(() => profiles.load('dev')).toThrow(/BETTER_AUTH_SECRET/);
+
+    profile.requiredSecrets.push('BETTER_AUTH_SECRET');
+    fs.writeFileSync(filePath, JSON.stringify(profile));
+    expect(profiles.load('dev').frontend.enabled).toBe(true);
+
+    profile.frontend.runtime.registrationEnabled = true;
+    fs.writeFileSync(filePath, JSON.stringify(profile));
+    expect(() => profiles.load('dev')).toThrow(/backend registration/);
+});
+
 test('Proxmox provision creates and starts a missing LXC through REST', async () => {
     const calls: string[] = [];
     const api: ProxmoxApi = {

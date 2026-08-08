@@ -31,5 +31,15 @@ for (const presentation of presentations) {
         await expect(page.locator('h1')).toBeVisible();
         await page.goto('/missing');
         await expect(page.locator('h1')).toBeVisible();
+        await page.goto('/sign-in');
+        await expect(
+            page.getByText('Authentication is disabled for this deployment.'),
+        ).toBeVisible();
+        await page.goto('/sign-up');
+        await expect(
+            page.getByText('Registration is not available for this deployment.'),
+        ).toBeVisible();
+        await page.goto('/account');
+        await expect(page).toHaveURL(/\/sign-in$/u);
     });
 }

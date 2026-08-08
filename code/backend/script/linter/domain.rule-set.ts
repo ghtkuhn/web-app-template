@@ -150,7 +150,7 @@ export class DomainRuleSet {
         }
         const allowedBases: Record<string, readonly string[]> = {
             controller: ['BaseController'],
-            service: ['BaseService'],
+            service: ['BaseService', 'BaseWorkflowService'],
             store: ['BaseStore'],
             object: ['BaseObject'],
             dto: ['BaseDTO', 'EntityDTO'],
@@ -160,6 +160,7 @@ export class DomainRuleSet {
                 'WebSocketHandler',
                 'CliHandler',
                 'NodeHandler',
+                'DelegatedHttpHandler',
             ],
         };
         const layer = this.paths.layer(analysis.filePath);

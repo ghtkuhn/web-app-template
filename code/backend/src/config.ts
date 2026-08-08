@@ -28,7 +28,9 @@ export const config = {
         active: (process.env.ACTIVE_MODULES || 'health')
             .split(',')
             .map((name) => name.trim())
-            .filter(Boolean),
+            .filter(Boolean)
+            .concat(process.env.AUTH_ENABLED === 'true' ? ['auth'] : [])
+            .filter((name, index, names) => names.indexOf(name) === index),
     },
     database: {
         type: (process.env.DB_TYPE || 'sqlite') as 'sqlite' | 'postgres',
@@ -54,10 +56,30 @@ export const config = {
             .map((origin) => origin.trim())
             .filter(Boolean),
     },
+    auth: {
+        enabled: process.env.AUTH_ENABLED === 'true',
+        registrationEnabled:
+            process.env.AUTH_REGISTRATION_ENABLED === 'true',
+        secret: process.env.BETTER_AUTH_SECRET || '',
+        baseUrl:
+            process.env.BETTER_AUTH_BASE_URL || 'http://localhost:3000',
+    },
     logging: {
         level: process.env.LOG_LEVEL || 'info',
     },
 };
+
+if (config.auth.enabled && config.auth.secret.length < 32) {
+    throw new Error(
+        'BETTER_AUTH_SECRET must contain at least 32 characters when Auth is enabled.',
+    );
+}
+
+try {
+    new URL(config.auth.baseUrl);
+} catch {
+    throw new Error('BETTER_AUTH_BASE_URL must be an absolute URL.');
+}
 
 if (
     config.server.nodeEnv === 'production' &&

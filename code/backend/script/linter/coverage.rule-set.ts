@@ -20,7 +20,7 @@ export class CoverageRuleSet {
         this.tests = model.testAnalyses();
         this.openApiSource = model.openApiSource();
         this.openApiError =
-            /^openapi:\s+3\.\d+\.\d+/mu.test(this.openApiSource) &&
+            /^openapi:\s+["']?3\.\d+\.\d+["']?/mu.test(this.openApiSource) &&
             /^paths:\s*(?:\{\})?\s*$/mu.test(this.openApiSource)
                 ? null
                 : 'openapi.yaml must contain a valid OpenAPI version and paths map.';
@@ -66,6 +66,13 @@ export class CoverageRuleSet {
     /** Requires OpenAPI, executable request, and documented status evidence. */
     // fallow-ignore-next-line complexity -- Correlates three independently required contract sources.
     private httpIssues(analysis: SourceAnalysis): LintIssueDraft[] {
+        if (
+            analysis.classes.some(
+                (candidate) => candidate.baseName === 'DelegatedHttpHandler',
+            )
+        ) {
+            return [];
+        }
         const issues: LintIssueDraft[] = [];
         const operations = analysis.httpHandlerOperations;
         if (

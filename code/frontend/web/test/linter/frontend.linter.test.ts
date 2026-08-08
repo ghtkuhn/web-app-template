@@ -134,7 +134,7 @@ test('Core ownership, direction, environment, and design tokens are strict', () 
         );
         fixture.write(
             'core/models/account.model.ts',
-            "import { HealthService } from '../services/health.service.ts';",
+            "import { HealthService } from '../services/health.service.ts'; sessionStorage.getItem('token');",
         );
         fixture.write(
             'presentation/desktop/components/Card.vue',
@@ -148,6 +148,7 @@ test('Core ownership, direction, environment, and design tokens are strict', () 
         expect(ids).toContain('CORE_STRUCTURE');
         expect(ids).toContain('FRONTEND_ENV_OWNERSHIP');
         expect(ids).toContain('CORE_LAYER_DIRECTION');
+        expect(ids).toContain('AUTH_TOKEN_STORAGE_OWNERSHIP');
         expect(ids).toContain('PRESENTATION_NETWORK_ACCESS');
         expect(ids).toContain('DESIGN_TOKEN_USAGE');
     } finally {

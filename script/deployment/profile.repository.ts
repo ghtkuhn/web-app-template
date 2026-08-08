@@ -150,20 +150,58 @@ export class DeploymentProfileRepository {
                 throw new Error(`Profiles must not contain '${forbidden}'.`);
             }
         }
+        this.assertAuthConfiguration(profile);
         if (
             profile.environment !== 'local' &&
             profile.environment !== 'dev'
         ) {
-            for (const component of [profile.backend, profile.frontend]) {
-                if (
-                    component.enabled &&
-                    component.target.driver === 'proxmox-lxc' &&
-                    component.target.allowInsecureTls
-                ) {
-                    throw new Error(
-                        `${profile.environment} profiles require verified Proxmox TLS.`,
-                    );
-                }
+            this.assertVerifiedProxmoxTls(profile);
+        }
+    }
+
+    /** Validates alignment between Backend Auth and public Frontend flags. */
+    private assertAuthConfiguration(profile: DeploymentProfile): void {
+        const authEnabled = profile.backend.enabled &&
+            profile.backend.activeModules.includes('auth');
+        if (
+            authEnabled &&
+            !profile.requiredSecrets.includes('BETTER_AUTH_SECRET')
+        ) {
+            throw new Error(
+                'Auth deployments must require BETTER_AUTH_SECRET.',
+            );
+        }
+        if (
+            profile.frontend.enabled &&
+            profile.frontend.runtime.authEnabled !== authEnabled
+        ) {
+            throw new Error(
+                'Frontend authEnabled must match the backend Auth module.',
+            );
+        }
+        if (
+            profile.frontend.enabled &&
+            profile.frontend.runtime.registrationEnabled &&
+            (!profile.backend.enabled ||
+                !profile.backend.authRegistrationEnabled)
+        ) {
+            throw new Error(
+                'Frontend registration requires backend registration.',
+            );
+        }
+    }
+
+    /** Rejects insecure Proxmox TLS outside local development profiles. */
+    private assertVerifiedProxmoxTls(profile: DeploymentProfile): void {
+        for (const component of [profile.backend, profile.frontend]) {
+            if (
+                component.enabled &&
+                component.target.driver === 'proxmox-lxc' &&
+                component.target.allowInsecureTls
+            ) {
+                throw new Error(
+                    `${profile.environment} profiles require verified Proxmox TLS.`,
+                );
             }
         }
     }

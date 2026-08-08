@@ -1,4 +1,10 @@
-import type { ApiError, ApiRequest, ApiResult } from './interfaces.ts';
+import type {
+    ApiError,
+    ApiRequest,
+    ApiResult,
+    AuthTokenReader,
+} from './interfaces.ts';
+import { authTokenStore } from './auth-token.store.ts';
 
 type FetchImplementation = typeof fetch;
 
@@ -12,6 +18,7 @@ export class ApiClient {
         fetchImplementation: FetchImplementation =
             globalThis.fetch.bind(globalThis),
         origin: string = window.location.origin,
+        private readonly tokenReader: AuthTokenReader = authTokenStore,
     ) {
         this.baseUrl = new URL(baseUrl, origin);
         if (!this.baseUrl.pathname.endsWith('/')) {
@@ -33,9 +40,7 @@ export class ApiClient {
                     body: request.body === undefined
                         ? undefined
                         : JSON.stringify(request.body),
-                    headers: request.body === undefined
-                        ? undefined
-                        : { 'content-type': 'application/json' },
+                    headers: this.headers(request.body !== undefined),
                     signal: request.signal,
                 },
             );
@@ -56,6 +61,22 @@ export class ApiClient {
                 error: this.transportError(error),
             };
         }
+    }
+
+    /** Builds transport headers without exposing token storage to callers. */
+    private headers(hasBody: boolean): Headers | undefined {
+        const token = this.tokenReader.get();
+        if (!hasBody && !token) {
+            return undefined;
+        }
+        const headers = new Headers();
+        if (hasBody) {
+            headers.set('content-type', 'application/json');
+        }
+        if (token) {
+            headers.set('authorization', `Bearer ${token}`);
+        }
+        return headers;
     }
 
     private async parse<T>(response: Response): Promise<ApiResult<T>> {

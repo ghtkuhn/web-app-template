@@ -3,6 +3,8 @@
  * Run `npm run generate:test-catalog` after adding or removing tests.
  */
 export const BACKEND_TEST_FILES = [
+    'src/module/auth/test/auth.integration.test.ts',
+    'src/module/auth/test/auth.module.test.ts',
     'src/module/health/test/health.module.test.ts',
     'test/backend.application.test.ts',
     'test/cli.application.test.ts',

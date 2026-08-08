@@ -138,3 +138,9 @@ backup, creates a pre-restore safety backup, replaces the database atomically,
 and starts and health-checks the current release. A code rollback never restores
 the database automatically. Large backfills must be separate idempotent,
 restartable jobs rather than startup migrations.
+
+When `auth` is included in `backend.activeModules`, the profile must list
+`BETTER_AUTH_SECRET` in `requiredSecrets`; the secret remains Environment-only.
+Set `backend.authRegistrationEnabled` explicitly and keep the frontend runtime
+flags `authEnabled` and `registrationEnabled` consistent with the backend.
+Auth-disabled profiles require no Better Auth secret and remain the default.

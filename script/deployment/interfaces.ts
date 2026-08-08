@@ -42,6 +42,7 @@ export interface BackendDeployment {
     readonly publicWebSocketUrl: string;
     readonly allowedOrigins: readonly string[];
     readonly activeModules: readonly string[];
+    readonly authRegistrationEnabled: boolean;
     readonly sqlitePath: string;
     readonly databaseBackupRetention?: number;
 }
@@ -54,6 +55,8 @@ export interface FrontendDeployment {
         readonly apiBaseUrl: string;
         readonly webSocketUrl: string;
         readonly presentationLock: 'desktop' | 'tablet' | 'mobile' | null;
+        readonly authEnabled: boolean;
+        readonly registrationEnabled: boolean;
     };
 }
 

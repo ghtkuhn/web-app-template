@@ -299,6 +299,12 @@ Every schema change requires both:
 Stores use the injected database client. Driver imports and connection creation
 belong exclusively to `src/base/base.database.ts`.
 
+Third-party adapters may own tables only when every table is listed in the
+central `EXTERNAL_TABLE_OWNERS` registry, typed in `database.ts`, and created by
+an application migration. Those tables are accessed only through the named
+adapter; declaring external ownership is not a general escape from Object and
+Store rules.
+
 Every row-to-Object mapping explicitly maps `id`, `created_at`, `updated_at`,
 `is_deleted`, and `deleted_at`. Normal finders exclude soft-deleted rows.
 `delete()` updates `is_deleted`, `deleted_at`, and `updated_at`; it never performs
@@ -313,6 +319,30 @@ test helper) with the same method and route plus assertions for every documented
 success and controlled error status. Comments and string references do not
 count. Store coverage likewise constructs the Store and executes a persistence
 method. Node, CLI, and WebSocket operations are not OpenAPI operations.
+
+`openapi/application.openapi.yaml` contains the hand-maintained application
+contract. `npm run generate:openapi --workspace @app/backend` merges the
+deterministic Better Auth schema into the checked-in public contract;
+`check:openapi` rejects drift and component or path collisions.
+
+Normal HTTP handlers always use Controllers and `HandlerResult`. A
+`DelegatedHttpHandler` is reserved for an external Fetch-compatible protocol
+such as Better Auth, where status, bytes, cookies, and repeated headers must be
+preserved without an application JSON envelope.
+
+## Included Auth Reference
+
+The registered `auth` module is inactive by default. Enable it with
+`AUTH_ENABLED=true` and a high-entropy `BETTER_AUTH_SECRET` of at least 32
+characters. Public registration remains disabled unless
+`AUTH_REGISTRATION_ENABLED=true`. The module uses the application-owned Kysely
+connection, application migrations, trusted origins, signed Bearer tokens, and
+delegated endpoints below `/api/auth/*`; it never opens or migrates a second
+database connection.
+
+Other modules verify sessions through the injected `AuthModulePort` Node
+contract. Public DTOs exclude tokens, password hashes, account credentials, and
+verification secrets.
 
 Request JSON is untrusted at runtime. A TypeScript assertion does not validate
 it:

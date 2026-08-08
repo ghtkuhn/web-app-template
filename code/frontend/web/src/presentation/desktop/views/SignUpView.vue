@@ -1,0 +1,39 @@
+<script setup lang="ts">
+import { ref } from 'vue';
+import { RouterLink, useRouter } from 'vue-router';
+import { authComposable } from '../../../core/composables/auth.composable.ts';
+
+const name = ref('');
+const email = ref('');
+const password = ref('');
+const router = useRouter();
+
+/** Submits the desktop registration form. */
+async function submit(): Promise<void> {
+    await authComposable.signUp(name.value, email.value, password.value);
+    if (authComposable.data.value) {
+        await router.push('/account');
+    }
+}
+</script>
+
+<template>
+    <section class="desktop-auth">
+        <div><p class="eyebrow">Desktop account</p><h1>Create an account.</h1></div>
+        <form v-if="authComposable.registrationEnabled" class="auth-form" @submit.prevent="submit">
+            <label>Name<input v-model="name" required></label>
+            <label>Email<input v-model="email" type="email" required></label>
+            <label>Password<input v-model="password" type="password" minlength="8" required></label>
+            <p v-if="authComposable.error.value">{{ authComposable.error.value.message }}</p>
+            <button type="submit">Register</button>
+            <RouterLink to="/sign-in">Sign in instead</RouterLink>
+        </form>
+        <p v-else>Registration is not available for this deployment.</p>
+    </section>
+</template>
+
+<style scoped>
+.desktop-auth { display: grid; grid-template-columns: 1fr 24rem; gap: var(--space-8); }
+.auth-form, label { display: grid; gap: var(--space-3); }
+.auth-form { padding: var(--space-6); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-medium); background: var(--color-panel); }
+</style>

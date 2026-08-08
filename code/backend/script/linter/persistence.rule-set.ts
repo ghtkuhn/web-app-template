@@ -176,6 +176,7 @@ export class PersistenceRuleSet {
             return [];
         }
         const source = fs.readFileSync(filePath, 'utf8');
+        const externalTables = this.externalTableNames(source);
         const required = [
             'id',
             'created_at',
@@ -187,6 +188,10 @@ export class PersistenceRuleSet {
         for (const match of source.matchAll(
             /interface\s+([A-Za-z0-9_]+Table)\s*\{([\s\S]*?)\}/gu,
         )) {
+            const tableName = this.tableNameForInterface(source, match[1]);
+            if (tableName && externalTables.has(tableName)) {
+                continue;
+            }
             const missing = required.filter(
                 (field) => !new RegExp(`\\b${field}\\s*[?:]`, 'u').test(match[2]),
             );
@@ -200,6 +205,37 @@ export class PersistenceRuleSet {
             }
         }
         return issues;
+    }
+
+    /** Reads the explicit adapter ownership registry from the central schema. */
+    private externalTableNames(source: string): ReadonlySet<string> {
+        const registry = source.match(
+            /export\s+const\s+EXTERNAL_TABLE_OWNERS\s*=\s*\{([\s\S]*?)\}\s+as\s+const/u,
+        )?.[1];
+        if (!registry) {
+            return new Set();
+        }
+        return new Set(
+            [...registry.matchAll(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*:/gmu)]
+                .map((match) => match[1]),
+        );
+    }
+
+    /** Resolves the Database property backed by one declared table interface. */
+    private tableNameForInterface(
+        source: string,
+        interfaceName: string,
+    ): string | null {
+        const database = source.match(
+            /export\s+interface\s+Database\s*\{([\s\S]*?)\}/u,
+        )?.[1];
+        if (!database) {
+            return null;
+        }
+        const escaped = interfaceName.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+        return database.match(
+            new RegExp(`^\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*:\\s*${escaped}\\s*;`, 'mu'),
+        )?.[1] ?? null;
     }
 
     /** Creates one normalized issue. */

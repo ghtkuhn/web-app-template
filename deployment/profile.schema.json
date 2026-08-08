@@ -74,7 +74,7 @@
                 {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": ["enabled", "target", "publicHttpUrl", "publicWebSocketUrl", "allowedOrigins", "activeModules", "sqlitePath"],
+                    "required": ["enabled", "target", "publicHttpUrl", "publicWebSocketUrl", "allowedOrigins", "activeModules", "authRegistrationEnabled", "sqlitePath"],
                     "properties": {
                         "enabled": { "const": true },
                         "target": { "$ref": "#/$defs/target" },
@@ -82,6 +82,7 @@
                         "publicWebSocketUrl": { "type": "string", "format": "uri" },
                         "allowedOrigins": { "type": "array", "uniqueItems": true, "items": { "type": "string", "format": "uri" } },
                         "activeModules": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
+                        "authRegistrationEnabled": { "type": "boolean" },
                         "sqlitePath": { "type": "string", "minLength": 1 },
                         "databaseBackupRetention": { "type": "integer", "minimum": 1, "default": 10 }
                     }
@@ -102,11 +103,13 @@
                         "runtime": {
                             "type": "object",
                             "additionalProperties": false,
-                            "required": ["apiBaseUrl", "webSocketUrl", "presentationLock"],
+                            "required": ["apiBaseUrl", "webSocketUrl", "presentationLock", "authEnabled", "registrationEnabled"],
                             "properties": {
                                 "apiBaseUrl": { "type": "string", "format": "uri" },
                                 "webSocketUrl": { "type": "string", "format": "uri" },
-                                "presentationLock": { "enum": ["desktop", "tablet", "mobile", null] }
+                                "presentationLock": { "enum": ["desktop", "tablet", "mobile", null] },
+                                "authEnabled": { "type": "boolean" },
+                                "registrationEnabled": { "type": "boolean" }
                             }
                         }
                     }

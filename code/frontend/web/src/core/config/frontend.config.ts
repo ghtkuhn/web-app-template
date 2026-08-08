@@ -15,17 +15,23 @@ export class FrontendConfig {
     public readonly routerBaseUrl: string;
     public readonly presentationLock: Presentation | null;
     public readonly webSocketUrl: string;
+    public readonly authEnabled: boolean;
+    public readonly registrationEnabled: boolean;
 
     private constructor(
         apiBaseUrl: string,
         routerBaseUrl: string,
         presentationLock: Presentation | null,
         webSocketUrl: string,
+        authEnabled: boolean,
+        registrationEnabled: boolean,
     ) {
         this.apiBaseUrl = apiBaseUrl;
         this.routerBaseUrl = routerBaseUrl;
         this.presentationLock = presentationLock;
         this.webSocketUrl = webSocketUrl;
+        this.authEnabled = authEnabled;
+        this.registrationEnabled = registrationEnabled;
     }
 
     /** Creates validated configuration from Vite environment values. */
@@ -45,6 +51,9 @@ export class FrontendConfig {
         );
         const webSocketUrl =
             runtime?.webSocketUrl ?? 'ws://localhost:3001';
+        const authEnabled = runtime?.authEnabled ?? false;
+        const registrationEnabled =
+            authEnabled && (runtime?.registrationEnabled ?? false);
 
         this.assertUrl(apiBaseUrl, 'VITE_API_BASE_URL');
         this.assertUrl(webSocketUrl, 'webSocketUrl');
@@ -54,6 +63,8 @@ export class FrontendConfig {
             routerBaseUrl,
             presentationLock,
             webSocketUrl,
+            authEnabled,
+            registrationEnabled,
         );
     }
 

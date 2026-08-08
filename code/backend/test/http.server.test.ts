@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { BaseHandler } from '../src/base/base.handler.ts';
 import { BaseModule } from '../src/base/base.module.ts';
 import { HttpServer } from '../src/base/http.server.ts';
+import { DelegatedHttpHandler } from '../src/base/delegated.http.handler.ts';
 import type { HandlerResult } from '../src/base/interfaces.ts';
 import { HealthModule } from '../src/module/health/index.ts';
 
@@ -32,6 +33,28 @@ class TestModule extends BaseModule {
 class ThrowingHandler extends BaseHandler {
     protected async processRequest(): Promise<HandlerResult> {
         throw new Error('secret failure details');
+    }
+}
+
+class FetchProtocolHandler extends DelegatedHttpHandler {
+    protected async processRequest(): Promise<Response> {
+        const headers = new Headers({
+            'content-type': 'application/octet-stream',
+            'set-auth-token': 'signed-session',
+        });
+        headers.append('set-cookie', 'first=1; Path=/');
+        headers.append('set-cookie', 'second=2; Path=/');
+        return new Response(new Uint8Array([1, 2, 3]), {
+            status: 202,
+            headers,
+        });
+    }
+}
+
+class DelegatedModule extends BaseModule {
+    constructor() {
+        super();
+        this.registerHandler('http', new FetchProtocolHandler());
     }
 }
 
@@ -105,6 +128,26 @@ test('request details reach the handler and explicit status is preserved', async
         );
         assert.equal(await handler.request?.text(), 'payload');
     });
+});
+
+test('delegated Fetch responses preserve status, headers, cookies, and bytes', async () => {
+    await withServer({ protocol: new DelegatedModule() }, async (server) => {
+        const response = await fetch(
+            `http://127.0.0.1:${server.port}/api/protocol`,
+            { headers: { Origin: 'https://example.test' } },
+        );
+        assert.equal(response.status, 202);
+        assert.equal(response.headers.get('set-auth-token'), 'signed-session');
+        assert.equal(
+            response.headers.get('access-control-expose-headers'),
+            'set-auth-token',
+        );
+        assert.equal(response.headers.getSetCookie().length, 2);
+        assert.deepEqual(
+            [...new Uint8Array(await response.arrayBuffer())],
+            [1, 2, 3],
+        );
+    }, undefined, ['https://example.test']);
 });
 
 test('204 responses contain no body', async () => {

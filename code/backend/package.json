@@ -8,6 +8,7 @@
         "node": ">=22.23.1 <23"
     },
     "dependencies": {
+        "better-auth": "^1.6.26",
         "better-sqlite3": "^12.11.1",
         "kysely": "^0.27.0",
         "uuid": "^9.0.0",
@@ -31,6 +32,8 @@
         "lint": "npm run lint:architecture && npm run lint:openapi",
         "lint:architecture": "node script/linter.ts",
         "lint:openapi": "redocly lint openapi/openapi.yaml",
+        "generate:openapi": "node script/openapi.ts generate",
+        "check:openapi": "node script/openapi.ts check",
         "lint:backend": "npm run lint",
         "module:status": "node script/module-tools.ts status",
         "module:sync": "node script/module-tools.ts sync",

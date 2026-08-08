@@ -256,6 +256,7 @@ export class ArchitectureRuleSet {
             ...this.routerOwnershipIssues(analysis),
             ...this.presentationOwnershipIssues(analysis),
             ...this.environmentOwnershipIssues(analysis),
+            ...this.authStorageOwnershipIssues(analysis),
             ...this.networkOwnershipIssues(analysis),
         ];
     }
@@ -344,6 +345,24 @@ export class ArchitectureRuleSet {
                     'Presentation code must use application composables instead of network access.',
                 )];
             }
+        }
+        return [];
+    }
+
+    /** Keeps JavaScript-readable Auth credentials behind one explicit owner. */
+    private authStorageOwnershipIssues(
+        analysis: SourceAnalysis,
+    ): LintIssue[] {
+        const relative = this.paths.relative(analysis.filePath);
+        const isTokenStore = relative.endsWith(
+            'code/frontend/web/src/core/api/auth-token.store.ts',
+        );
+        if (!isTokenStore && analysis.source.includes('sessionStorage')) {
+            return [this.issue(
+                analysis,
+                'AUTH_TOKEN_STORAGE_OWNERSHIP',
+                'sessionStorage access belongs exclusively in core/api/auth-token.store.ts.',
+            )];
         }
         return [];
     }

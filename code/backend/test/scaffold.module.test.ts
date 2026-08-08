@@ -310,6 +310,7 @@ test('the checked-in production catalog matches deterministic generation', () =>
         'utf8',
     );
     const expected = new CatalogRenderer().render([
+        new ModuleName('auth'),
         new ModuleName('health'),
     ]);
     assert.equal(actual, expected);

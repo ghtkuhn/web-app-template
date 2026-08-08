@@ -129,6 +129,20 @@ export class DockerDeploymentDriver {
                         profile.backend.enabled
                             ? profile.backend.allowedOrigins.join(',')
                             : '',
+                    DEPLOY_AUTH_ENABLED:
+                        profile.backend.enabled &&
+                        profile.backend.activeModules.includes('auth')
+                            ? 'true'
+                            : 'false',
+                    DEPLOY_AUTH_REGISTRATION_ENABLED:
+                        profile.backend.enabled &&
+                        profile.backend.authRegistrationEnabled
+                            ? 'true'
+                            : 'false',
+                    DEPLOY_BETTER_AUTH_BASE_URL:
+                        profile.backend.enabled
+                            ? profile.backend.publicHttpUrl
+                            : 'http://localhost:3000',
                     FRONTEND_API_BASE_URL:
                         profile.frontend.enabled
                             ? profile.frontend.runtime.apiBaseUrl
@@ -141,6 +155,16 @@ export class DockerDeploymentDriver {
                         profile.frontend.enabled
                             ? profile.frontend.runtime.presentationLock ?? 'null'
                             : 'null',
+                    FRONTEND_AUTH_ENABLED:
+                        profile.frontend.enabled &&
+                        profile.frontend.runtime.authEnabled
+                            ? 'true'
+                            : 'false',
+                    FRONTEND_REGISTRATION_ENABLED:
+                        profile.frontend.enabled &&
+                        profile.frontend.runtime.registrationEnabled
+                            ? 'true'
+                            : 'false',
                 },
             },
         );

@@ -55,6 +55,10 @@ export class DeploymentConfigRenderer {
             `DEPLOYMENT_RELEASE_ID=${releaseId}`,
             `ACTIVE_MODULES=${profile.backend.activeModules.join(',')}`,
             `ALLOWED_ORIGINS=${profile.backend.allowedOrigins.join(',')}`,
+            `AUTH_ENABLED=${profile.backend.activeModules.includes('auth')}`,
+            `AUTH_REGISTRATION_ENABLED=${profile.backend.authRegistrationEnabled}`,
+            `BETTER_AUTH_BASE_URL=${profile.backend.publicHttpUrl}`,
+            `BETTER_AUTH_SECRET=${environment.BETTER_AUTH_SECRET ?? ''}`,
             '',
         ].join('\n');
     }
@@ -68,6 +72,8 @@ export class DeploymentConfigRenderer {
             `    apiBaseUrl: ${JSON.stringify(profile.frontend.runtime.apiBaseUrl)},`,
             `    webSocketUrl: ${JSON.stringify(profile.frontend.runtime.webSocketUrl)},`,
             `    presentationLock: ${JSON.stringify(profile.frontend.runtime.presentationLock)},`,
+            `    authEnabled: ${JSON.stringify(profile.frontend.runtime.authEnabled)},`,
+            `    registrationEnabled: ${JSON.stringify(profile.frontend.runtime.registrationEnabled)},`,
             '};',
             '',
         ].join('\n');

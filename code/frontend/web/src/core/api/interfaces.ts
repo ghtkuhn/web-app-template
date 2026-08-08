@@ -13,3 +13,8 @@ export interface ApiRequest {
     readonly body?: unknown;
     readonly signal?: AbortSignal;
 }
+
+/** Read-only Bearer-token dependency consumed by HTTP transports. */
+export interface AuthTokenReader {
+    get(): string | null;
+}
