@@ -386,6 +386,3 @@ npm run lint:architecture --workspace @app/backend
 
 Architecture findings include stable rule IDs. Fix the reported structure or
 dependency violation instead of suppressing or working around the rule.
-Little Coder works on only the first active cause. It runs a focused TypeScript
-or test check before the next mutation and then reruns the architecture linter.
-If the same cause remains after two attempts, it stops for an external review.

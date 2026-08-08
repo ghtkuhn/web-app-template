@@ -24,7 +24,6 @@
   "scripts": {
     "lint": "npm run lint --workspaces --if-present",
     "lint:backend": "npm run lint --workspace @app/backend",
-    "little-coder": "node script/little-coder.ts",
     "module:status": "node code/backend/script/module-tools.ts status",
     "module:sync": "node code/backend/script/module-tools.ts sync",
     "module:dependency": "node code/backend/script/module-tools.ts dependency",

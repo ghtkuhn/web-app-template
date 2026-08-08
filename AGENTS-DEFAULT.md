@@ -71,14 +71,6 @@
 * You must derive solutions generically; tests may cover examples, but implementation logic must not special-case them.
 * You must not install new dependencies without user consent.
 * You must not create, edit, move, rename, or delete files or directories below `code/backend/src/base/`.
-* When using Little Coder, you must start it with `npm run little-coder -- [arguments]` so the project mutation guards are loaded.
-* Little Coder automatically interrupts ten exact consecutive repetitions in model thinking, retries once with thinking disabled, and stops instead of retrying indefinitely if the loop returns. Use `/thinking-loop` to inspect this guard.
-* Little Coder backend changes must remain within the active lint-gate batch or repair scope.
-* You must not bypass a red backend lint gate, weaken its rules, or modify protected architecture controls to make it green.
-* You must run backend work in small lintable batches; the gate enforces a layer/module check and a maximum of five successful file mutations.
-* Little Coder must repair only the first active backend lint cause and run the focused check before another backend mutation.
-* Little Coder must stop and report the blocker after two ineffective repairs of the same cause.
-* You must not silence a finding with type casts, widened contracts, permissive assertions, placeholder values, or unrelated refactors.
 * You must not invoke `rm`, `rmdir`, `unlink`, or another direct system deletion command.
 * You must delete project files and directories only with `npm run rm -- <project-relative-path>`.
 * You should run `npm run rm -- <project-relative-path> --dry-run` first when the target contains multiple files or directories.
@@ -111,7 +103,6 @@
 * `npm run generate:test-catalog`: Regenerates the deterministic checked-in backend test catalog.
 * `npm run lint`: Runs every workspace linter.
 * `npm run lint:backend`: Runs the backend architecture and OpenAPI linters.
-* `npm run little-coder`: Starts Little Coder with Base protection and the incremental backend architecture lint gate.
 * `npm run module:status`: Reports the first actionable architecture state for one backend module.
 * `npm run module:sync`: Regenerates manifest-owned module registry metadata without changing fach files.
 * `npm run module:dependency`: Adds one public module dependency to a consumer manifest and synchronizes it.
