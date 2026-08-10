@@ -51,10 +51,55 @@ class FetchProtocolHandler extends DelegatedHttpHandler {
     }
 }
 
+class StreamingFetchProtocolHandler extends DelegatedHttpHandler {
+    public requestWasAborted = false;
+    public readerWasCancelled = false;
+    private readonly secondChunkDelayMs: number | null;
+
+    constructor(secondChunkDelayMs: number | null) {
+        super();
+        this.secondChunkDelayMs = secondChunkDelayMs;
+    }
+
+    protected async processRequest(input: Request): Promise<Response> {
+        input.signal.addEventListener('abort', () => {
+            this.requestWasAborted = true;
+        });
+        const encoder = new TextEncoder();
+        const handler = this;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const stream = new ReadableStream<Uint8Array>({
+            start(controller): void {
+                controller.enqueue(encoder.encode('first'));
+                if (handler.secondChunkDelayMs !== null) {
+                    timer = setTimeout(() => {
+                        controller.enqueue(encoder.encode('second'));
+                        controller.close();
+                    }, handler.secondChunkDelayMs);
+                }
+            },
+            cancel(): void {
+                handler.readerWasCancelled = true;
+                if (timer) {
+                    clearTimeout(timer);
+                }
+            },
+        });
+        return new Response(stream);
+    }
+}
+
 class DelegatedModule extends BaseModule {
     constructor() {
         super();
         this.registerHandler('http', new FetchProtocolHandler());
+    }
+}
+
+class StreamingDelegatedModule extends BaseModule {
+    constructor(handler: StreamingFetchProtocolHandler) {
+        super();
+        this.registerHandler('http', handler);
     }
 }
 
@@ -76,6 +121,16 @@ async function withServer(
     } finally {
         await server.stop();
     }
+}
+
+async function waitFor(condition: () => boolean): Promise<void> {
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+        if (condition()) {
+            return;
+        }
+        await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    }
+    assert.fail('Timed out waiting for the expected transport state.');
 }
 
 test('health module proves the complete HTTP path', async () => {
@@ -148,6 +203,51 @@ test('delegated Fetch responses preserve status, headers, cookies, and bytes', a
             [1, 2, 3],
         );
     }, undefined, ['https://example.test']);
+});
+
+test('delegated Fetch responses deliver the first stream chunk before completion', async () => {
+    const handler = new StreamingFetchProtocolHandler(300);
+    await withServer(
+        { stream: new StreamingDelegatedModule(handler) },
+        async (server) => {
+            const startedAt = performance.now();
+            const response = await fetch(
+                `http://127.0.0.1:${server.port}/api/stream`,
+            );
+            const reader = response.body?.getReader();
+            assert.ok(reader);
+            const first = await reader.read();
+            assert.equal(new TextDecoder().decode(first.value), 'first');
+            assert.ok(performance.now() - startedAt < 200);
+            const second = await reader.read();
+            assert.equal(new TextDecoder().decode(second.value), 'second');
+        },
+    );
+});
+
+test('client disconnect aborts delegated requests and cancels their readers', async () => {
+    const handler = new StreamingFetchProtocolHandler(null);
+    await withServer(
+        { stream: new StreamingDelegatedModule(handler) },
+        async (server) => {
+            const controller = new AbortController();
+            const response = await fetch(
+                `http://127.0.0.1:${server.port}/api/stream`,
+                { signal: controller.signal },
+            );
+            const reader = response.body?.getReader();
+            assert.ok(reader);
+            assert.equal(
+                new TextDecoder().decode((await reader.read()).value),
+                'first',
+            );
+            controller.abort();
+            await assert.rejects(reader.read());
+            await waitFor(
+                () => handler.requestWasAborted && handler.readerWasCancelled,
+            );
+        },
+    );
 });
 
 test('204 responses contain no body', async () => {

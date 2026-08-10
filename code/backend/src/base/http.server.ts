@@ -111,6 +111,19 @@ export class HttpServer {
         request: IncomingMessage,
         response: ServerResponse,
     ): Promise<void> {
+        const abortController = new AbortController();
+        const abortRequest = (): void => {
+            if (!abortController.signal.aborted) {
+                abortController.abort();
+            }
+        };
+        const abortOnResponseClose = (): void => {
+            if (!response.writableEnded) {
+                abortRequest();
+            }
+        };
+        request.once('aborted', abortRequest);
+        response.once('close', abortOnResponseClose);
         try {
             if (!this.applyOriginPolicy(request, response)) {
                 await this.writeResult(
@@ -149,9 +162,18 @@ export class HttpServer {
                 return;
             }
 
-            const webRequest = await this.createWebRequest(request, url);
+            const webRequest = await this.createWebRequest(
+                request,
+                url,
+                abortController.signal,
+            );
             const result = await module.dispatch('http', webRequest);
-            await this.writeResult(response, result, request.method);
+            await this.writeResult(
+                response,
+                result,
+                request.method,
+                abortController.signal,
+            );
         } catch (error: unknown) {
             // Do not attempt a second response after a socket-level failure or disconnect.
             if (response.headersSent || response.destroyed) {
@@ -168,6 +190,9 @@ export class HttpServer {
                 { success: false, error: message, statusCode },
                 request.method,
             );
+        } finally {
+            request.off('aborted', abortRequest);
+            response.off('close', abortOnResponseClose);
         }
     }
 
@@ -197,6 +222,7 @@ export class HttpServer {
     private async createWebRequest(
         request: IncomingMessage,
         url: URL,
+        signal: AbortSignal,
     ): Promise<Request> {
         const method = request.method ?? 'GET';
         const body =
@@ -208,6 +234,7 @@ export class HttpServer {
             method,
             headers: new Headers(request.headers as Record<string, string>),
             body: body?.length ? new Uint8Array(body) : undefined,
+            signal,
         });
     }
 
@@ -261,9 +288,10 @@ export class HttpServer {
         response: ServerResponse,
         result: HttpDispatchResult,
         method?: string,
+        signal?: AbortSignal,
     ): Promise<void> {
         if (result instanceof Response) {
-            await this.writeFetchResponse(response, result, method);
+            await this.writeFetchResponse(response, result, method, signal);
             return;
         }
         const statusCode = result.statusCode ?? (result.success ? 200 : 500);
@@ -293,6 +321,7 @@ export class HttpServer {
         response: ServerResponse,
         result: Response,
         method?: string,
+        signal?: AbortSignal,
     ): Promise<void> {
         response.statusCode = result.status;
         this.copyFetchHeaders(response, result.headers);
@@ -301,7 +330,125 @@ export class HttpServer {
             response.end();
             return;
         }
-        response.end(Buffer.from(await result.arrayBuffer()));
+        const reader = result.body?.getReader();
+        if (!reader) {
+            response.end();
+            return;
+        }
+        await this.writeResponseBody(response, reader, signal);
+    }
+
+    /** Streams a Fetch body while retaining cancellation ownership at the transport boundary. */
+    private async writeResponseBody(
+        response: ServerResponse,
+        reader: ReadableStreamDefaultReader<Uint8Array>,
+        signal?: AbortSignal,
+    ): Promise<void> {
+        const cancelReader = (): void => {
+            void reader.cancel().catch(() => undefined);
+        };
+        signal?.addEventListener('abort', cancelReader, { once: true });
+
+        try {
+            await this.copyResponseChunks(response, reader, signal);
+        } catch (error: unknown) {
+            this.destroyFailedResponse(response, error, signal);
+        } finally {
+            signal?.removeEventListener('abort', cancelReader);
+            reader.releaseLock();
+        }
+    }
+
+    /** Copies available Fetch chunks until either stream reaches a terminal state. */
+    private async copyResponseChunks(
+        response: ServerResponse,
+        reader: ReadableStreamDefaultReader<Uint8Array>,
+        signal?: AbortSignal,
+    ): Promise<void> {
+        while (this.canWriteResponse(response, signal)) {
+            const chunk = await reader.read();
+            if (chunk.done) {
+                break;
+            }
+            await this.writeResponseChunk(response, chunk.value, signal);
+        }
+        this.endResponseIfOpen(response, signal);
+    }
+
+    /** Determines whether the connection can accept another source chunk. */
+    private canWriteResponse(response: ServerResponse, signal?: AbortSignal): boolean {
+        if (signal?.aborted) {
+            return false;
+        }
+        return !response.destroyed;
+    }
+
+    /** Ends a response only while the connection is still writable. */
+    // fallow-ignore-next-line complexity -- Abort, destruction, and completion are independent socket states.
+    private endResponseIfOpen(response: ServerResponse, signal?: AbortSignal): void {
+        if (signal?.aborted) {
+            return;
+        }
+        if (response.destroyed) {
+            return;
+        }
+        if (response.writableEnded) {
+            return;
+        }
+        response.end();
+    }
+
+    /** Writes one chunk and waits for the writable socket when its buffer is full. */
+    private async writeResponseChunk(
+        response: ServerResponse,
+        chunk: Uint8Array,
+        signal?: AbortSignal,
+    ): Promise<void> {
+        if (!response.write(chunk)) {
+            await this.waitForDrain(response, signal);
+        }
+    }
+
+    /** Destroys a partially written response only when cancellation did not cause the failure. */
+    // fallow-ignore-next-line complexity -- Cancellation and socket destruction require independent failure guards.
+    private destroyFailedResponse(
+        response: ServerResponse,
+        error: unknown,
+        signal?: AbortSignal,
+    ): void {
+        if (signal?.aborted) {
+            return;
+        }
+        if (response.destroyed) {
+            return;
+        }
+        response.destroy(error instanceof Error ? error : undefined);
+    }
+
+    /** Waits for writable capacity or stops promptly when the client disconnects. */
+    private async waitForDrain(
+        response: ServerResponse,
+        signal?: AbortSignal,
+    ): Promise<void> {
+        if (signal?.aborted || response.destroyed) {
+            return;
+        }
+        await new Promise<void>((resolve) => {
+            const complete = (): void => {
+                response.off('drain', complete);
+                response.off('close', complete);
+                response.off('error', complete);
+                signal?.removeEventListener('abort', complete);
+                resolve();
+            };
+            response.once('drain', complete);
+            response.once('close', complete);
+            response.once('error', complete);
+            signal?.addEventListener('abort', complete, { once: true });
+            if (signal?.aborted || response.destroyed) {
+                complete();
+            }
+        });
     }
 
     /** Copies Fetch headers while preserving multiple Set-Cookie values. */
