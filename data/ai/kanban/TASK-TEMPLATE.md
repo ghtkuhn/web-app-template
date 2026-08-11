@@ -40,8 +40,13 @@
 
 ## Verification
 
-After completing this task, update OpenAPI and the database schema when
-required, then run the complete verification from the project root:
+For an intermediate task in an active implementation sequence, update OpenAPI
+and the database schema when required, then run focused linting, typechecking,
+and only tests created or changed by this task. Do not rerun pre-existing test
+suites.
+
+After completing the final open task in that sequence, run the complete
+verification from the project root:
 
 ```bash
 npm run verify
@@ -54,10 +59,10 @@ This command includes:
 - Automated tests
 - Fallow code-health audit
 
-Expected result:
+Expected result for the final task:
 
 - `npm run verify` exits with code `0`.
-- All relevant tests pass.
+- The complete existing test suite passes.
 - The backend architecture linter reports no violations.
 - Fallow completes without an execution error.
 - New Fallow findings introduced by this task are resolved.

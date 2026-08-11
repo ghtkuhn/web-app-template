@@ -41,7 +41,9 @@
 * Task file names must be in the following format: `<task-counter>-<domain>-<title>.md`
 * You must work tasks sequentially.
 * You must use `fallow` to verify code health, dead code, and duplication before declaring a task done.
-* You must move the task file to `data/ai/kanban/done` after verify.
+* During an active implementation sequence, you must run only tests created or changed by the current task. You must not run pre-existing test suites again until the final open task in that sequence is complete.
+* After the final open task is complete, you must run the complete existing test suite and root `npm run verify` once before declaring the sequence complete.
+* You must move the task file to `data/ai/kanban/done` after its required focused checks; move the final task only after complete verification.
 * You must commit in git after every completed task, if the project is a git repo.
 
 
@@ -244,7 +246,7 @@
 * The repository root owns the only `package-lock.json`, shared TypeScript tooling, `tsconfig.base.json`, and the complete `verify` script. Workspaces must not duplicate or shorten these contracts.
 * Module files must preserve four-space indentation and include appropriate code comments and JSDoc.
 * Backend architecture diagnostics expose separate `Reason`, `Fix`, and one-based source positions; tools must consume the JSON format instead of editing diagnostic comments into source files.
-* `npm run verify` must pass before backend work is declared complete.
+* Focused backend work requires lint, typecheck, and only current-task tests. The complete existing test suite and `npm run verify` run after the final open task of the active implementation sequence.
 
 
 ## Frontend Programming Rules (Strict Presentation Architecture)
@@ -273,7 +275,7 @@
 * Create Core feature skeletons with `npm run scaffold:feature -- <kebab-case-name>`.
 * The frontend implementation workflow is **Scaffold** → **Core logic** → **all three Presentations** → **tests** → **`npm run verify`**.
 * Vitest and Vue Test Utils cover units and components; Playwright covers shared routing and representative mobile, tablet, and desktop browser flows.
-* `npm run lint --workspace @app/web` and the root `npm run verify` must pass before frontend work is complete.
+* Focused frontend work requires its linter, typecheck, and only current-task tests. The complete existing test suite and root `npm run verify` run after the final open task of the active implementation sequence.
 
 
 ## Deployment Rules
