@@ -187,6 +187,37 @@ test('the global style layer must retain the Pico import', () => {
     }
 });
 
+test('the bundled Tabler icon font is owned by the global style layer', () => {
+    const fixture = new Fixture();
+    try {
+        fixture.write(
+            'shared/styles/main.css',
+            '@import "./tabler/tabler-icons.css";',
+        );
+        fixture.write(
+            'presentation/desktop/views/BadView.vue',
+            `<template><link href="https://cdn.example.test/tabler-icons.css"></template>
+             <style scoped>@import "../../../shared/styles/tabler/tabler-icons.css";</style>`,
+        );
+        const ids = fixture.issues().map((issue) => issue.ruleId);
+        expect(ids).toContain('TABLER_ICON_OWNERSHIP');
+        expect(ids).toContain('TABLER_ICON_CDN_FORBIDDEN');
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('the global style layer must retain the local Tabler import', () => {
+    const fixture = new Fixture();
+    try {
+        fixture.write('shared/styles/main.css', ':root {}');
+        const ids = fixture.issues().map((issue) => issue.ruleId);
+        expect(ids).toContain('TABLER_ICON_GLOBAL_IMPORT_MISSING');
+    } finally {
+        fixture.dispose();
+    }
+});
+
 test('parser failures and CLI exit codes are stable', () => {
     const valid = new Fixture();
     const invalid = new Fixture();

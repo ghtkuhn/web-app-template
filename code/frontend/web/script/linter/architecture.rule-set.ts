@@ -39,6 +39,7 @@ export class ArchitectureRuleSet {
             ...this.vueIssues(analysis),
             ...this.routeCoverageIssues(analysis),
             ...this.picoOwnershipIssues(analysis),
+            ...this.tablerIconOwnershipIssues(analysis),
         ];
     }
 
@@ -76,6 +77,47 @@ export class ArchitectureRuleSet {
                 analysis,
                 'PICO_CDN_FORBIDDEN',
                 'Pico CSS must be installed through npm, not loaded from a CDN.',
+            ));
+        }
+        return issues;
+    }
+
+    /** Keeps the bundled Tabler font available through one shared style entry. */
+    private tablerIconOwnershipIssues(analysis: SourceAnalysis): LintIssue[] {
+        const issues: LintIssue[] = [];
+        const relative = this.paths.relative(analysis.filePath);
+        const isGlobalStyle = relative.endsWith(
+            'code/frontend/web/src/shared/styles/main.css',
+        );
+        const isTablerStyle = relative.endsWith(
+            'code/frontend/web/src/shared/styles/tabler/tabler-icons.css',
+        );
+        const importsTabler = /@import\s+["'][^"']*tabler-icons\.css["']/u.test(
+            analysis.source,
+        );
+        if (isGlobalStyle && !importsTabler) {
+            issues.push(this.issue(
+                analysis,
+                'TABLER_ICON_GLOBAL_IMPORT_MISSING',
+                'shared/styles/main.css must import the local Tabler icon stylesheet.',
+            ));
+        }
+        if (importsTabler && !isGlobalStyle && !isTablerStyle) {
+            issues.push(this.issue(
+                analysis,
+                'TABLER_ICON_OWNERSHIP',
+                'The Tabler icon stylesheet may only be imported by shared/styles/main.css.',
+            ));
+        }
+        if (
+            /(?:@import\s+(?:url\()?['"]?https?:\/\/[^)'"\s]*tabler|<link\b[^>]*href=["']https?:\/\/[^"']*tabler)/iu.test(
+                analysis.source,
+            )
+        ) {
+            issues.push(this.issue(
+                analysis,
+                'TABLER_ICON_CDN_FORBIDDEN',
+                'Tabler Icons must use the bundled local font, not a CDN.',
             ));
         }
         return issues;
