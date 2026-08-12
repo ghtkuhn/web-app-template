@@ -11,15 +11,17 @@ async function signOut(): Promise<void> {
 
 <template>
     <section class="tablet-account">
-        <p class="eyebrow">Tablet account</p><h1>Your account.</h1>
+        <p class="eyebrow">Tablet account</p>
+        <h1>Your account.</h1>
         <article v-if="authComposable.data.value">
-            <strong>{{ authComposable.data.value.name }}</strong><span>{{ authComposable.data.value.email }}</span>
-            <button type="button" @click="signOut">Sign out</button>
+            <header><strong>{{ authComposable.data.value.name }}</strong></header>
+            <p>{{ authComposable.data.value.email }}</p>
+            <footer><button type="button" class="secondary" @click="signOut">Sign out</button></footer>
         </article>
     </section>
 </template>
 
 <style scoped>
 .tablet-account, article { display: grid; gap: var(--space-3); }
-article { max-width: 30rem; margin-top: var(--space-8); padding: var(--space-6); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-medium); background: var(--color-panel); }
+article { max-width: 30rem; margin-top: var(--space-8); }
 </style>

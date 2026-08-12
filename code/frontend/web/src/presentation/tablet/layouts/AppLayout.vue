@@ -18,7 +18,7 @@ import { authComposable } from '../../../core/composables/auth.composable.ts';
                 </RouterLink>
             </nav>
         </header>
-        <main class="tablet-content">
+        <main class="tablet-content" id="main-content">
             <slot />
         </main>
     </div>
@@ -50,7 +50,6 @@ import { authComposable } from '../../../core/composables/auth.composable.ts';
 
 .tablet-navigation a {
     color: var(--color-muted);
-    text-decoration: none;
 }
 
 .tablet-navigation [aria-current="page"] {

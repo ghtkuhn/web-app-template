@@ -5,41 +5,45 @@ const presentations = [
     { name: 'Tablet presentation', width: 900, height: 1000 },
     { name: 'Desktop presentation', width: 1440, height: 900 },
 ];
+const colorSchemes = ['light', 'dark'] as const;
 
-for (const presentation of presentations) {
-    test(`${presentation.name} renders routes and Health`, async ({ page }) => {
-        await page.setViewportSize({
-            width: presentation.width,
-            height: presentation.height,
-        });
-        await page.route('**/api/health', async (route) => {
-            await route.fulfill({
-                contentType: 'application/json',
-                body: JSON.stringify({
-                    success: true,
-                    data: { status: 'ok' },
-                }),
+for (const colorScheme of colorSchemes) {
+    for (const presentation of presentations) {
+        test(`${presentation.name} renders routes and Health in ${colorScheme} mode`, async ({ page }) => {
+            await page.emulateMedia({ colorScheme });
+            await page.setViewportSize({
+                width: presentation.width,
+                height: presentation.height,
             });
+            await page.route('**/api/health', async (route) => {
+                await route.fulfill({
+                    contentType: 'application/json',
+                    body: JSON.stringify({
+                        success: true,
+                        data: { status: 'ok' },
+                    }),
+                });
+            });
+            await page.goto('/');
+            await expect(page.getByText(presentation.name)).toBeVisible();
+            await page
+                .getByRole('button', { name: /check health/i })
+                .click();
+            await expect(page.getByText(/ok/i)).toBeVisible();
+            await page.goto('/about');
+            await expect(page.locator('h1')).toBeVisible();
+            await page.goto('/missing');
+            await expect(page.locator('h1')).toBeVisible();
+            await page.goto('/sign-in');
+            await expect(
+                page.getByText('Authentication is disabled for this deployment.'),
+            ).toBeVisible();
+            await page.goto('/sign-up');
+            await expect(
+                page.getByText('Registration is not available for this deployment.'),
+            ).toBeVisible();
+            await page.goto('/account');
+            await expect(page).toHaveURL(/\/sign-in$/u);
         });
-        await page.goto('/');
-        await expect(page.getByText(presentation.name)).toBeVisible();
-        await page
-            .getByRole('button', { name: /(health|backend)/i })
-            .click();
-        await expect(page.getByText(/ok/i)).toBeVisible();
-        await page.goto('/about');
-        await expect(page.locator('h1')).toBeVisible();
-        await page.goto('/missing');
-        await expect(page.locator('h1')).toBeVisible();
-        await page.goto('/sign-in');
-        await expect(
-            page.getByText('Authentication is disabled for this deployment.'),
-        ).toBeVisible();
-        await page.goto('/sign-up');
-        await expect(
-            page.getByText('Registration is not available for this deployment.'),
-        ).toBeVisible();
-        await page.goto('/account');
-        await expect(page).toHaveURL(/\/sign-in$/u);
-    });
+    }
 }

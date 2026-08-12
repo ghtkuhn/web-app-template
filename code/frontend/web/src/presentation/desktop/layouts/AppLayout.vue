@@ -18,7 +18,7 @@ import { authComposable } from '../../../core/composables/auth.composable.ts';
                 </RouterLink>
             </nav>
         </header>
-        <main class="desktop-content">
+        <main class="desktop-content" id="main-content">
             <slot />
         </main>
     </div>
@@ -51,7 +51,6 @@ import { authComposable } from '../../../core/composables/auth.composable.ts';
 
 .desktop-navigation a {
     color: var(--color-muted);
-    text-decoration: none;
 }
 
 .desktop-navigation [aria-current="page"] {

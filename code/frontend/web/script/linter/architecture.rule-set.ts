@@ -38,7 +38,47 @@ export class ArchitectureRuleSet {
             ...this.ownershipIssues(analysis),
             ...this.vueIssues(analysis),
             ...this.routeCoverageIssues(analysis),
+            ...this.picoOwnershipIssues(analysis),
         ];
+    }
+
+    /** Keeps Pico as one global semantic foundation instead of per-view imports. */
+    private picoOwnershipIssues(analysis: SourceAnalysis): LintIssue[] {
+        const issues: LintIssue[] = [];
+        const relative = this.paths.relative(analysis.filePath);
+        const isGlobalStyle = relative.endsWith(
+            'code/frontend/web/src/shared/styles/main.css',
+        );
+        const importsPico = /@import\s+["']@picocss\/pico["']/u.test(
+            analysis.source,
+        );
+        if (isGlobalStyle && !importsPico) {
+            issues.push(this.issue(
+                analysis,
+                'PICO_GLOBAL_IMPORT_MISSING',
+                'shared/styles/main.css must import Pico CSS from @picocss/pico.',
+            ));
+        }
+        if (importsPico && !isGlobalStyle) {
+            issues.push(this.issue(
+                analysis,
+                'PICO_OWNERSHIP',
+                'Pico CSS may only be imported by shared/styles/main.css.',
+            ));
+        }
+        if (
+            analysis.isVue &&
+            /(?:picocss\.com|cdn\.jsdelivr\.net\/npm\/@picocss)/iu.test(
+                analysis.source,
+            )
+        ) {
+            issues.push(this.issue(
+                analysis,
+                'PICO_CDN_FORBIDDEN',
+                'Pico CSS must be installed through npm, not loaded from a CDN.',
+            ));
+        }
+        return issues;
     }
 
     private placementIssues(analysis: SourceAnalysis): LintIssue[] {

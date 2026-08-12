@@ -9,25 +9,38 @@ const password = ref('');
 const router = useRouter();
 async function submit(): Promise<void> {
     await authComposable.signUp(name.value, email.value, password.value);
-    if (authComposable.data.value) await router.push('/account');
+    if (authComposable.data.value) {
+        await router.push('/account');
+    }
 }
 </script>
 
 <template>
     <section class="tablet-auth">
-        <p class="eyebrow">Tablet account</p><h1>Create an account.</h1>
+        <p class="eyebrow">Tablet account</p>
+        <h1>Create an account.</h1>
         <form v-if="authComposable.registrationEnabled" @submit.prevent="submit">
-            <label>Name<input v-model="name" required></label>
-            <label>Email<input v-model="email" type="email" required></label>
-            <label>Password<input v-model="password" type="password" minlength="8" required></label>
-            <p v-if="authComposable.error.value">{{ authComposable.error.value.message }}</p>
-            <button type="submit">Register</button><RouterLink to="/sign-in">Sign in instead</RouterLink>
+            <fieldset>
+                <legend>Tablet details</legend>
+                <label>Name<input v-model="name" autocomplete="name" required></label>
+                <label>
+                    Email<input v-model="email" type="email" autocomplete="email" required>
+                    <small>We use this address to identify your account.</small>
+                </label>
+                <label>
+                    Password<input v-model="password" type="password" autocomplete="new-password" minlength="8" required>
+                    <small>Use eight or more characters to protect this account.</small>
+                </label>
+            </fieldset>
+            <p v-if="authComposable.error.value" role="alert">{{ authComposable.error.value.message }}</p>
+            <button type="submit" :aria-busy="authComposable.status.value === 'loading'" :disabled="authComposable.status.value === 'loading'">Register</button>
+            <RouterLink to="/sign-in">Sign in instead</RouterLink>
         </form>
         <p v-else>Registration is not available for this deployment.</p>
     </section>
 </template>
 
 <style scoped>
-.tablet-auth, form, label { display: grid; gap: var(--space-3); }
-form { max-width: 30rem; margin-top: var(--space-8); padding: var(--space-6); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-medium); background: var(--color-panel); }
+.tablet-auth, form, fieldset { display: grid; gap: var(--space-3); }
+form { max-width: 30rem; margin-top: var(--space-8); }
 </style>

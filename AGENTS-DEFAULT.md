@@ -267,6 +267,8 @@
 * State that must survive a presentation switch must live outside presentation components.
 * `shared` contains non-visual assets, styles, and utilities but no shared Vue components.
 * Shared design tokens live in `shared/styles`; presentation colors, font sizes, radii, and z-index values must use those tokens.
+* `@picocss/pico` is the sole frontend CSS framework and may be imported only by `shared/styles/main.css`; CDN imports and parallel UI frameworks are forbidden.
+* Presentation markup must use semantic HTML and Pico's classless defaults before adding presentation-local layout rules. Pico variables are derived only from shared design tokens.
 * Vue scripts must use `<script setup lang="ts">`; presentation styles must be scoped.
 * Width-based media queries must not create a second presentation breakpoint system.
 * Frontend TypeScript and Vue code must preserve four-space indentation.

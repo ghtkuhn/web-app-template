@@ -156,6 +156,37 @@ test('Core ownership, direction, environment, and design tokens are strict', () 
     }
 });
 
+test('Pico CSS is owned by the global style layer and may not use a CDN', () => {
+    const fixture = new Fixture();
+    try {
+        fixture.write(
+            'shared/styles/main.css',
+            '@import "@picocss/pico";',
+        );
+        fixture.write(
+            'presentation/desktop/views/BadView.vue',
+            `<template><link href="https://picocss.com/pico.min.css"></template>
+             <style scoped>@import "@picocss/pico";</style>`,
+        );
+        const ids = fixture.issues().map((issue) => issue.ruleId);
+        expect(ids).toContain('PICO_OWNERSHIP');
+        expect(ids).toContain('PICO_CDN_FORBIDDEN');
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('the global style layer must retain the Pico import', () => {
+    const fixture = new Fixture();
+    try {
+        fixture.write('shared/styles/main.css', ':root {}');
+        const ids = fixture.issues().map((issue) => issue.ruleId);
+        expect(ids).toContain('PICO_GLOBAL_IMPORT_MISSING');
+    } finally {
+        fixture.dispose();
+    }
+});
+
 test('parser failures and CLI exit codes are stable', () => {
     const valid = new Fixture();
     const invalid = new Fixture();

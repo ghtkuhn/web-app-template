@@ -10,18 +10,21 @@ import { healthComposable } from '../../../core/composables/health.composable.ts
             Desktop can use the available space for dense navigation and
             parallel workflows without shaping the smaller presentations.
         </p>
-        <aside class="health-card">
-            <strong>Backend health</strong>
-            <span>{{ healthComposable.status.value }}</span>
-            <span>{{ healthComposable.data.value }}</span>
-            <span hidden>{{ healthComposable.error.value }}</span>
-            <button
-                type="button"
-                @click="healthComposable.load()"
-            >
-                Check health
-            </button>
-        </aside>
+        <article class="health-card" aria-labelledby="desktop-health-title">
+            <header>
+                <strong id="desktop-health-title">Backend health</strong>
+            </header>
+            <p>{{ healthComposable.status.value }}</p>
+            <p>{{ healthComposable.data.value }}</p>
+            <p v-if="healthComposable.error.value" role="alert">
+                {{ healthComposable.error.value }}
+            </p>
+            <footer>
+                <button type="button" @click="healthComposable.load()">
+                    Check health
+                </button>
+            </footer>
+        </article>
     </section>
 </template>
 
@@ -40,9 +43,5 @@ import { healthComposable } from '../../../core/composables/health.composable.ts
     display: grid;
     gap: var(--space-3);
     align-content: start;
-    padding: var(--space-5);
-    border: var(--border-width) solid var(--color-border);
-    border-radius: var(--radius-medium);
-    background: var(--color-panel);
 }
 </style>

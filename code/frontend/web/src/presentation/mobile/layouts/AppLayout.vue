@@ -8,7 +8,7 @@ import { authComposable } from '../../../core/composables/auth.composable.ts';
         <header class="mobile-header">
             <RouterLink class="mobile-brand" to="/">Web App</RouterLink>
         </header>
-        <main class="mobile-content">
+        <main class="mobile-content" id="main-content">
             <slot />
         </main>
         <nav class="mobile-navigation" aria-label="Mobile navigation">
@@ -64,7 +64,6 @@ import { authComposable } from '../../../core/composables/auth.composable.ts';
     display: grid;
     place-items: center;
     color: var(--color-muted);
-    text-decoration: none;
 }
 
 .mobile-navigation [aria-current="page"] {
