@@ -12,3 +12,4 @@ contain only the result, verification status, and genuine blockers.
 - Render icons with the `ti ti-<icon-name>` classes, for example `<i class="ti ti-home" aria-hidden="true"></i>`.
 - Decorative icons require `aria-hidden="true"`; icon-only controls require an accessible name such as `aria-label`.
 - Do not add an icon CDN, a second icon library, or presentation-local Tabler stylesheet imports.
+- Before choosing an icon, run `npm run icons -- <search-term>`; it searches the bundled catalog and prints class names, code points, and official visual-reference URLs. Use `npm run icons -- --all` only when a complete list is necessary.

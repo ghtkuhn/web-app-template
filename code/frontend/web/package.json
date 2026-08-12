@@ -15,6 +15,7 @@
     "lint": "node script/linter.ts",
     "generate:api": "node script/api-contract.ts generate",
     "check:api": "node script/api-contract.ts check",
+    "icons": "node script/icon-catalog.ts",
     "scaffold:route": "node script/scaffold.ts route",
     "scaffold:component": "node script/scaffold.ts component",
     "scaffold:feature": "node script/scaffold.ts feature",
