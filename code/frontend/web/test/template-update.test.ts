@@ -27,6 +27,15 @@ function write(root: string, relativePath: string, content: string): void {
     fs.writeFileSync(target, content);
 }
 
+function writeCanonicalInstructions(
+    roots_: readonly string[],
+    content = 'canonical agent instructions',
+): void {
+    for (const root of roots_) {
+        write(root, 'AGENTS.md', content);
+    }
+}
+
 function archive(root: string, name: string): Buffer {
     const archivePath = path.join(path.dirname(root), `${name}.tar.gz`);
     ProcessFixtureRunner.run('tar', [
@@ -180,6 +189,7 @@ test('three-way planning updates safe files and reports real conflicts', () => {
     write(incoming, 'conflict.txt', 'incoming');
     write(local, 'custom.txt', 'custom');
     write(incoming, 'added.txt', 'added');
+    writeCanonicalInstructions([base, local, incoming]);
 
     const plan = new UpdatePlanner().plan(base, local, incoming);
 
@@ -206,6 +216,7 @@ test('planner handles safe deletion and conflicts on modified deletion', () => {
     write(local, 'delete.txt', 'old');
     write(base, 'keep.txt', 'old');
     write(local, 'keep.txt', 'custom');
+    writeCanonicalInstructions([base, local, incoming]);
 
     const plan = new UpdatePlanner().plan(base, local, incoming);
 
@@ -214,6 +225,51 @@ test('planner handles safe deletion and conflicts on modified deletion', () => {
         relativePath: 'delete.txt',
     });
     expect(plan.conflicts[0]?.relativePath).toBe('keep.txt');
+});
+
+test('agent instructions replace the basis and preserve project rules', () => {
+    const base = temporaryRoot('template-base-');
+    const local = temporaryRoot('template-local-');
+    const incoming = temporaryRoot('template-incoming-');
+    write(base, 'AGENTS.md', 'old template basis');
+    write(base, 'AGENTS-DEFAULT.md', 'old defaults');
+    write(local, 'AGENTS.md', 'locally changed basis');
+    write(local, 'AGENTS-DEFAULT.md', 'locally changed defaults');
+    write(local, 'AGENTS-PROJECT.md', 'project-specific rules');
+    write(incoming, 'AGENTS.md', 'new canonical basis');
+    write(incoming, 'AGENTS-DEFAULT.md', 'must not be installed');
+    write(incoming, 'AGENTS-PROJECT.md', 'must not be installed');
+
+    const plan = new UpdatePlanner().plan(base, local, incoming);
+
+    expect(plan.actions.map((action) => [
+        action.kind,
+        action.relativePath,
+    ])).toEqual([
+        ['delete', 'AGENTS-DEFAULT.md'],
+        ['write', 'AGENTS.md'],
+    ]);
+    expect(plan.conflicts).toEqual([]);
+    expect(fs.readFileSync(
+        path.join(local, 'AGENTS-PROJECT.md'),
+        'utf8',
+    )).toBe('project-specific rules');
+});
+
+test('agent instruction planning rejects missing and unsafe basis files', () => {
+    const base = temporaryRoot('template-base-');
+    const local = temporaryRoot('template-local-');
+    const incoming = temporaryRoot('template-incoming-');
+
+    expect(() => new UpdatePlanner().plan(base, local, incoming)).toThrow(
+        /regular AGENTS\.md/,
+    );
+
+    write(incoming, 'AGENTS.md', 'canonical basis');
+    fs.symlinkSync('missing.md', path.join(local, 'AGENTS.md'));
+    expect(() => new UpdatePlanner().plan(base, local, incoming)).toThrow(
+        /Local AGENTS\.md must be a regular file/,
+    );
 });
 
 test('planner excludes local secrets, runtime data, and agent state', () => {
@@ -232,6 +288,7 @@ test('planner excludes local secrets, runtime data, and agent state', () => {
         write(local, relativePath, 'local');
         write(incoming, relativePath, 'incoming');
     }
+    writeCanonicalInstructions([base, local, incoming]);
 
     const plan = new UpdatePlanner().plan(base, local, incoming);
 
@@ -278,6 +335,7 @@ test('package planning preserves app identity and merges template properties', (
             added: '2.0.0',
         },
     }));
+    writeCanonicalInstructions([base, local, incoming]);
 
     const plan = new UpdatePlanner().plan(base, local, incoming);
     const packageAction = plan.actions.find(
@@ -316,6 +374,7 @@ test('package planning reports property-level concurrent changes', () => {
     write(incoming, 'package.json', JSON.stringify({
         scripts: { verify: 'incoming' },
     }));
+    writeCanonicalInstructions([base, local, incoming]);
 
     const plan = new UpdatePlanner().plan(base, local, incoming);
 
@@ -455,9 +514,12 @@ test('transaction restores files, metadata, and lockfile after install failure',
     const project = temporaryRoot('template-project-');
     const incoming = temporaryRoot('template-incoming-');
     write(project, 'existing.txt', 'old');
+    write(project, 'AGENTS.md', 'old agent basis');
+    write(project, 'AGENTS-DEFAULT.md', 'old default basis');
     write(project, '.template/version.json', '{"version":"1.0.0"}');
     write(project, 'package-lock.json', 'old-lock');
     write(incoming, 'existing.txt', 'new');
+    write(incoming, 'AGENTS.md', 'new canonical basis');
     write(incoming, 'added.txt', 'added');
     write(incoming, 'version.json', '{"version":"2.0.0"}');
     let installs = 0;
@@ -483,6 +545,16 @@ test('transaction restores files, metadata, and lockfile after install failure',
         },
         {
             kind: 'write',
+            relativePath: 'AGENTS.md',
+            sourcePath: path.join(incoming, 'AGENTS.md'),
+            mode: 0o644,
+        },
+        {
+            kind: 'delete',
+            relativePath: 'AGENTS-DEFAULT.md',
+        },
+        {
+            kind: 'write',
             relativePath: 'added.txt',
             sourcePath: path.join(incoming, 'added.txt'),
             mode: 0o644,
@@ -498,6 +570,13 @@ test('transaction restores files, metadata, and lockfile after install failure',
     expect(fs.readFileSync(path.join(project, 'existing.txt'), 'utf8')).toBe(
         'old',
     );
+    expect(fs.readFileSync(path.join(project, 'AGENTS.md'), 'utf8')).toBe(
+        'old agent basis',
+    );
+    expect(fs.readFileSync(
+        path.join(project, 'AGENTS-DEFAULT.md'),
+        'utf8',
+    )).toBe('old default basis');
     expect(fs.existsSync(path.join(project, 'added.txt'))).toBe(false);
     expect(fs.readFileSync(
         path.join(project, '.template/version.json'),
@@ -531,6 +610,12 @@ test('updater continues all resolution types and keeps a failed verify update', 
         name: 'spendwise-like-app',
         version: '9.0.0',
     }));
+    write(base, 'AGENTS.md', 'legacy template basis');
+    write(base, 'AGENTS-DEFAULT.md', 'legacy defaults');
+    write(project, 'AGENTS.md', 'locally changed basis');
+    write(project, 'AGENTS-DEFAULT.md', 'locally changed defaults');
+    write(project, 'AGENTS-PROJECT.md', 'project rules');
+    write(incoming, 'AGENTS.md', 'new canonical basis');
     for (const file of ['local.txt', 'incoming.txt', 'merged.txt']) {
         write(base, file, 'base');
         write(project, file, 'local');
@@ -607,6 +692,14 @@ test('updater continues all resolution types and keeps a failed verify update', 
     );
     expect(fs.existsSync(path.join(project, 'delete.txt'))).toBe(false);
     expect(fs.existsSync(path.join(project, 'added-linter.ts'))).toBe(true);
+    expect(fs.readFileSync(path.join(project, 'AGENTS.md'), 'utf8')).toBe(
+        'new canonical basis',
+    );
+    expect(fs.existsSync(path.join(project, 'AGENTS-DEFAULT.md'))).toBe(false);
+    expect(fs.readFileSync(
+        path.join(project, 'AGENTS-PROJECT.md'),
+        'utf8',
+    )).toBe('project rules');
     expect(JSON.parse(fs.readFileSync(
         path.join(project, 'package.json'),
         'utf8',
@@ -642,6 +735,7 @@ test('extracted releases update a project while preserving local files', () => {
     write(newRoot, 'added.txt', 'added');
     write(local, 'managed.txt', 'old');
     write(local, 'custom.txt', 'custom');
+    writeCanonicalInstructions([oldRoot, newRoot, local]);
     const oldArchive = path.join(fixture, 'old.tar.gz');
     const newArchive = path.join(fixture, 'new.tar.gz');
     ProcessFixtureRunner.run('tar', [
@@ -684,6 +778,95 @@ test('extracted releases update a project while preserving local files', () => {
     expect(fs.readFileSync(path.join(local, 'custom.txt'), 'utf8')).toBe(
         'custom',
     );
+});
+
+test('successive updates keep project instructions and refresh the basis', async () => {
+    const fixture = temporaryRoot('template-agent-migration-');
+    const versions = ['1.0.0', '1.1.0', '1.2.0'];
+    const releaseRoots = new Map<string, string>();
+    for (const version of versions) {
+        const releaseRoot = path.join(fixture, `repository-${version}`);
+        fs.mkdirSync(releaseRoot);
+        write(releaseRoot, 'package.json', JSON.stringify({
+            name: 'template',
+            version,
+            scripts: { verify: 'verify' },
+        }));
+        write(
+            releaseRoot,
+            'AGENTS.md',
+            version === '1.0.0'
+                ? 'legacy entry'
+                : `canonical basis ${version}`,
+        );
+        if (version === '1.0.0') {
+            write(releaseRoot, 'AGENTS-DEFAULT.md', 'legacy defaults');
+        }
+        releaseRoots.set(version, releaseRoot);
+    }
+
+    const project = path.join(fixture, 'project');
+    fs.mkdirSync(project);
+    write(project, 'package.json', JSON.stringify({
+        name: 'application',
+        version: '9.0.0',
+        scripts: { verify: 'verify' },
+    }));
+    write(project, 'AGENTS.md', 'locally changed legacy entry');
+    write(project, 'AGENTS-DEFAULT.md', 'locally changed legacy defaults');
+    write(project, 'AGENTS-PROJECT.md', 'durable project rules');
+    write(project, '.template/version.json', JSON.stringify({
+        version: '1.0.0',
+        repository: 'ghtkuhn/web-app-template',
+    }));
+
+    const releases = new Map(
+        versions.map((version) => [
+            version,
+            archive(
+                releaseRoots.get(version) as string,
+                `agent-release-${version}`,
+            ),
+        ]),
+    );
+    const runner = {
+        run(): string {
+            return '';
+        },
+    } as ProcessRunner;
+    const updater = new TemplateUpdater(runner, () => ({
+        async resolve(version?: string) {
+            const resolved = version ?? '1.2.0';
+            return {
+                version: resolved,
+                tag: `v${resolved}`,
+                archiveUrl: resolved,
+            };
+        },
+        async download(release) {
+            return releases.get(release.version) as Buffer;
+        },
+    }));
+
+    await updater.update(project, '1.1.0');
+    expect(fs.readFileSync(path.join(project, 'AGENTS.md'), 'utf8')).toBe(
+        'canonical basis 1.1.0',
+    );
+    expect(fs.existsSync(path.join(project, 'AGENTS-DEFAULT.md'))).toBe(false);
+    expect(fs.readFileSync(
+        path.join(project, 'AGENTS-PROJECT.md'),
+        'utf8',
+    )).toBe('durable project rules');
+
+    write(project, 'AGENTS.md', 'locally changed canonical basis');
+    await updater.update(project, '1.2.0');
+    expect(fs.readFileSync(path.join(project, 'AGENTS.md'), 'utf8')).toBe(
+        'canonical basis 1.2.0',
+    );
+    expect(fs.readFileSync(
+        path.join(project, 'AGENTS-PROJECT.md'),
+        'utf8',
+    )).toBe('durable project rules');
 });
 
 test('archive extraction rejects traversal before extracting files', () => {

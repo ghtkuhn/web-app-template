@@ -112,13 +112,36 @@ test('agent instructions document every root npm script', () => {
     const packageJson = JSON.parse(
         fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8'),
     ) as { scripts: Record<string, string> };
-    const agents = ['AGENTS-DEFAULT.md', 'AGENTS.md']
-        .map((fileName) =>
-            fs.readFileSync(path.join(projectRoot, fileName), 'utf8'),
-        )
-        .join('\n');
+    const agents = fs.readFileSync(
+        path.join(projectRoot, 'AGENTS.md'),
+        'utf8',
+    );
 
     for (const script of Object.keys(packageJson.scripts)) {
         expect(agents).toContain(`npm run ${script}`);
     }
+});
+
+test('canonical agent instructions own the basis and delegate project rules', () => {
+    const projectRoot = path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        '../../../..',
+    );
+    const agents = fs.readFileSync(
+        path.join(projectRoot, 'AGENTS.md'),
+        'utf8',
+    );
+
+    expect(fs.existsSync(
+        path.join(projectRoot, 'AGENTS-DEFAULT.md'),
+    )).toBe(false);
+    expect(agents).toContain(
+        'you must read `AGENTS-PROJECT.md` if it exists',
+    );
+    expect(agents).toContain(
+        'overrides conflicting rules in this file regardless of wording strength',
+    );
+    expect(agents).toContain(
+        '`AGENTS.md` is template-owned and replaced by every update',
+    );
 });

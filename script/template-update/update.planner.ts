@@ -5,10 +5,12 @@ import type {
     UpdateConflict,
     UpdatePlan,
 } from './interfaces.ts';
+import { AgentInstructionPlanner } from './agent-instruction.planner.ts';
 import { PackageManifestMerger } from './package-manifest.merger.ts';
 
 /** Produces a deterministic three-way update plan. */
 export class UpdatePlanner {
+    private readonly agentInstructions = new AgentInstructionPlanner();
     private readonly packageManifest = new PackageManifestMerger();
 
     /** Compares the old template, local project, and new template. */
@@ -22,8 +24,14 @@ export class UpdatePlanner {
         const paths = [...new Set([
             ...baseFiles,
             ...incomingFiles,
-        ])].sort();
-        const actions: UpdateAction[] = [];
+        ])]
+            .filter((relativePath) =>
+                !this.agentInstructions.owns(relativePath),
+            )
+            .sort();
+        const actions: UpdateAction[] = [
+            ...this.agentInstructions.plan(localRoot, incomingRoot),
+        ];
         const conflicts: UpdateConflict[] = [];
 
         for (const relativePath of paths) {
