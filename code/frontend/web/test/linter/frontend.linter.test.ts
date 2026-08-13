@@ -218,6 +218,95 @@ test('the global style layer must retain the local Tabler import', () => {
     }
 });
 
+test('font sizes and box spacing accept their strict unit contracts', () => {
+    const fixture = new Fixture();
+    try {
+        fixture.write(
+            'shared/styles/main.css',
+            `@import "@picocss/pico";
+             @import "./tabler/tabler-icons.css";
+             :root {
+                 --font-size: clamp(1rem, 2rem, 3rem);
+                 --space: calc(100% - 12px);
+                 --pico-spacing: var(--space);
+             }
+             h1 { font-size: var(--font-size, 4rem); font: inherit; }
+             article {
+                 margin: 0 auto;
+                 padding: var(--space);
+                 gap: min(10%, 24px);
+                 width: 40rem;
+                 line-height: 1.5;
+             }`,
+        );
+        fixture.write(
+            'presentation/desktop/components/ResetText.vue',
+            `<template><p /></template>
+             <style scoped>
+             p { font-size: unset; margin: auto; padding: inherit; }
+             </style>`,
+        );
+        const ids = fixture.issues().map((issue) => issue.ruleId);
+        expect(ids).not.toContain('FRONTEND_FONT_SIZE_UNIT');
+        expect(ids).not.toContain('FRONTEND_FONT_SHORTHAND');
+        expect(ids).not.toContain('FRONTEND_BOX_SPACING_UNIT');
+        expect(ids).not.toContain('DESIGN_TOKEN_USAGE');
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('invalid direct, token, fallback, math, and shorthand units are rejected', () => {
+    const fixture = new Fixture();
+    try {
+        fixture.write(
+            'shared/styles/main.css',
+            `@import "@picocss/pico";
+             @import "./tabler/tabler-icons.css";
+             :root {
+                 --font-size: clamp(1rem, 2vw, 3rem);
+                 --space: calc(100% - 1rem);
+                 --pico-spacing: var(--space);
+             }
+             h1 { font-size: var(--font-size, 12px); }
+             article { margin: var(--space); font: 400 1rem sans-serif; }`,
+        );
+        fixture.write(
+            'presentation/desktop/components/BadUnits.vue',
+            `<template><div /></template>
+             <style scoped>
+             div { font-size: var(--missing); padding: 1rem; }
+             </style>`,
+        );
+        const ids = fixture.issues().map((issue) => issue.ruleId);
+        expect(ids).toContain('FRONTEND_FONT_SIZE_UNIT');
+        expect(ids).toContain('FRONTEND_FONT_SHORTHAND');
+        expect(ids).toContain('FRONTEND_BOX_SPACING_UNIT');
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('bundled Tabler CSS is excluded from application unit contracts', () => {
+    const fixture = new Fixture();
+    try {
+        fixture.write(
+            'shared/styles/main.css',
+            `@import "@picocss/pico";
+             @import "./tabler/tabler-icons.css";`,
+        );
+        fixture.write(
+            'shared/styles/tabler/tabler-icons.css',
+            '.ti { font-size: 16px; margin: 1rem; }',
+        );
+        const ids = fixture.issues().map((issue) => issue.ruleId);
+        expect(ids).not.toContain('FRONTEND_FONT_SIZE_UNIT');
+        expect(ids).not.toContain('FRONTEND_BOX_SPACING_UNIT');
+    } finally {
+        fixture.dispose();
+    }
+});
+
 test('parser failures and CLI exit codes are stable', () => {
     const valid = new Fixture();
     const invalid = new Fixture();

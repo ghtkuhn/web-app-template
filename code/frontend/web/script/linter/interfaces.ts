@@ -15,6 +15,19 @@ export interface SourceDependency {
 export interface StyleBlock {
     content: string;
     scoped: boolean;
+    declarations: StyleDeclaration[];
+    atRules: StyleAtRule[];
+    imports: string[];
+}
+
+export interface StyleDeclaration {
+    property: string;
+    value: string;
+}
+
+export interface StyleAtRule {
+    name: string;
+    parameters: string;
 }
 
 export interface SourceAnalysis {

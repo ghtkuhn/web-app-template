@@ -46,7 +46,7 @@ import { authComposable } from '../../../core/composables/auth.composable.ts';
 
 .desktop-navigation {
     display: flex;
-    gap: 2rem;
+    gap: 32px;
 }
 
 .desktop-navigation a {
@@ -58,6 +58,6 @@ import { authComposable } from '../../../core/composables/auth.composable.ts';
 }
 
 .desktop-content {
-    padding: 8rem 0;
+    padding: 128px 0;
 }
 </style>

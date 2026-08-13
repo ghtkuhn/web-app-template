@@ -3,9 +3,12 @@ import path from 'node:path';
 import { parse as parseTypeScript } from '@babel/parser';
 import { parse as parseVue } from '@vue/compiler-sfc';
 import type { SFCDescriptor } from '@vue/compiler-sfc';
+import { parse as parseCss } from 'postcss';
+import parseCssValue from 'postcss-value-parser';
 import type {
     SourceAnalysis,
     SourceDependency,
+    StyleBlock,
 } from './interfaces.ts';
 
 type AstNode = {
@@ -27,6 +30,7 @@ export class SourceAnalyzer {
         const extension = path.extname(filePath);
         const analysis = this.empty(filePath, source);
         if (extension === '.css') {
+            analysis.styles = [this.styleBlock(filePath, source, false)];
             return analysis;
         }
 
@@ -72,10 +76,69 @@ export class SourceAnalyzer {
         analysis.hasNormalScript = Boolean(script);
         analysis.hasScriptSetup = Boolean(scriptSetup);
         analysis.scriptLanguage = scriptSetup?.lang ?? script?.lang ?? null;
-        analysis.styles = descriptor.styles.map((style) => ({
-            content: style.content,
-            scoped: Boolean(style.scoped),
-        }));
+        analysis.styles = descriptor.styles.map((style, index) =>
+            this.styleBlock(
+                `${analysis.filePath}?style=${index}`,
+                style.content,
+                Boolean(style.scoped),
+            ),
+        );
+    }
+
+    private styleBlock(
+        filePath: string,
+        content: string,
+        scoped: boolean,
+    ): StyleBlock {
+        const root = parseCss(content, { from: filePath });
+        const declarations: StyleBlock['declarations'] = [];
+        const atRules: StyleBlock['atRules'] = [];
+        const imports: string[] = [];
+        root.walkDecls((declaration) => {
+            declarations.push({
+                property: declaration.prop,
+                value: declaration.value,
+            });
+        });
+        root.walkAtRules((atRule) => {
+            atRules.push({
+                name: atRule.name,
+                parameters: atRule.params,
+            });
+            if (atRule.name.toLowerCase() === 'import') {
+                const importedSource = this.importedStyleSource(
+                    atRule.params,
+                );
+                if (importedSource) {
+                    imports.push(importedSource);
+                }
+            }
+        });
+        return {
+            content,
+            scoped,
+            declarations,
+            atRules,
+            imports,
+        };
+    }
+
+    private importedStyleSource(parameters: string): string | null {
+        const parsed = parseCssValue(parameters);
+        const first = parsed.nodes.find((node) => node.type !== 'space');
+        if (!first) {
+            return null;
+        }
+        if (first.type === 'string' || first.type === 'word') {
+            return first.value;
+        }
+        if (first.type === 'function' && first.value === 'url') {
+            return parseCssValue.stringify(first.nodes).replace(
+                /^(?:['"])(.*)(?:['"])$/u,
+                '$1',
+            );
+        }
+        return null;
     }
 
     private vueContent(descriptor: SFCDescriptor): string {

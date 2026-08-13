@@ -50,9 +50,8 @@ export class ArchitectureRuleSet {
         const isGlobalStyle = relative.endsWith(
             'code/frontend/web/src/shared/styles/main.css',
         );
-        const importsPico = /@import\s+["']@picocss\/pico["']/u.test(
-            analysis.source,
-        );
+        const imports = analysis.styles.flatMap((style) => style.imports);
+        const importsPico = imports.includes('@picocss/pico');
         if (isGlobalStyle && !importsPico) {
             issues.push(this.issue(
                 analysis,
@@ -68,10 +67,8 @@ export class ArchitectureRuleSet {
             ));
         }
         if (
-            analysis.isVue &&
-            /(?:picocss\.com|cdn\.jsdelivr\.net\/npm\/@picocss)/iu.test(
-                analysis.source,
-            )
+            imports.some((source) => this.isPicoRemoteSource(source)) ||
+            (analysis.isVue && this.hasPicoRemoteLink(analysis.source))
         ) {
             issues.push(this.issue(
                 analysis,
@@ -92,8 +89,9 @@ export class ArchitectureRuleSet {
         const isTablerStyle = relative.endsWith(
             'code/frontend/web/src/shared/styles/tabler/tabler-icons.css',
         );
-        const importsTabler = /@import\s+["'][^"']*tabler-icons\.css["']/u.test(
-            analysis.source,
+        const imports = analysis.styles.flatMap((style) => style.imports);
+        const importsTabler = imports.some((source) =>
+            source.endsWith('tabler-icons.css'),
         );
         if (isGlobalStyle && !importsTabler) {
             issues.push(this.issue(
@@ -110,9 +108,8 @@ export class ArchitectureRuleSet {
             ));
         }
         if (
-            /(?:@import\s+(?:url\()?['"]?https?:\/\/[^)'"\s]*tabler|<link\b[^>]*href=["']https?:\/\/[^"']*tabler)/iu.test(
-                analysis.source,
-            )
+            imports.some((source) => this.isTablerRemoteSource(source)) ||
+            (analysis.isVue && this.hasTablerRemoteLink(analysis.source))
         ) {
             issues.push(this.issue(
                 analysis,
@@ -121,6 +118,27 @@ export class ArchitectureRuleSet {
             ));
         }
         return issues;
+    }
+
+    private isPicoRemoteSource(source: string): boolean {
+        return /^https?:\/\//iu.test(source) &&
+            /(?:picocss\.com|@picocss\/pico)/iu.test(source);
+    }
+
+    private hasPicoRemoteLink(source: string): boolean {
+        return /<link\b[^>]*href=["']https?:\/\/[^"']*(?:picocss\.com|@picocss\/pico)[^"']*["']/iu.test(
+            source,
+        );
+    }
+
+    private isTablerRemoteSource(source: string): boolean {
+        return /^https?:\/\//iu.test(source) && /tabler/iu.test(source);
+    }
+
+    private hasTablerRemoteLink(source: string): boolean {
+        return /<link\b[^>]*href=["']https?:\/\/[^"']*tabler[^"']*["']/iu.test(
+            source,
+        );
     }
 
     private placementIssues(analysis: SourceAnalysis): LintIssue[] {
@@ -532,13 +550,15 @@ export class ArchitectureRuleSet {
                 ),
             );
         }
-        const styleSource = [
-            analysis.source,
-            ...analysis.styles.map((style) => style.content),
-        ].join('\n');
         if (
             ['presentation', 'shared'].includes(layer) &&
-            /@media[^{]*(?:min|max)-width/i.test(styleSource)
+            analysis.styles.some((style) =>
+                style.atRules.some(
+                    (atRule) =>
+                        atRule.name.toLowerCase() === 'media' &&
+                        /(?:min|max)-width/iu.test(atRule.parameters),
+                ),
+            )
         ) {
             issues.push(
                 this.issue(
@@ -564,13 +584,34 @@ export class ArchitectureRuleSet {
     }
 
     private hasRawTokenValue(analysis: SourceAnalysis): boolean {
-        const declaration =
-            /(?:color|background(?:-color)?|font-size|border-radius|z-index)\s*:\s*([^;]+);/gi;
-        const styles = analysis.styles
-            .map((style) => style.content)
-            .join('\n');
-        return [...styles.matchAll(declaration)].some(
-            (match) => !match[1].trim().startsWith('var('),
+        const resetValues = new Set([
+            'inherit',
+            'initial',
+            'revert',
+            'revert-layer',
+            'unset',
+        ]);
+        const tokenProperties = new Set([
+            'background',
+            'background-color',
+            'border-radius',
+            'color',
+            'font-size',
+            'z-index',
+        ]);
+        return analysis.styles.some((style) =>
+            style.declarations.some(
+                (declaration) => {
+                    const property = declaration.property.toLowerCase();
+                    const value = declaration.value.trim().toLowerCase();
+                    const allowedFontReset =
+                        property === 'font-size' &&
+                        (value === '0' || resetValues.has(value));
+                    return tokenProperties.has(property) &&
+                        !declaration.value.trim().startsWith('var(') &&
+                        !allowedFontReset;
+                },
+            ),
         );
     }
 

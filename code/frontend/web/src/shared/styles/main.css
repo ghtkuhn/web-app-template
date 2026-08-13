@@ -12,13 +12,13 @@
     --color-focus: #3457d5;
     --font-size-small: 0.8rem;
     --font-size-body: 1.1rem;
-    --font-size-display: clamp(2.5rem, 8vw, 5rem);
+    --font-size-display: 4rem;
     --line-height-tight: 1;
     --line-height-body: 1.7;
-    --space-3: 0.75rem;
-    --space-5: 1.25rem;
-    --space-6: 1.5rem;
-    --space-8: 2rem;
+    --space-3: 12px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-8: 32px;
     --radius-medium: 0.75rem;
     --border-width: 1px;
     --layer-navigation: 10;
@@ -68,7 +68,7 @@ a {
 }
 
 .eyebrow {
-    margin: 0 0 1rem;
+    margin: 0 0 16px;
     color: var(--color-accent);
     font-size: var(--font-size-small);
     font-weight: 750;
@@ -86,7 +86,7 @@ h1 {
 
 .page-copy {
     max-width: 60ch;
-    margin: 1.5rem 0 0;
+    margin: 24px 0 0;
     color: var(--color-muted);
     font-size: var(--font-size-body);
     line-height: var(--line-height-body);
@@ -94,6 +94,6 @@ h1 {
 
 .action-link {
     display: inline-block;
-    margin-top: 2rem;
+    margin-top: 32px;
     font-weight: 700;
 }

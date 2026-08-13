@@ -16,6 +16,11 @@
         "**/test/deployment.test.ts",
         "**/generated/**"
     ],
+    "ignoreDependencies": [
+        "@babel/parser",
+        "@vue/compiler-sfc",
+        "postcss-value-parser"
+    ],
     "workspaces": {
         "patterns": [
             "code/backend",

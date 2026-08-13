@@ -9,6 +9,7 @@ import type {
 } from './interfaces.ts';
 import { PathResolver, type PresentationName } from './path.resolver.ts';
 import { SourceAnalyzer } from './source.analyzer.ts';
+import { StyleRuleSet } from './style.rule-set.ts';
 
 const PRESENTATIONS: readonly PresentationName[] = [
     'desktop',
@@ -22,10 +23,12 @@ export class FrontendLinter {
     private readonly scanner = new FileScanner();
     private readonly analyzer = new SourceAnalyzer();
     private readonly rules: ArchitectureRuleSet;
+    private readonly styleRules: StyleRuleSet;
 
     constructor(projectRoot: string) {
         this.paths = new PathResolver(projectRoot);
         this.rules = new ArchitectureRuleSet(this.paths);
+        this.styleRules = new StyleRuleSet(this.paths);
     }
 
     public run(): LintResult {
@@ -49,6 +52,7 @@ export class FrontendLinter {
                 });
             }
         }
+        issues.push(...this.styleRules.evaluate(analyses));
         issues.push(...this.parityIssues(analyses));
         return {
             filesChecked: files.length,

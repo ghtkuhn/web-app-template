@@ -104,7 +104,7 @@ test('rejects traversal through a symbolic-link parent', () => {
     expect(fs.existsSync(path.join(outside, 'file.txt'))).toBe(true);
 });
 
-test('AGENTS-DEFAULT documents every root npm script', () => {
+test('agent instructions document every root npm script', () => {
     const projectRoot = path.resolve(
         path.dirname(fileURLToPath(import.meta.url)),
         '../../../..',
@@ -112,10 +112,11 @@ test('AGENTS-DEFAULT documents every root npm script', () => {
     const packageJson = JSON.parse(
         fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8'),
     ) as { scripts: Record<string, string> };
-    const agents = fs.readFileSync(
-        path.join(projectRoot, 'AGENTS-DEFAULT.md'),
-        'utf8',
-    );
+    const agents = ['AGENTS-DEFAULT.md', 'AGENTS.md']
+        .map((fileName) =>
+            fs.readFileSync(path.join(projectRoot, fileName), 'utf8'),
+        )
+        .join('\n');
 
     for (const script of Object.keys(packageJson.scripts)) {
         expect(agents).toContain(`npm run ${script}`);

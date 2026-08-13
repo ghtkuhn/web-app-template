@@ -32,7 +32,7 @@ import { healthComposable } from '../../../core/composables/health.composable.ts
 .desktop-home {
     display: grid;
     grid-template-columns: minmax(0, 2fr) minmax(18rem, 1fr);
-    column-gap: 5rem;
+    column-gap: 80px;
 }
 
 .desktop-home .eyebrow {

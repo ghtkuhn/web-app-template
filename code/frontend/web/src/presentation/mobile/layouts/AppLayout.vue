@@ -27,7 +27,7 @@ import { authComposable } from '../../../core/composables/auth.composable.ts';
 <style scoped>
 .mobile-shell {
     min-height: 100vh;
-    padding: 0 1.25rem 5rem;
+    padding: 0 20px 80px;
 }
 
 .mobile-header {
@@ -43,7 +43,7 @@ import { authComposable } from '../../../core/composables/auth.composable.ts';
 }
 
 .mobile-content {
-    padding: 3.5rem 0;
+    padding: 56px 0;
 }
 
 .mobile-navigation {
