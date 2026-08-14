@@ -37,6 +37,7 @@
     "icons": "npm run icons --workspace @app/web --",
     "scaffold:file": "node code/backend/script/scaffold-file.ts",
     "scaffold:module": "node code/backend/script/scaffold-module.ts",
+    "scaffold:operation": "node code/backend/script/scaffold-operation.ts",
     "scaffold:test": "node code/backend/script/scaffold-test.ts",
     "scaffold:route": "npm run scaffold:route --workspace @app/web --",
     "scaffold:component": "npm run scaffold:component --workspace @app/web --",

@@ -244,6 +244,9 @@ export class ProjectRuleSet {
         const basename = path.basename(filePath, '.ts');
         const auxiliary = this.paths.auxiliaryPath(filePath);
         if (auxiliary) {
+            if (layer === 'service' && basename.endsWith('.operation')) {
+                return `${this.pascal(basename.slice(0, -'.operation'.length))}Operation`;
+            }
             const suffix = `${layer}-aux`;
             if (!basename.endsWith(`.${suffix}`)) {
                 return null;

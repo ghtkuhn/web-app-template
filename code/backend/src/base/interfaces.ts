@@ -62,8 +62,14 @@ export interface IBaseApiAux {}
 /** Marker contract for private controller-layer auxiliary classes. */
 export interface IBaseControllerAux {}
 
-/** Marker contract for private service-layer auxiliary classes. */
+/** Legacy marker retained until Service Aux implementations migrate to Operations. */
 export interface IBaseServiceAux {}
+
+/** Executes one typed application operation with injected Service dependencies. */
+export interface IBaseServiceOperation<TInput, TOutput> {
+    /** Executes the complete application operation for one typed input. */
+    execute(input: TInput): TOutput | Promise<TOutput>;
+}
 
 /** Marker contract for private store-layer auxiliary classes. */
 export interface IBaseStoreAux {}

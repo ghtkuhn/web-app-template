@@ -40,6 +40,7 @@
         "module:dependency": "node script/module-tools.ts dependency",
         "scaffold:file": "node script/scaffold-file.ts",
         "scaffold:module": "node script/scaffold-module.ts",
+        "scaffold:operation": "node script/scaffold-operation.ts",
         "scaffold:test": "node script/scaffold-test.ts",
         "typecheck": "tsc --project tsconfig.json",
         "verify:module": "node script/module-tools.ts verify",

@@ -167,7 +167,7 @@ export class DomainRuleSet {
         const auxiliaryBases: Record<string, readonly string[]> = {
             api: ['BaseApiAux'],
             controller: ['BaseControllerAux'],
-            service: ['BaseServiceAux'],
+            service: ['BaseServiceAux', 'BaseServiceOperation'],
             store: ['BaseStoreAux'],
         };
         const allowed = auxiliary
