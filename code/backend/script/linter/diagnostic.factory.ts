@@ -36,6 +36,7 @@ const EVIDENCE_BY_RULE: Readonly<
     LAYER_IMPORT_DIRECTION: 'imports',
     UNDECLARED_WORKSPACE_DEPENDENCY: 'imports',
     MODULE_POST_CONSTRUCTION_WIRING: 'methodCalls',
+    DATABASE_DRIVER_OWNERSHIP: 'imports',
 };
 
 /** Converts internal rule findings into the public structured contract. */

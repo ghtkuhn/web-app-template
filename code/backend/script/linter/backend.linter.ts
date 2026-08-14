@@ -7,6 +7,7 @@ import { DomainRuleSet } from './domain.rule-set.ts';
 import { FileScanner } from './file.scanner.ts';
 import { InfrastructureRuleSet } from './infrastructure.rule-set.ts';
 import { ModuleTestRuleSet } from './module-test.rule-set.ts';
+import { MigrationRuleSet } from './migration.rule-set.ts';
 import type {
     BackendLinterConfig,
     LintIssue,
@@ -42,6 +43,7 @@ export class BackendLinter {
     private readonly transportRules: TransportRuleSet;
     private readonly workspaceRules: WorkspaceRuleSet;
     private readonly moduleTestRules: ModuleTestRuleSet;
+    private readonly migrationRules: MigrationRuleSet;
     private readonly serviceOperationRules: ServiceOperationRuleSet;
     private readonly project: ProjectModel;
 
@@ -67,6 +69,7 @@ export class BackendLinter {
             this.project,
         );
         this.moduleTestRules = new ModuleTestRuleSet(this.paths);
+        this.migrationRules = new MigrationRuleSet(this.paths);
         this.serviceOperationRules = new ServiceOperationRuleSet(this.paths);
     }
 
@@ -89,6 +92,7 @@ export class BackendLinter {
             ...this.coverageRules.configurationIssues(),
             ...this.workspaceConfigurationIssues(),
             ...this.moduleTestRules.configurationIssues(),
+            ...this.migrationRules.evaluate(),
         ];
         const analyses: SourceAnalysis[] = [];
 

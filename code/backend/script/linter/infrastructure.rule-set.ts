@@ -29,21 +29,26 @@ export class InfrastructureRuleSet {
                 issues.push(
                     this.issue(
                         analysis,
-                        'DATABASE_DRIVER_IMPORT',
+                        'DATABASE_DRIVER_OWNERSHIP',
                         `Database driver '${dependency.source}' may only be imported by base.database.ts.`,
                     ),
                 );
             }
         }
 
-        const connectionPatterns = [
-            /\bnew\s+Kysely\s*</,
-            /\bnew\s+Kysely\s*\(/,
-            /\bnew\s+SqliteDialect\s*\(/,
-            /\bnew\s+SqliteDriver\s*\(/,
-        ];
+        const connectionClasses = new Set([
+            'Kysely',
+            'SqliteDialect',
+            'SqliteDriver',
+            'PostgresDialect',
+            'Pool',
+        ]);
         if (
-            connectionPatterns.some((pattern) => pattern.test(analysis.source))
+            analysis.constructorCalls.some(
+                (constructor) =>
+                    constructor.className !== null &&
+                    connectionClasses.has(constructor.className),
+            )
         ) {
             issues.push(
                 this.issue(

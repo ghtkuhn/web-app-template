@@ -59,6 +59,12 @@ const FIXES: Readonly<Record<string, string>> = {
         'Run npm run module:sync for the containing module.',
     SERVICE_AUX_FORBIDDEN:
         'Replace the Service Aux with a *.operation.ts class extending BaseServiceOperation.',
+    MIGRATION_DIALECT_STRUCTURE:
+        'Keep migrations directly under src/migration/sqlite and src/migration/postgres using matching numbered kebab-case filenames.',
+    MIGRATION_DIALECT_PARITY:
+        'Add the same logical migration basename to the missing dialect catalog and implement its dialect-specific physical schema change.',
+    DATABASE_DRIVER_OWNERSHIP:
+        'Remove the driver import or connection construction; only src/base/base.database.ts owns database drivers and connections.',
 };
 
 /** Owns stable remediation guidance for backend architecture rules. */

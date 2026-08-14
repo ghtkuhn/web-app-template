@@ -335,13 +335,25 @@ declared in `code/backend/package.json`.
 `src/database.ts` is the complete current Kysely schema. Every persistent Domain
 Object table includes its identity, timestamp, and soft-delete metadata.
 
-Every schema change requires both:
+Every schema change requires all of the following:
 
 1. an update to `src/database.ts`; and
-2. one ordered migration under `src/migration/`.
+2. one ordered SQLite migration under `src/migration/sqlite/`; and
+3. the same logical migration basename under `src/migration/postgres/`.
+
+The paired files represent the same logical change, but may use different
+physical SQL types and dialect-specific implementation details. Migration files
+must be direct `<three-digits>-<kebab-case>.migration.ts` children of their
+dialect catalog. Resource generation writes both variants as one transaction
+and rolls both back if either write fails.
 
 Stores use the injected database client. Driver imports and connection creation
-belong exclusively to `src/base/base.database.ts`.
+belong exclusively to `src/base/base.database.ts`; Domain modules never import
+`pg`, `better-sqlite3`, a dialect, a pool, or another connection factory.
+
+SQLite migration startup retains its verified pre-migration backup and
+integrity checks. PostgreSQL migration startup relies on Kysely's transactional
+migration lock; PostgreSQL backup and restore are external deployment concerns.
 
 Third-party adapters may own tables only when every table is listed in the
 central `EXTERNAL_TABLE_OWNERS` registry, typed in `database.ts`, and created by

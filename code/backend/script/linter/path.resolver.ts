@@ -162,6 +162,11 @@ export class PathResolver {
         return this.backendSourceRoot;
     }
 
+    /** Returns the root containing dialect-specific migration catalogs. */
+    public migrationRoot(): string {
+        return path.join(this.backendSourceRoot, 'migration');
+    }
+
     /** Returns the backend workspace package manifest. */
     public packageManifest(): string {
         return path.join(this.projectRoot, 'code/backend/package.json');

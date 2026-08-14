@@ -457,12 +457,81 @@ test('database drivers and connections are owned by base.database', () => {
             issues
                 .filter((issue) => issue.ruleId.startsWith('DATABASE_'))
                 .map((issue) => issue.ruleId),
-            ['DATABASE_CONNECTION_CREATION', 'DATABASE_DRIVER_IMPORT'],
+            ['DATABASE_CONNECTION_CREATION', 'DATABASE_DRIVER_OWNERSHIP'],
         );
+        const ownership = issues.find(
+            (issue) => issue.ruleId === 'DATABASE_DRIVER_OWNERSHIP',
+        );
+        assert.equal(ownership?.location.start.line, 2);
+        assert.match(ownership?.fix ?? '', /base\.database\.ts/u);
         assert.ok(
             issues.some(
                 (issue) => issue.ruleId === 'LAYER_IMPORT_DIRECTION',
             ),
+        );
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('migration dialect catalogs require strict structure and parity', () => {
+    const fixture = new FixtureProject();
+    try {
+        fixture.write(
+            'code/backend/src/migration/sqlite/001-create-example.migration.ts',
+            'export class CreateExampleMigration {}',
+        );
+        fixture.write(
+            'code/backend/src/migration/postgres/001-create-example.migration.ts',
+            'export class CreateExampleMigration {}',
+        );
+        assert.ok(
+            !new BackendLinter({ projectRoot: fixture.root })
+                .run()
+                .issues.some((issue) =>
+                    issue.ruleId.startsWith('MIGRATION_DIALECT_'),
+                ),
+        );
+
+        fixture.remove(
+            'code/backend/src/migration/postgres/001-create-example.migration.ts',
+        );
+        fixture.write(
+            'code/backend/src/migration/sqlite/nested/invalid.migration.ts',
+            'export class InvalidMigration {}',
+        );
+        const issues = new BackendLinter({ projectRoot: fixture.root })
+            .run()
+            .issues.filter((issue) =>
+                issue.ruleId.startsWith('MIGRATION_DIALECT_'),
+            );
+        assert.deepEqual(
+            issues.map((issue) => issue.ruleId),
+            ['MIGRATION_DIALECT_PARITY', 'MIGRATION_DIALECT_STRUCTURE'],
+        );
+        assert.equal(issues[0].location.start.line, 1);
+        assert.match(issues[0].fix, /same logical migration basename/u);
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('PostgreSQL drivers and pools remain base infrastructure concerns', () => {
+    const fixture = new FixtureProject();
+    try {
+        fixture.write(
+            'code/backend/src/module/example/store/example.store.ts',
+            `import { Pool } from 'pg';
+             export class ExampleStore extends BaseStore {
+                 connect() { return new Pool(); }
+             }`,
+        );
+        const issues = new BackendLinter({ projectRoot: fixture.root })
+            .run()
+            .issues.filter((issue) => issue.ruleId.startsWith('DATABASE_'));
+        assert.deepEqual(
+            issues.map((issue) => issue.ruleId),
+            ['DATABASE_CONNECTION_CREATION', 'DATABASE_DRIVER_OWNERSHIP'],
         );
     } finally {
         fixture.dispose();

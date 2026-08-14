@@ -16,6 +16,7 @@ export const BACKEND_TEST_FILES = [
     'test/linter/backend.linter.test.ts',
     'test/linter/linter.cli.test.ts',
     'test/linter/source.analyzer.test.ts',
+    'test/migration.pair.writer.test.ts',
     'test/module.tools.test.ts',
     'test/node.communication.test.ts',
     'test/openapi.contract.test.ts',
