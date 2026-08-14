@@ -159,6 +159,12 @@ database provider owns backups, retention, point-in-time recovery, restore
 testing, and disaster recovery. Application deployment never claims that an
 external PostgreSQL backup exists and never runs `pg_dump` or `pg_restore`.
 
+The repository's complete `npm run verify` command requires a running Docker
+daemon. It starts a uniquely named disposable PostgreSQL 17 container from a
+pinned image digest, verifies connections, migrations, schema types, and Auth,
+and stops the container in success and failure paths. The test never uses or
+modifies the PostgreSQL server configured by a deployment profile.
+
 When `auth` is included in `backend.activeModules`, the profile must list
 `BETTER_AUTH_SECRET` in `requiredSecrets`; the secret remains Environment-only.
 Set `backend.authRegistrationEnabled` explicitly and keep the frontend runtime

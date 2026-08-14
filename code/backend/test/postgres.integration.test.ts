@@ -3,14 +3,16 @@ import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
-import { Kysely, PostgresDialect } from 'kysely';
+import { sql } from 'kysely';
 import { Pool } from 'pg';
-import type { Database } from '../src/database.ts';
-import { up as migrateAuth } from '../src/migration/postgres/002-better-auth.migration.ts';
+import { DatabaseManager } from '../src/base/base.database.ts';
+import { MigrationManager } from '../src/base/base.migration.ts';
+import { config } from '../src/config.ts';
 import { AuthService } from '../src/module/auth/service/auth.service.ts';
 import { AuthRuntimeService } from '../src/module/auth/service/auth-runtime.service.ts';
 
-const POSTGRES_IMAGE = 'postgres:17-alpine';
+const POSTGRES_IMAGE =
+    'postgres@sha256:d4bb0a8c1b7bb2e29f976d099e7bfb9a5d8858cffe9e46b35cd302cd1f1f8168';
 const POSTGRES_PASSWORD = 'template-postgres-integration-password';
 const BASE_URL = 'http://localhost:3000';
 const ORIGIN = 'http://localhost:8080';
@@ -53,6 +55,16 @@ class PostgresTestServer {
             this.stop();
             throw error;
         }
+    }
+
+    /** Returns a connection URL with a replacement password for failure tests. */
+    public connectionStringWithPassword(password: string): string {
+        if (!this.connectionStringValue) {
+            throw new Error('PostgreSQL test server has not started.');
+        }
+        const url = new URL(this.connectionStringValue);
+        url.password = password;
+        return url.toString();
     }
 
     /** Stops the disposable container; Docker removes it automatically. */
@@ -131,16 +143,68 @@ function authRequest(path: string, init: RequestInit = {}): Request {
     });
 }
 
-test('Better Auth supports PostgreSQL registration, Bearer sessions, and logout', async () => {
+test('PostgreSQL runtime, migrations, and Better Auth work end to end', async () => {
     const server = new PostgresTestServer();
     const connectionString = await server.start();
-    const database = new Kysely<Database>({
-        dialect: new PostgresDialect({
-            pool: new Pool({ connectionString }),
-        }),
-    });
+    const originalDatabase = config.database;
+    config.database = {
+        type: 'postgres',
+        connectionString,
+        poolMax: 4,
+        idleTimeoutMs: 1000,
+        connectionTimeoutMs: 1000,
+        releaseId: 'postgres-integration',
+    };
     try {
-        await migrateAuth(database);
+        const [database, concurrentDatabase] = await Promise.all([
+            DatabaseManager.getInstance(),
+            DatabaseManager.getInstance(),
+        ]);
+        assert.equal(database, concurrentDatabase);
+        assert.equal(
+            (await sql<{ value: number }>`select 1 as value`.execute(database))
+                .rows[0]?.value,
+            1,
+        );
+
+        const [firstMigration, concurrentMigration] = await Promise.all([
+            MigrationManager.migrate(database),
+            MigrationManager.migrate(database),
+        ]);
+        assert.equal(firstMigration.backupCreated, false);
+        assert.equal(concurrentMigration.backupCreated, false);
+        assert.equal(
+            (await MigrationManager.migrate(database)).backupCreated,
+            false,
+        );
+        const migrations = await sql<{ name: string }>`
+            select name
+            from kysely_migration
+            order by name
+        `.execute(database);
+        assert.deepEqual(
+            migrations.rows.map((migration) => migration.name),
+            ['001-initialize.migration', '002-better-auth.migration'],
+        );
+        const physicalColumns = await sql<{
+            column_name: string;
+            data_type: string;
+        }>`
+            select column_name, data_type
+            from information_schema.columns
+            where table_schema = 'public'
+                and table_name = 'auth_user'
+                and column_name in ('emailVerified', 'createdAt')
+            order by column_name
+        `.execute(database);
+        assert.deepEqual(physicalColumns.rows, [
+            {
+                column_name: 'createdAt',
+                data_type: 'timestamp with time zone',
+            },
+            { column_name: 'emailVerified', data_type: 'boolean' },
+        ]);
+
         const disabled = new AuthRuntimeService({
             database,
             databaseType: 'postgres',
@@ -198,8 +262,36 @@ test('Better Auth supports PostgreSQL registration, Bearer sessions, and logout'
         );
         assert.equal(logout.status, 200);
         assert.equal(await service.getSession({ bearerToken }), null);
+
+        await DatabaseManager.close();
+        const recreated = await DatabaseManager.getInstance();
+        assert.notEqual(recreated, database);
+        assert.equal(
+            (await sql<{ value: number }>`select 1 as value`.execute(recreated))
+                .rows[0]?.value,
+            1,
+        );
+
+        await DatabaseManager.close();
+        const invalidPassword = 'integration-password-must-not-leak';
+        config.database = {
+            ...config.database,
+            connectionString:
+                server.connectionStringWithPassword(invalidPassword),
+        };
+        const failingDatabase = await DatabaseManager.getInstance();
+        let connectionFailure: unknown;
+        try {
+            await sql`select 1`.execute(failingDatabase);
+        } catch (error: unknown) {
+            connectionFailure = error;
+        }
+        assert.ok(connectionFailure instanceof Error);
+        assert.doesNotMatch(connectionFailure.message, /integration-password/u);
+        assert.doesNotMatch(connectionFailure.message, /postgresql:\/\//u);
     } finally {
-        await database.destroy();
+        await DatabaseManager.close();
+        config.database = originalDatabase;
         server.stop();
     }
 });

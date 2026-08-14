@@ -1,3 +1,4 @@
+// fallow-ignore-file unused-file -- Loaded dynamically by Kysely's migration provider.
 // fallow-ignore-file code-duplication -- Declarative schema mirrors the SQLite catalog.
 import type { Kysely } from 'kysely';
 import type { Database } from '../../database.ts';

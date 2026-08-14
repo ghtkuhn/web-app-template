@@ -355,6 +355,12 @@ SQLite migration startup retains its verified pre-migration backup and
 integrity checks. PostgreSQL migration startup relies on Kysely's transactional
 migration lock; PostgreSQL backup and restore are external deployment concerns.
 
+Root verification starts a disposable PostgreSQL 17 container from a pinned
+image digest and proves the real driver lifecycle, migration catalog, physical
+schema, and Better Auth protocol. Docker must therefore be installed and its
+daemon must be running; the verification fails explicitly instead of skipping
+PostgreSQL when Docker is unavailable.
+
 Third-party adapters may own tables only when every table is listed in the
 central `EXTERNAL_TABLE_OWNERS` registry, typed in `database.ts`, and created by
 an application migration. Those tables are accessed only through the named
