@@ -24,7 +24,7 @@ class TestHandler extends BaseHandler<Request> {
 }
 
 class TestModule extends BaseModule {
-    constructor(handler?: TestHandler) {
+    constructor(handler?: BaseHandler<Request>) {
         super();
         if (handler) this.registerHandler('http', handler);
     }
@@ -54,6 +54,7 @@ class FetchProtocolHandler extends DelegatedHttpHandler {
 class StreamingFetchProtocolHandler extends DelegatedHttpHandler {
     public requestWasAborted = false;
     public readerWasCancelled = false;
+    public abortReason: unknown;
     private readonly secondChunkDelayMs: number | null;
 
     constructor(secondChunkDelayMs: number | null) {
@@ -64,6 +65,7 @@ class StreamingFetchProtocolHandler extends DelegatedHttpHandler {
     protected async processRequest(input: Request): Promise<Response> {
         input.signal.addEventListener('abort', () => {
             this.requestWasAborted = true;
+            this.abortReason = input.signal.reason;
         });
         const encoder = new TextEncoder();
         const handler = this;
@@ -89,6 +91,24 @@ class StreamingFetchProtocolHandler extends DelegatedHttpHandler {
     }
 }
 
+class SlowHandler extends BaseHandler<Request> {
+    public requestWasAborted = false;
+    private readonly delayMs: number;
+
+    constructor(delayMs: number) {
+        super();
+        this.delayMs = delayMs;
+    }
+
+    protected async processRequest(input: Request): Promise<HandlerResult> {
+        input.signal.addEventListener('abort', () => {
+            this.requestWasAborted = true;
+        });
+        await new Promise<void>((resolve) => setTimeout(resolve, this.delayMs));
+        return { success: true, data: { completed: true } };
+    }
+}
+
 class DelegatedModule extends BaseModule {
     constructor() {
         super();
@@ -108,12 +128,14 @@ async function withServer(
     run: (server: HttpServer) => Promise<void>,
     maxBodyBytes?: number,
     allowedOrigins?: readonly string[],
+    requestTimeoutMs?: number,
 ): Promise<void> {
     const server = new HttpServer({
         port: 0,
         modules,
         maxBodyBytes,
         allowedOrigins,
+        requestTimeoutMs,
     });
     await server.start();
     try {
@@ -246,7 +268,80 @@ test('client disconnect aborts delegated requests and cancels their readers', as
             await waitFor(
                 () => handler.requestWasAborted && handler.readerWasCancelled,
             );
+            assert.equal(
+                handler.abortReason instanceof DOMException
+                    ? handler.abortReason.name
+                    : undefined,
+                'AbortError',
+            );
         },
+        undefined,
+        undefined,
+        1_000,
+    );
+});
+
+test('processing deadline aborts a slow handler before response headers', async () => {
+    const handler = new SlowHandler(150);
+    await withServer(
+        { health: new TestModule(handler) },
+        async (server) => {
+            const response = await fetch(
+                `http://127.0.0.1:${server.port}/api/health`,
+            );
+            assert.equal(response.status, 408);
+            assert.deepEqual(await response.json(), {
+                success: false,
+                error: 'Request timed out',
+            });
+            assert.equal(handler.requestWasAborted, true);
+        },
+        undefined,
+        undefined,
+        30,
+    );
+});
+
+test('processing deadline cancels delegated streams after response headers', async () => {
+    const handler = new StreamingFetchProtocolHandler(200);
+    await withServer(
+        { stream: new StreamingDelegatedModule(handler) },
+        async (server) => {
+            const response = await fetch(
+                `http://127.0.0.1:${server.port}/api/stream`,
+            );
+            const reader = response.body?.getReader();
+            assert.ok(reader);
+            assert.equal(
+                new TextDecoder().decode((await reader.read()).value),
+                'first',
+            );
+            await assert.rejects(reader.read());
+            await waitFor(
+                () => handler.requestWasAborted && handler.readerWasCancelled,
+            );
+        },
+        undefined,
+        undefined,
+        30,
+    );
+});
+
+test('completed requests clear their processing deadline', async () => {
+    const handler = new TestHandler();
+    await withServer(
+        { test: new TestModule(handler) },
+        async (server) => {
+            const response = await fetch(
+                `http://127.0.0.1:${server.port}/api/test`,
+            );
+            assert.equal(response.status, 200);
+            await new Promise<void>((resolve) => setTimeout(resolve, 50));
+            assert.equal(handler.request?.signal.aborted, false);
+        },
+        undefined,
+        undefined,
+        20,
     );
 });
 

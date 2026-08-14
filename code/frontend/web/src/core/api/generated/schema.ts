@@ -779,6 +779,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Too Many Requests. You have exceeded the rate limit. Try again later. */
             429: {
                 headers: {
@@ -856,6 +865,15 @@ export interface operations {
                     "application/json": {
                         message?: string;
                     };
+                };
+            };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Too Many Requests. You have exceeded the rate limit. Try again later. */
@@ -946,6 +964,15 @@ export interface operations {
                     "application/json": {
                         message?: string;
                     };
+                };
+            };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Too Many Requests. You have exceeded the rate limit. Try again later. */
@@ -1050,6 +1077,15 @@ export interface operations {
                     "application/json": {
                         message?: string;
                     };
+                };
+            };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Too Many Requests. You have exceeded the rate limit. Try again later. */
@@ -1180,6 +1216,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Too Many Requests. You have exceeded the rate limit. Try again later. */
             429: {
                 headers: {
@@ -1285,6 +1330,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Too Many Requests. You have exceeded the rate limit. Try again later. */
             429: {
                 headers: {
@@ -1382,6 +1436,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Too Many Requests. You have exceeded the rate limit. Try again later. */
             429: {
                 headers: {
@@ -1466,6 +1529,15 @@ export interface operations {
                     "application/json": {
                         message?: string;
                     };
+                };
+            };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Too Many Requests. You have exceeded the rate limit. Try again later. */
@@ -1567,6 +1639,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Too Many Requests. You have exceeded the rate limit. Try again later. */
             429: {
                 headers: {
@@ -1654,6 +1735,15 @@ export interface operations {
                     "application/json": {
                         message?: string;
                     };
+                };
+            };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Too Many Requests. You have exceeded the rate limit. Try again later. */
@@ -1747,6 +1837,15 @@ export interface operations {
                     "application/json": {
                         message?: string;
                     };
+                };
+            };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Too Many Requests. You have exceeded the rate limit. Try again later. */
@@ -1866,6 +1965,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Too Many Requests. You have exceeded the rate limit. Try again later. */
             429: {
                 headers: {
@@ -1962,6 +2070,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Too Many Requests. You have exceeded the rate limit. Try again later. */
             429: {
                 headers: {
@@ -2046,6 +2163,15 @@ export interface operations {
                     "application/json": {
                         message?: string;
                     };
+                };
+            };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Too Many Requests. You have exceeded the rate limit. Try again later. */
@@ -2135,6 +2261,15 @@ export interface operations {
                     "application/json": {
                         message?: string;
                     };
+                };
+            };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Too Many Requests. You have exceeded the rate limit. Try again later. */
@@ -2239,6 +2374,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Too Many Requests. You have exceeded the rate limit. Try again later. */
             429: {
                 headers: {
@@ -2335,6 +2479,15 @@ export interface operations {
                     "application/json": {
                         message?: string;
                     };
+                };
+            };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Too Many Requests. You have exceeded the rate limit. Try again later. */
@@ -2434,6 +2587,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Too Many Requests. You have exceeded the rate limit. Try again later. */
             429: {
                 headers: {
@@ -2528,6 +2690,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Too Many Requests. You have exceeded the rate limit. Try again later. */
             429: {
                 headers: {
@@ -2619,6 +2790,15 @@ export interface operations {
                     "application/json": {
                         message?: string;
                     };
+                };
+            };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Too Many Requests. You have exceeded the rate limit. Try again later. */
@@ -2717,6 +2897,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Too Many Requests. You have exceeded the rate limit. Try again later. */
             429: {
                 headers: {
@@ -2808,6 +2997,15 @@ export interface operations {
                     "application/json": {
                         message?: string;
                     };
+                };
+            };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Too Many Requests. You have exceeded the rate limit. Try again later. */
@@ -2921,6 +3119,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Too Many Requests. You have exceeded the rate limit. Try again later. */
             429: {
                 headers: {
@@ -3025,6 +3232,15 @@ export interface operations {
                     "application/json": {
                         message?: string;
                     };
+                };
+            };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Too Many Requests. You have exceeded the rate limit. Try again later. */
@@ -3160,6 +3376,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Too Many Requests. You have exceeded the rate limit. Try again later. */
             429: {
                 headers: {
@@ -3250,6 +3475,15 @@ export interface operations {
                     "application/json": {
                         message?: string;
                     };
+                };
+            };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Too Many Requests. You have exceeded the rate limit. Try again later. */
@@ -3386,6 +3620,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Unprocessable Entity. User already exists or failed to create user. */
             422: {
                 headers: {
@@ -3492,6 +3735,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Too Many Requests. You have exceeded the rate limit. Try again later. */
             429: {
                 headers: {
@@ -3584,6 +3836,15 @@ export interface operations {
                     "application/json": {
                         message?: string;
                     };
+                };
+            };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Too Many Requests. You have exceeded the rate limit. Try again later. */
@@ -3683,6 +3944,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Too Many Requests. You have exceeded the rate limit. Try again later. */
             429: {
                 headers: {
@@ -3776,6 +4046,15 @@ export interface operations {
                     "application/json": {
                         message?: string;
                     };
+                };
+            };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             /** @description Too Many Requests. You have exceeded the rate limit. Try again later. */
@@ -3873,6 +4152,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Too Many Requests. You have exceeded the rate limit. Try again later. */
             429: {
                 headers: {
@@ -3926,6 +4214,15 @@ export interface operations {
             };
             /** @description The Health module is not available. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The request exceeded the configured processing deadline. */
+            408: {
                 headers: {
                     [name: string]: unknown;
                 };

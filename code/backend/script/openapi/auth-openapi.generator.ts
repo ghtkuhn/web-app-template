@@ -133,6 +133,20 @@ export class AuthOpenApiGenerator {
                                     ? description
                                     : `${method.toUpperCase()} ${route}`,
                         security: this.normalizeSecurity(operation.security),
+                        responses: {
+                            ...this.record(operation.responses),
+                            '408': {
+                                description:
+                                    'The request exceeded the configured processing deadline.',
+                                content: {
+                                    'application/json': {
+                                        schema: {
+                                            $ref: '#/components/schemas/ErrorResponse',
+                                        },
+                                    },
+                                },
+                            },
+                        },
                     },
                 ];
             }),

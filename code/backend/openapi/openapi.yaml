@@ -255,6 +255,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "429":
                     content:
                         "application/json":
@@ -330,6 +336,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "429":
                     content:
                         "application/json":
@@ -423,6 +435,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "429":
                     content:
                         "application/json":
@@ -530,6 +548,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "429":
                     content:
                         "application/json":
@@ -670,6 +694,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "429":
                     content:
                         "application/json":
@@ -774,6 +804,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "429":
                     content:
                         "application/json":
@@ -874,6 +910,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "429":
                     content:
                         "application/json":
@@ -951,6 +993,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "429":
                     content:
                         "application/json":
@@ -1046,6 +1094,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "429":
                     content:
                         "application/json":
@@ -1132,6 +1186,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "429":
                     content:
                         "application/json":
@@ -1223,6 +1283,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "429":
                     content:
                         "application/json":
@@ -1399,6 +1465,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "429":
                     content:
                         "application/json":
@@ -1504,6 +1576,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "429":
                     content:
                         "application/json":
@@ -1582,6 +1660,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "429":
                     content:
                         "application/json":
@@ -1664,6 +1748,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "429":
                     content:
                         "application/json":
@@ -1764,6 +1854,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "429":
                     content:
                         "application/json":
@@ -1860,6 +1956,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "429":
                     content:
                         "application/json":
@@ -1954,6 +2056,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "429":
                     content:
                         "application/json":
@@ -2047,6 +2155,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "429":
                     content:
                         "application/json":
@@ -2135,6 +2249,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "429":
                     content:
                         "application/json":
@@ -2228,6 +2348,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "429":
                     content:
                         "application/json":
@@ -2316,6 +2442,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "429":
                     content:
                         "application/json":
@@ -2415,6 +2547,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "429":
                     content:
                         "application/json":
@@ -2533,6 +2671,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "429":
                     content:
                         "application/json":
@@ -2733,6 +2877,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "429":
                     content:
                         "application/json":
@@ -2818,6 +2968,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "429":
                     content:
                         "application/json":
@@ -2967,6 +3123,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "422":
                     content:
                         "application/json":
@@ -3068,6 +3230,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "429":
                     content:
                         "application/json":
@@ -3158,6 +3326,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "429":
                     content:
                         "application/json":
@@ -3252,6 +3426,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "429":
                     content:
                         "application/json":
@@ -3352,6 +3532,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "429":
                     content:
                         "application/json":
@@ -3443,6 +3629,12 @@ paths:
                                         type: "string"
                                 type: "object"
                     description: "Not Found. The requested resource was not found."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
                 "429":
                     content:
                         "application/json":
@@ -3490,6 +3682,12 @@ paths:
                             schema:
                                 "$ref": "#/components/schemas/ErrorResponse"
                     description: "The Health module is not available."
+                "408":
+                    content:
+                        "application/json":
+                            schema:
+                                "$ref": "#/components/schemas/ErrorResponse"
+                    description: "The request exceeded the configured processing deadline."
             security: []
             summary: "Read backend health"
             tags:

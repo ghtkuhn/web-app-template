@@ -112,6 +112,10 @@ export class HttpServer {
         response: ServerResponse,
     ): Promise<void> {
         const abortController = new AbortController();
+        const deadlineTimer = setTimeout(() => {
+            abortController.abort(this.createTransportError(408));
+        }, this.requestTimeoutMs);
+        deadlineTimer.unref();
         const abortRequest = (): void => {
             if (!abortController.signal.aborted) {
                 abortController.abort();
@@ -125,75 +129,112 @@ export class HttpServer {
         request.once('aborted', abortRequest);
         response.once('close', abortOnResponseClose);
         try {
-            if (!this.applyOriginPolicy(request, response)) {
-                await this.writeResult(
-                    response,
-                    { success: false, error: 'Forbidden', statusCode: 403 },
-                    request.method,
-                );
-                return;
-            }
-            if (request.method === 'OPTIONS') {
-                response.statusCode = 204;
-                response.end();
-                return;
-            }
-            const host = request.headers.host ?? `localhost:${this.port}`;
-            const url = new URL(request.url ?? '/', `http://${host}`);
-            const segments = url.pathname.split('/').filter(Boolean);
-
-            if (segments[0] !== 'api' || !segments[1]) {
-                await this.writeResult(
-                    response,
-                    { success: false, error: 'Not found', statusCode: 404 },
-                    request.method,
-                );
-                return;
-            }
-
-            // The transport selects only the module; the handler owns the remaining path.
-            const module = this.modules.get(segments[1]);
-            if (!module) {
-                await this.writeResult(
-                    response,
-                    { success: false, error: 'Not found', statusCode: 404 },
-                    request.method,
-                );
-                return;
-            }
-
-            const webRequest = await this.createWebRequest(
+            await this.processRequest(
                 request,
-                url,
-                abortController.signal,
-            );
-            const result = await module.dispatch('http', webRequest);
-            await this.writeResult(
                 response,
-                result,
-                request.method,
                 abortController.signal,
             );
         } catch (error: unknown) {
-            // Do not attempt a second response after a socket-level failure or disconnect.
-            if (response.headersSent || response.destroyed) {
-                return;
-            }
-
-            const statusCode = this.getTransportStatus(error);
-            const message =
-                statusCode === 413
-                    ? 'Request body too large'
-                    : 'Invalid request';
-            await this.writeResult(
-                response,
-                { success: false, error: message, statusCode },
-                request.method,
-            );
+            await this.writeTransportFailure(request, response, error);
         } finally {
+            clearTimeout(deadlineTimer);
             request.off('aborted', abortRequest);
             response.off('close', abortOnResponseClose);
         }
+    }
+
+    /** Applies transport policy, resolves a module, and delegates one request. */
+    private async processRequest(
+        request: IncomingMessage,
+        response: ServerResponse,
+        signal: AbortSignal,
+    ): Promise<void> {
+        if (!this.applyOriginPolicy(request, response)) {
+            await this.writeResult(
+                response,
+                { success: false, error: 'Forbidden', statusCode: 403 },
+                request.method,
+                signal,
+            );
+            return;
+        }
+        if (request.method === 'OPTIONS') {
+            response.statusCode = 204;
+            await this.endResponse(response, undefined, signal);
+            return;
+        }
+        const route = this.resolveRoute(request);
+        if (!route) {
+            await this.writeResult(
+                response,
+                { success: false, error: 'Not found', statusCode: 404 },
+                request.method,
+                signal,
+            );
+            return;
+        }
+        const webRequest = await this.createWebRequest(
+            request,
+            route.url,
+            signal,
+        );
+        const result = await this.awaitWithSignal(
+            route.module.dispatch('http', webRequest),
+            signal,
+        );
+        await this.writeResult(response, result, request.method, signal);
+    }
+
+    /** Resolves only the module segment while preserving the complete public URL. */
+    private resolveRoute(
+        request: IncomingMessage,
+    ): { url: URL; module: BaseModule } | null {
+        const url = this.createRequestUrl(request);
+        const module = this.modules.get(this.getModuleName(url));
+        return module ? { url, module } : null;
+    }
+
+    /** Builds the absolute Fetch URL from one native request. */
+    private createRequestUrl(request: IncomingMessage): URL {
+        const host = request.headers.host ?? `localhost:${this.port}`;
+        return new URL(request.url ?? '/', `http://${host}`);
+    }
+
+    /** Extracts the module owner from the literal public API route contract. */
+    private getModuleName(url: URL): string {
+        return /^\/api\/([^/]+)(?:\/|$)/u.exec(url.pathname)?.[1] ?? '';
+    }
+
+    /** Writes one safe transport error unless the socket already owns a response. */
+    private async writeTransportFailure(
+        request: IncomingMessage,
+        response: ServerResponse,
+        error: unknown,
+    ): Promise<void> {
+        if (response.headersSent || response.destroyed) {
+            return;
+        }
+        const statusCode = this.getTransportStatus(error);
+        await this.writeResult(
+            response,
+            {
+                success: false,
+                error: this.getTransportMessage(statusCode),
+                statusCode,
+            },
+            request.method,
+        );
+    }
+
+    /** Maps one controlled transport status to its stable public message. */
+    private getTransportMessage(statusCode: number): string {
+        if (statusCode === 408) {
+            return 'Request timed out';
+        }
+        if (statusCode === 413) {
+            return 'Request body too large';
+        }
+        return 'Invalid request';
     }
 
     /** Applies strict browser-origin and preflight response headers. */
@@ -228,7 +269,7 @@ export class HttpServer {
         const body =
             method === 'GET' || method === 'HEAD'
                 ? undefined
-                : await this.readBody(request);
+                : await this.readBody(request, signal);
 
         return new Request(url, {
             method,
@@ -241,29 +282,89 @@ export class HttpServer {
     /**
      * Buffers the incoming body while enforcing the configured byte limit.
      */
-    private async readBody(request: IncomingMessage): Promise<Buffer> {
+    private async readBody(
+        request: IncomingMessage,
+        signal: AbortSignal,
+    ): Promise<Buffer> {
         return new Promise<Buffer>((resolve, reject) => {
             const chunks: Buffer[] = [];
             let totalBytes = 0;
 
-            request.on('data', (chunk: Buffer) => {
+            const cleanup = (): void => {
+                request.off('data', onData);
+                request.off('end', onEnd);
+                request.off('aborted', onAborted);
+                request.off('error', onError);
+                signal.removeEventListener('abort', onSignalAbort);
+            };
+            const settle = (
+                complete: () => void,
+            ): void => {
+                cleanup();
+                complete();
+            };
+            const onData = (chunk: Buffer): void => {
                 totalBytes += chunk.length;
                 if (totalBytes > this.maxBodyBytes) {
-                    const error = new Error(
-                        'Request body too large',
-                    ) as Error & { statusCode: number };
-                    error.statusCode = 413;
-                    reject(error);
-                    // Drain the remaining stream so the connection can be reused safely.
+                    settle(() => reject(this.createTransportError(413)));
                     request.resume();
                     return;
                 }
                 chunks.push(chunk);
-            });
-            request.once('end', () => resolve(Buffer.concat(chunks)));
-            request.once('aborted', () => reject(new Error('Request aborted')));
-            request.once('error', reject);
+            };
+            const onEnd = (): void => {
+                settle(() => resolve(Buffer.concat(chunks)));
+            };
+            const onAborted = (): void => {
+                settle(() => reject(new Error('Request aborted')));
+            };
+            const onError = (error: Error): void => {
+                settle(() => reject(error));
+            };
+            const onSignalAbort = (): void => {
+                settle(() => reject(signal.reason));
+                request.resume();
+            };
+
+            request.on('data', onData);
+            request.once('end', onEnd);
+            request.once('aborted', onAborted);
+            request.once('error', onError);
+            signal.addEventListener('abort', onSignalAbort, { once: true });
+            if (signal.aborted) {
+                onSignalAbort();
+            }
         });
+    }
+
+    /** Rejects pending work as soon as its request signal reaches a terminal state. */
+    private async awaitWithSignal<T>(
+        work: Promise<T>,
+        signal: AbortSignal,
+    ): Promise<T> {
+        if (signal.aborted) {
+            throw signal.reason;
+        }
+        return new Promise<T>((resolve, reject) => {
+            const onAbort = (): void => {
+                reject(signal.reason);
+            };
+            signal.addEventListener('abort', onAbort, { once: true });
+            work.then(resolve, reject).finally(() => {
+                signal.removeEventListener('abort', onAbort);
+            });
+        });
+    }
+
+    /** Creates one status-bearing error for controlled transport failures. */
+    private createTransportError(statusCode: 408 | 413): Error {
+        const error = new Error(
+            statusCode === 408
+                ? 'Request timed out'
+                : 'Request body too large',
+        ) as Error & { statusCode: number };
+        error.statusCode = statusCode;
+        return error;
     }
 
     /**
@@ -274,9 +375,9 @@ export class HttpServer {
             typeof error === 'object' &&
             error !== null &&
             'statusCode' in error &&
-            error.statusCode === 413
+            (error.statusCode === 408 || error.statusCode === 413)
         ) {
-            return 413;
+            return error.statusCode;
         }
         return 400;
     }
@@ -299,7 +400,7 @@ export class HttpServer {
         response.setHeader('X-Content-Type-Options', 'nosniff');
 
         if (statusCode === 204 || method === 'HEAD') {
-            response.end();
+            await this.endResponse(response, undefined, signal);
             return;
         }
 
@@ -313,7 +414,7 @@ export class HttpServer {
                 error: result.error ?? 'Internal Server Error',
             };
         }
-        response.end(JSON.stringify(payload));
+        await this.endResponse(response, JSON.stringify(payload), signal);
     }
 
     /** Writes a delegated Fetch response without replacing protocol semantics. */
@@ -327,12 +428,12 @@ export class HttpServer {
         this.copyFetchHeaders(response, result.headers);
         response.setHeader('X-Content-Type-Options', 'nosniff');
         if (this.hasNoResponseBody(result, method)) {
-            response.end();
+            await this.endResponse(response, undefined, signal);
             return;
         }
         const reader = result.body?.getReader();
         if (!reader) {
-            response.end();
+            await this.endResponse(response, undefined, signal);
             return;
         }
         await this.writeResponseBody(response, reader, signal);
@@ -354,8 +455,19 @@ export class HttpServer {
         } catch (error: unknown) {
             this.destroyFailedResponse(response, error, signal);
         } finally {
+            this.closeAbortedResponse(response, signal);
             signal?.removeEventListener('abort', cancelReader);
             reader.releaseLock();
+        }
+    }
+
+    /** Closes an unfinished response after deadline or disconnect cancellation. */
+    private closeAbortedResponse(
+        response: ServerResponse,
+        signal?: AbortSignal,
+    ): void {
+        if (signal?.aborted && !response.destroyed) {
+            response.destroy();
         }
     }
 
@@ -372,7 +484,7 @@ export class HttpServer {
             }
             await this.writeResponseChunk(response, chunk.value, signal);
         }
-        this.endResponseIfOpen(response, signal);
+        await this.endResponseIfOpen(response, signal);
     }
 
     /** Determines whether the connection can accept another source chunk. */
@@ -385,7 +497,10 @@ export class HttpServer {
 
     /** Ends a response only while the connection is still writable. */
     // fallow-ignore-next-line complexity -- Abort, destruction, and completion are independent socket states.
-    private endResponseIfOpen(response: ServerResponse, signal?: AbortSignal): void {
+    private async endResponseIfOpen(
+        response: ServerResponse,
+        signal?: AbortSignal,
+    ): Promise<void> {
         if (signal?.aborted) {
             return;
         }
@@ -395,7 +510,49 @@ export class HttpServer {
         if (response.writableEnded) {
             return;
         }
-        response.end();
+        await this.endResponse(response, undefined, signal);
+    }
+
+    /** Ends one response and waits for flush, disconnect, failure, or cancellation. */
+    private async endResponse(
+        response: ServerResponse,
+        body?: string,
+        signal?: AbortSignal,
+    ): Promise<void> {
+        if (response.destroyed || response.writableEnded) {
+            return;
+        }
+        await new Promise<void>((resolve, reject) => {
+            const cleanup = (): void => {
+                response.off('close', onClose);
+                response.off('error', onError);
+                signal?.removeEventListener('abort', onAbort);
+            };
+            const complete = (): void => {
+                cleanup();
+                resolve();
+            };
+            const onClose = (): void => {
+                complete();
+            };
+            const onError = (error: Error): void => {
+                cleanup();
+                reject(error);
+            };
+            const onAbort = (): void => {
+                if (!response.destroyed) {
+                    response.destroy();
+                }
+                complete();
+            };
+            response.once('close', onClose);
+            response.once('error', onError);
+            signal?.addEventListener('abort', onAbort, { once: true });
+            response.end(body, complete);
+            if (signal?.aborted) {
+                onAbort();
+            }
+        });
     }
 
     /** Writes one chunk and waits for the writable socket when its buffer is full. */

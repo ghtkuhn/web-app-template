@@ -37,6 +37,12 @@ paths:
                         application/json:
                             schema:
                                 $ref: "#/components/schemas/ErrorResponse"
+                "408":
+                    description: The request exceeded the configured processing deadline.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: "#/components/schemas/ErrorResponse"
 components:
     schemas:
         HealthResponse:
