@@ -2,6 +2,9 @@ import type { BaseModule } from './base.module.ts';
 import type { Kysely } from 'kysely';
 import type { Database } from '../database.ts';
 
+/** Database dialects supported by the application infrastructure. */
+export type DatabaseType = 'sqlite' | 'postgres';
+
 /** Transport gateways supported by every module. */
 export type TransportType = 'http' | 'websocket' | 'cli' | 'node';
 
@@ -172,6 +175,8 @@ export interface ModuleDependencies {
 export interface ApplicationInfrastructure {
     /** Shared database client owned by the application lifecycle. */
     readonly database: Kysely<Database>;
+    /** Dialect implemented by the shared database client. */
+    readonly databaseType: DatabaseType;
 }
 
 /** Declarative construction metadata for one module. */

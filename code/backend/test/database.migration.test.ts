@@ -19,10 +19,13 @@ class FailingBackupManager extends DatabaseBackupManager {
 
 test('pending migrations create one valid backup and do not repeat', async () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'migration-'));
-    const originalPath = config.database.sqlitePath;
-    const originalRelease = config.database.releaseId;
-    config.database.sqlitePath = path.join(directory, 'backend.sqlite');
-    config.database.releaseId = 'test-release';
+    const originalDatabase = config.database;
+    config.database = {
+        type: 'sqlite',
+        sqlitePath: path.join(directory, 'backend.sqlite'),
+        backupRetention: 10,
+        releaseId: 'test-release',
+    };
 
     try {
         const database = await DatabaseManager.getInstance();
@@ -40,16 +43,21 @@ test('pending migrations create one valid backup and do not repeat', async () =>
         assert.equal(new DatabaseBackupManager().list().length, 1);
     } finally {
         await DatabaseManager.close();
-        config.database.sqlitePath = originalPath;
-        config.database.releaseId = originalRelease;
+        config.database = originalDatabase;
         fs.rmSync(directory, { recursive: true, force: true });
     }
 });
 
 test('restore validates the backup and atomically replaces SQLite data', async () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'restore-'));
-    const originalPath = config.database.sqlitePath;
-    config.database.sqlitePath = path.join(directory, 'backend.sqlite');
+    const sqlitePath = path.join(directory, 'backend.sqlite');
+    const originalDatabase = config.database;
+    config.database = {
+        type: 'sqlite',
+        sqlitePath,
+        backupRetention: 10,
+        releaseId: 'test',
+    };
 
     try {
         const database = await DatabaseManager.getInstance();
@@ -61,12 +69,12 @@ test('restore validates the backup and atomically replaces SQLite data', async (
         const backup = await backups.create('restore-test', '001', '002');
         await sql`insert into restore_test values ('after')`.execute(database);
         await DatabaseManager.close();
-        fs.writeFileSync(`${config.database.sqlitePath}-wal`, 'stale');
-        fs.writeFileSync(`${config.database.sqlitePath}-shm`, 'stale');
+        fs.writeFileSync(`${sqlitePath}-wal`, 'stale');
+        fs.writeFileSync(`${sqlitePath}-shm`, 'stale');
 
         backups.restore(backup.id);
-        assert.equal(fs.existsSync(`${config.database.sqlitePath}-wal`), false);
-        assert.equal(fs.existsSync(`${config.database.sqlitePath}-shm`), false);
+        assert.equal(fs.existsSync(`${sqlitePath}-wal`), false);
+        assert.equal(fs.existsSync(`${sqlitePath}-shm`), false);
         const restored = await DatabaseManager.getInstance();
         const rows = await sql<{ value: string }>`
             select value from restore_test order by value
@@ -74,15 +82,20 @@ test('restore validates the backup and atomically replaces SQLite data', async (
         assert.deepEqual(rows.rows, [{ value: 'before' }]);
     } finally {
         await DatabaseManager.close();
-        config.database.sqlitePath = originalPath;
+        config.database = originalDatabase;
         fs.rmSync(directory, { recursive: true, force: true });
     }
 });
 
 test('backup failure prevents pending migrations from executing', async () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'backup-failure-'));
-    const originalPath = config.database.sqlitePath;
-    config.database.sqlitePath = path.join(directory, 'backend.sqlite');
+    const originalDatabase = config.database;
+    config.database = {
+        type: 'sqlite',
+        sqlitePath: path.join(directory, 'backend.sqlite'),
+        backupRetention: 10,
+        releaseId: 'test',
+    };
     const failingBackups = new FailingBackupManager();
 
     try {
@@ -99,7 +112,7 @@ test('backup failure prevents pending migrations from executing', async () => {
         assert.equal(applied.rows[0]?.count, 0);
     } finally {
         await DatabaseManager.close();
-        config.database.sqlitePath = originalPath;
+        config.database = originalDatabase;
         fs.rmSync(directory, { recursive: true, force: true });
     }
 });

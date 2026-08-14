@@ -9,6 +9,11 @@ export class DatabaseMaintenanceCli {
     public async run(arguments_: readonly string[]): Promise<number> {
         try {
             const [command, backupId] = arguments_;
+            if (config.database.type !== 'sqlite') {
+                throw new Error(
+                    'Database maintenance commands currently require DB_TYPE=sqlite.',
+                );
+            }
             const backups = new DatabaseBackupManager();
             if (command === 'list') {
                 for (const backup of backups.list()) {

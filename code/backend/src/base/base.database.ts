@@ -1,4 +1,8 @@
-import { Kysely, SqliteDialect as SqliteDriver } from 'kysely';
+import {
+    Kysely,
+    PostgresDialect,
+    SqliteDialect as SqliteDriver,
+} from 'kysely';
 import type { Database } from '../database.ts';
 import { config } from '../config.ts';
 import path from 'path';
@@ -6,6 +10,7 @@ import fs from 'node:fs';
 import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
 import type BetterSqlite3Type from 'better-sqlite3';
+import { Pool } from 'pg';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
@@ -25,8 +30,8 @@ export class DatabaseManager {
     /**
      * Returns the process-wide Kysely instance.
      *
-     * If no instance exists, creates the configured SQLite connection. Concurrent
-     * callers receive the same application-owned client.
+     * If no instance exists, creates the configured SQLite or PostgreSQL client.
+     * Concurrent callers receive the same application-owned client.
      *
      * @returns The initialized shared database abstraction.
      */
@@ -38,26 +43,31 @@ export class DatabaseManager {
             return this.instance;
         }
 
-        if (config.database.type !== 'sqlite') {
-            throw new Error(
-                `Unsupported database type '${config.database.type}'. Only 'sqlite' is currently supported.`,
-            );
-        }
-
         console.log('🗄️ Initializing Database Connection...');
 
-        const dbPath = path.resolve(PROJECT_ROOT, config.database.sqlitePath);
-        fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-        const nativeDatabase = new BetterSqlite3(dbPath);
-
-        const dialect = new SqliteDriver({
-            database: nativeDatabase,
-        });
-
-        this.instance = new Kysely<Database>({
-            dialect,
-        });
-        this.nativeDatabase = nativeDatabase;
+        if (config.database.type === 'sqlite') {
+            const dbPath = path.resolve(
+                PROJECT_ROOT,
+                config.database.sqlitePath,
+            );
+            fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+            const nativeDatabase = new BetterSqlite3(dbPath);
+            this.instance = new Kysely<Database>({
+                dialect: new SqliteDriver({ database: nativeDatabase }),
+            });
+            this.nativeDatabase = nativeDatabase;
+        } else {
+            const pool = new Pool({
+                connectionString: config.database.connectionString,
+                max: config.database.poolMax,
+                idleTimeoutMillis: config.database.idleTimeoutMs,
+                connectionTimeoutMillis:
+                    config.database.connectionTimeoutMs,
+            });
+            this.instance = new Kysely<Database>({
+                dialect: new PostgresDialect({ pool }),
+            });
+        }
 
         return this.instance;
     }
@@ -88,6 +98,9 @@ export class DatabaseManager {
 
     /** Returns the absolute configured SQLite database path. */
     public static getSqlitePath(): string {
+        if (config.database.type !== 'sqlite') {
+            throw new Error('SQLite file access requires DB_TYPE=sqlite.');
+        }
         return path.resolve(PROJECT_ROOT, config.database.sqlitePath);
     }
 
@@ -98,7 +111,9 @@ export class DatabaseManager {
      */
     public static async backup(destination: string): Promise<void> {
         if (!this.nativeDatabase) {
-            throw new Error('Database connection is not initialized.');
+            throw new Error(
+                'SQLite backup requires an initialized SQLite connection.',
+            );
         }
         await this.nativeDatabase.backup(destination);
     }
@@ -109,8 +124,13 @@ export class DatabaseManager {
      * @throws Error when no active connection exists or integrity verification fails.
      */
     public static assertIntegrity(): void {
+        if (!this.nativeDatabase) {
+            throw new Error(
+                'SQLite integrity checks require an initialized SQLite connection.',
+            );
+        }
         const result = this.nativeDatabase
-            ?.pragma('integrity_check', { simple: true });
+            .pragma('integrity_check', { simple: true });
         if (result !== 'ok') {
             throw new Error(`SQLite integrity check failed: ${String(result)}`);
         }

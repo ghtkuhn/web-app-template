@@ -54,6 +54,7 @@ class EmptyModule extends BaseModule {}
 
 const infrastructure: ApplicationInfrastructure = {
     database: {} as Kysely<Database>,
+    databaseType: 'sqlite',
 };
 
 test('health exposes a typed in-process status operation', async () => {

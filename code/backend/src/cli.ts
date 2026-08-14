@@ -17,6 +17,7 @@ class CliApplication {
             const database = await DatabaseManager.getInstance();
             const modules = new ModuleRegistry(config.modules.active, {
                 database,
+                databaseType: config.database.type,
             }).create();
             const runner = new CliRunner({ modules });
             process.exitCode = await runner.run(argv);

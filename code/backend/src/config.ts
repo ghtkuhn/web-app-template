@@ -1,7 +1,173 @@
-/**
- * Central Configuration Management
- * Provides type-safe access to environment variables with sensible defaults for development.
- */
+import path from 'node:path';
+import type { DatabaseType } from './base/interfaces.ts';
+
+/** Shared configuration fields used by every database dialect. */
+interface CommonDatabaseConfig {
+    /** Stable release identifier recorded in migration backup metadata. */
+    releaseId: string;
+}
+
+/** Validated SQLite runtime configuration. */
+export interface SqliteDatabaseConfig extends CommonDatabaseConfig {
+    /** Selects the embedded SQLite dialect. */
+    type: 'sqlite';
+    /** Project-relative or absolute SQLite database path. */
+    sqlitePath: string;
+    /** Number of successful migration backups retained locally. */
+    backupRetention: number;
+}
+
+/** Validated PostgreSQL runtime configuration. */
+export interface PostgresDatabaseConfig extends CommonDatabaseConfig {
+    /** Selects the external PostgreSQL dialect. */
+    type: 'postgres';
+    /** Secret connection URL passed directly to the PostgreSQL pool. */
+    connectionString: string;
+    /** Maximum number of connections retained by the process pool. */
+    poolMax: number;
+    /** Time after which an unused pool connection may be closed. */
+    idleTimeoutMs: number;
+    /** Maximum time allowed while establishing a pool connection. */
+    connectionTimeoutMs: number;
+}
+
+/** Runtime database configuration narrowed by the selected dialect. */
+export type DatabaseConfig = SqliteDatabaseConfig | PostgresDatabaseConfig;
+
+/** Parses and validates the database-specific environment contract. */
+export class DatabaseConfigLoader {
+    /** Builds one validated database configuration from environment values. */
+    public static load(environment: NodeJS.ProcessEnv): DatabaseConfig {
+        const type = environment.DB_TYPE || 'sqlite';
+        if (!this.isDatabaseType(type)) {
+            throw new Error(
+                `DB_TYPE must be 'sqlite' or 'postgres'; received '${type}'.`,
+            );
+        }
+        return type === 'sqlite'
+            ? this.loadSqlite(environment)
+            : this.loadPostgres(environment);
+    }
+
+    private static loadSqlite(
+        environment: NodeJS.ProcessEnv,
+    ): SqliteDatabaseConfig {
+        return {
+            type: 'sqlite',
+            sqlitePath:
+                environment.DB_SQLITE_PATH || 'data/sqlite/backend.sqlite',
+            backupRetention: this.parseInteger(
+                environment.DB_BACKUP_RETENTION,
+                10,
+                'DB_BACKUP_RETENTION',
+                1,
+            ),
+            releaseId:
+                environment.DEPLOYMENT_RELEASE_ID || 'development',
+        };
+    }
+
+    private static loadPostgres(
+        environment: NodeJS.ProcessEnv,
+    ): PostgresDatabaseConfig {
+        const connectionString = environment.DATABASE_URL || '';
+        this.assertPostgresUrl(connectionString, environment.NODE_ENV);
+        return {
+            type: 'postgres',
+            connectionString,
+            poolMax: this.parseInteger(
+                environment.DB_POSTGRES_POOL_MAX,
+                10,
+                'DB_POSTGRES_POOL_MAX',
+                1,
+            ),
+            idleTimeoutMs: this.parseInteger(
+                environment.DB_POSTGRES_IDLE_TIMEOUT_MS,
+                30000,
+                'DB_POSTGRES_IDLE_TIMEOUT_MS',
+                0,
+            ),
+            connectionTimeoutMs: this.parseInteger(
+                environment.DB_POSTGRES_CONNECTION_TIMEOUT_MS,
+                10000,
+                'DB_POSTGRES_CONNECTION_TIMEOUT_MS',
+                0,
+            ),
+            releaseId:
+                environment.DEPLOYMENT_RELEASE_ID || 'development',
+        };
+    }
+
+    private static isDatabaseType(value: string): value is DatabaseType {
+        return value === 'sqlite' || value === 'postgres';
+    }
+
+    private static parseInteger(
+        value: string | undefined,
+        fallback: number,
+        name: string,
+        minimum: number,
+    ): number {
+        const parsed = value === undefined ? fallback : Number(value);
+        if (!Number.isInteger(parsed) || parsed < minimum) {
+            throw new Error(`${name} must be an integer of at least ${minimum}.`);
+        }
+        return parsed;
+    }
+
+    private static assertPostgresUrl(
+        connectionString: string,
+        nodeEnvironment: string | undefined,
+    ): void {
+        const url = this.parsePostgresUrl(connectionString);
+        this.assertPostgresProtocol(url);
+        this.assertPostgresLocation(url);
+        if (nodeEnvironment === 'production') {
+            this.assertProductionPostgresTls(url);
+        }
+    }
+
+    private static parsePostgresUrl(connectionString: string): URL {
+        let url: URL;
+        try {
+            url = new URL(connectionString);
+        } catch {
+            throw new Error(
+                'DATABASE_URL must be an absolute PostgreSQL connection URL when DB_TYPE=postgres.',
+            );
+        }
+        return url;
+    }
+
+    private static assertPostgresProtocol(url: URL): void {
+        if (!['postgres:', 'postgresql:'].includes(url.protocol)) {
+            throw new Error(
+                'DATABASE_URL must use the postgres: or postgresql: protocol.',
+            );
+        }
+    }
+
+    private static assertPostgresLocation(url: URL): void {
+        if (!url.hostname || url.pathname === '/' || url.pathname === '') {
+            throw new Error(
+                'DATABASE_URL must include a host and database name.',
+            );
+        }
+    }
+
+    private static assertProductionPostgresTls(url: URL): void {
+        if (
+            url.protocol !== 'postgresql:' ||
+            url.searchParams.get('sslmode') !== 'verify-full'
+        ) {
+            throw new Error(
+                'Production PostgreSQL requires a postgresql: DATABASE_URL with sslmode=verify-full.',
+            );
+        }
+    }
+}
+
+/** Central validated application configuration. */
 export const config = {
     server: {
         enabled: process.env.HTTP_ENABLED !== 'false',
@@ -32,22 +198,7 @@ export const config = {
             .concat(process.env.AUTH_ENABLED === 'true' ? ['auth'] : [])
             .filter((name, index, names) => names.indexOf(name) === index),
     },
-    database: {
-        type: (process.env.DB_TYPE || 'sqlite') as 'sqlite' | 'postgres',
-        sqlitePath: process.env.DB_SQLITE_PATH || 'data/sqlite/backend.sqlite',
-        backupRetention: parseInt(
-            process.env.DB_BACKUP_RETENTION || '10',
-            10,
-        ),
-        releaseId: process.env.DEPLOYMENT_RELEASE_ID || 'development',
-        postgres: {
-            host: process.env.DB_POSTGRES_HOST || 'localhost',
-            port: parseInt(process.env.DB_POSTGRES_PORT || '5432', 10),
-            user: process.env.DB_POSTGRES_USER || 'postgres',
-            password: process.env.DB_POSTGRES_PASSWORD || 'password',
-            name: process.env.DB_POSTGRES_NAME || 'backend_db',
-        },
-    },
+    database: DatabaseConfigLoader.load(process.env),
     security: {
         appSecret:
             process.env.APP_SECRET || 'dev-secret-key-do-not-use-in-production',
@@ -89,20 +240,20 @@ if (
 }
 if (
     config.server.nodeEnv === 'production' &&
-    (!config.database.sqlitePath.startsWith('/') ||
-        config.security.allowedOrigins.length === 0 ||
+    (config.security.allowedOrigins.length === 0 ||
         config.security.allowedOrigins.includes('*'))
 ) {
     throw new Error(
-        'Production requires an absolute SQLite path and explicit allowed origins.',
+        'Production requires explicit allowed origins.',
     );
 }
 
-export type Config = typeof config;
-
 if (
-    !Number.isInteger(config.database.backupRetention) ||
-    config.database.backupRetention < 1
+    config.server.nodeEnv === 'production' &&
+    config.database.type === 'sqlite' &&
+    !path.isAbsolute(config.database.sqlitePath)
 ) {
-    throw new Error('DB_BACKUP_RETENTION must be an integer of at least 1.');
+    throw new Error('Production SQLite requires an absolute database path.');
 }
+
+export type Config = typeof config;

@@ -8,7 +8,7 @@ import { DatabaseManager } from '../src/base/base.database.ts';
 import { BaseModule } from '../src/base/base.module.ts';
 import { BaseObject } from '../src/base/base.object.ts';
 import { BaseStore } from '../src/base/base.store.ts';
-import { config } from '../src/config.ts';
+import { config, DatabaseConfigLoader } from '../src/config.ts';
 import type { Database } from '../src/database.ts';
 import type {
     ApplicationInfrastructure,
@@ -65,7 +65,7 @@ test('BaseStore requires and retains the injected database client', () => {
 
 test('module factories pass registry infrastructure into private stores', () => {
     const database = {} as Kysely<Database>;
-    const infrastructure = { database };
+    const infrastructure = { database, databaseType: 'sqlite' as const };
     const definitions: ModuleDefinitions = {
         stored: {
             dependencies: [],
@@ -86,10 +86,13 @@ test('module factories pass registry infrastructure into private stores', () => 
 
 test('DatabaseManager shares, closes, and recreates its SQLite client', async () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'backend-db-'));
-    const originalType = config.database.type;
-    const originalPath = config.database.sqlitePath;
-    config.database.type = 'sqlite';
-    config.database.sqlitePath = path.join(directory, 'test.sqlite');
+    const originalDatabase = config.database;
+    config.database = {
+        type: 'sqlite',
+        sqlitePath: path.join(directory, 'test.sqlite'),
+        backupRetention: 10,
+        releaseId: 'test',
+    };
 
     try {
         const [first, concurrent] = await Promise.all([
@@ -103,24 +106,66 @@ test('DatabaseManager shares, closes, and recreates its SQLite client', async ()
         assert.notEqual(recreated, first);
     } finally {
         await DatabaseManager.close();
-        config.database.type = originalType;
-        config.database.sqlitePath = originalPath;
+        config.database = originalDatabase;
         fs.rmSync(directory, { recursive: true, force: true });
     }
 });
 
-test('DatabaseManager rejects unsupported PostgreSQL configuration', async () => {
-    const originalType = config.database.type;
+test('DatabaseManager shares, closes, and recreates its PostgreSQL client', async () => {
+    const originalDatabase = config.database;
     await DatabaseManager.close();
-    config.database.type = 'postgres';
+    config.database = {
+        type: 'postgres',
+        connectionString: 'postgresql://user:secret@127.0.0.1:1/database',
+        poolMax: 2,
+        idleTimeoutMs: 10,
+        connectionTimeoutMs: 10,
+        releaseId: 'test',
+    };
 
     try {
-        await assert.rejects(
+        const [first, concurrent] = await Promise.all([
             DatabaseManager.getInstance(),
-            /Unsupported database type 'postgres'/,
-        );
-    } finally {
-        config.database.type = originalType;
+            DatabaseManager.getInstance(),
+        ]);
+        assert.equal(first, concurrent);
         await DatabaseManager.close();
+        const recreated = await DatabaseManager.getInstance();
+        assert.notEqual(recreated, first);
+    } finally {
+        await DatabaseManager.close();
+        config.database = originalDatabase;
     }
+});
+
+test('database configuration validates PostgreSQL URL, TLS, and pool values', () => {
+    assert.throws(
+        () => DatabaseConfigLoader.load({ DB_TYPE: 'mysql' }),
+        /DB_TYPE must be 'sqlite' or 'postgres'/,
+    );
+    assert.throws(
+        () => DatabaseConfigLoader.load({ DB_TYPE: 'postgres' }),
+        /DATABASE_URL must be an absolute PostgreSQL connection URL/,
+    );
+    assert.throws(
+        () => DatabaseConfigLoader.load({
+            DB_TYPE: 'postgres',
+            NODE_ENV: 'production',
+            DATABASE_URL: 'postgresql://user:secret@db/app?sslmode=require',
+        }),
+        /sslmode=verify-full/,
+    );
+    const postgres = DatabaseConfigLoader.load({
+        DB_TYPE: 'postgres',
+        NODE_ENV: 'production',
+        DATABASE_URL:
+            'postgresql://user:secret@db/app?sslmode=verify-full',
+        DB_POSTGRES_POOL_MAX: '4',
+        DB_POSTGRES_IDLE_TIMEOUT_MS: '5000',
+        DB_POSTGRES_CONNECTION_TIMEOUT_MS: '2500',
+    });
+    assert.equal(postgres.type, 'postgres');
+    assert.equal(postgres.poolMax, 4);
+    assert.equal(postgres.idleTimeoutMs, 5000);
+    assert.equal(postgres.connectionTimeoutMs, 2500);
 });

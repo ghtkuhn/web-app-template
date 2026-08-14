@@ -26,6 +26,7 @@ export class BackendApplication {
 
             const modules = new ModuleRegistry(config.modules.active, {
                 database,
+                databaseType: config.database.type,
             }).create();
             console.log('📦 Registered Modules:', Object.keys(modules));
 
