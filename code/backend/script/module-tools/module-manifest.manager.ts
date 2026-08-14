@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { ModuleName } from '../scaffold-module/module-name.ts';
+import { ServiceRouterManager } from './service-router.manager.ts';
 
 interface ModuleManifest {
     readonly schemaVersion: 1;
@@ -11,6 +12,7 @@ interface ModuleManifest {
 /** Synchronizes the generated registry fields owned by module manifests. */
 export class ModuleManifestManager {
     private readonly modulesRoot: string;
+    private readonly serviceRouters: ServiceRouterManager;
 
     /** Creates a manager for one repository. */
     constructor(projectRoot: string) {
@@ -18,6 +20,7 @@ export class ModuleManifestManager {
             path.resolve(projectRoot),
             'code/backend/src/module',
         );
+        this.serviceRouters = new ServiceRouterManager(projectRoot);
     }
 
     /** Synchronizes one module and returns whether its entry changed. */
@@ -31,11 +34,12 @@ export class ModuleManifestManager {
         );
         const source = fs.readFileSync(entryPath, 'utf8');
         const synchronized = this.synchronizeSource(source, moduleName, manifest);
-        if (synchronized === source) {
-            return false;
+        let changed = false;
+        if (synchronized !== source) {
+            fs.writeFileSync(entryPath, synchronized, 'utf8');
+            changed = true;
         }
-        fs.writeFileSync(entryPath, synchronized, 'utf8');
-        return true;
+        return this.serviceRouters.syncModule(moduleName.value) || changed;
     }
 
     /** Checks all manifests without changing source. */
@@ -45,7 +49,10 @@ export class ModuleManifestManager {
             const manifest = this.read(moduleName);
             const entryPath = path.join(this.modulesRoot, name, 'index.ts');
             const source = fs.readFileSync(entryPath, 'utf8');
-            return this.synchronizeSource(source, moduleName, manifest) !== source;
+            return (
+                this.synchronizeSource(source, moduleName, manifest) !== source ||
+                this.serviceRouters.hasDrift(moduleName.value)
+            );
         });
     }
 

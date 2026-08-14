@@ -62,6 +62,7 @@ export interface ClassAnalysis {
     methodNames: string[];
     propertyNames: string[];
     staticExecutablePropertyCount: number;
+    baseTypeNames: Array<string | null>;
 }
 
 /** One analyzed class method with architecture-relevant persistence calls. */
@@ -71,6 +72,10 @@ export interface ClassMethodAnalysis {
     calledMethods: string[];
     stringArguments: string[];
     setProperties: string[];
+    accessibility: 'public' | 'protected' | 'private' | null;
+    parameterTypeNames: Array<string | null>;
+    returnTypeName: string | null;
+    statementCount: number;
 }
 
 /** One handler registration discovered in a module gateway. */
@@ -160,6 +165,7 @@ export interface SourceAnalysis {
     objectMappings: ObjectMapping[];
     validationCallOffsets: number[];
     persistenceCallOffsets: number[];
+    controlFlowCount: number;
     evidenceLocations: {
         declarations: SourceSpan[];
         imports: SourceSpan[];

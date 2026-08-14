@@ -42,6 +42,9 @@ type AstNode = {
     right?: AstNode;
     static?: boolean;
     abstract?: boolean;
+    accessibility?: 'public' | 'protected' | 'private';
+    superTypeParameters?: { params?: AstNode[] };
+    superTypeArguments?: { params?: AstNode[] };
     quasis?: Array<{ value?: { raw?: string } }>;
     loc?: {
         start?: { line?: number; column?: number };
@@ -183,6 +186,7 @@ export class SourceAnalyzer {
             objectMappings: [],
             validationCallOffsets: [],
             persistenceCallOffsets: [],
+            controlFlowCount: 0,
             evidenceLocations: {
                 declarations: [],
                 imports: [],
@@ -461,6 +465,21 @@ export class SourceAnalyzer {
         ) {
             analysis.nonErasableSyntaxCount += 1;
         }
+        if (
+            [
+                'IfStatement',
+                'SwitchStatement',
+                'ForStatement',
+                'ForInStatement',
+                'ForOfStatement',
+                'WhileStatement',
+                'DoWhileStatement',
+                'TryStatement',
+                'ConditionalExpression',
+            ].includes(astNode.type ?? '')
+        ) {
+            analysis.controlFlowCount += 1;
+        }
         this.collectVariableFlow(astNode, analysis);
         this.collectHandlerRegistration(astNode, analysis);
         this.collectHttpTestEvidence(astNode, analysis);
@@ -569,6 +588,12 @@ export class SourceAnalyzer {
             calledMethods,
             stringArguments,
             setProperties,
+            accessibility: node.accessibility ?? null,
+            parameterTypeNames: (node.params ?? []).map((parameter) =>
+                this.typeName(parameter.typeAnnotation ?? null),
+            ),
+            returnTypeName: this.typeName(node.returnType ?? null),
+            statementCount: node.body?.body?.length ?? 0,
         };
     }
 
@@ -706,6 +731,10 @@ export class SourceAnalyzer {
                         (member.value as AstNode | undefined)?.type ?? '',
                     ),
             ).length,
+            baseTypeNames:
+                (
+                    node.superTypeParameters ?? node.superTypeArguments
+                )?.params?.map((parameter) => this.typeName(parameter)) ?? [],
         };
     }
 

@@ -19,6 +19,7 @@ import { PersistenceRuleSet } from './persistence.rule-set.ts';
 import { ProjectRuleSet } from './project.rule-set.ts';
 import { ProjectModel } from './project.model.ts';
 import { SecurityRuleSet } from './security.rule-set.ts';
+import { ServiceOperationRuleSet } from './service-operation.rule-set.ts';
 import { SourceAnalyzer } from './source.analyzer.ts';
 import { TransportRuleSet } from './transport.rule-set.ts';
 import { WorkspaceRuleSet } from './workspace.rule-set.ts';
@@ -41,6 +42,7 @@ export class BackendLinter {
     private readonly transportRules: TransportRuleSet;
     private readonly workspaceRules: WorkspaceRuleSet;
     private readonly moduleTestRules: ModuleTestRuleSet;
+    private readonly serviceOperationRules: ServiceOperationRuleSet;
     private readonly project: ProjectModel;
 
     /** Creates a reusable linter core without output side effects. */
@@ -65,6 +67,7 @@ export class BackendLinter {
             this.project,
         );
         this.moduleTestRules = new ModuleTestRuleSet(this.paths);
+        this.serviceOperationRules = new ServiceOperationRuleSet(this.paths);
     }
 
     /** Analyzes the backend and returns deterministically sorted findings. */
@@ -109,6 +112,7 @@ export class BackendLinter {
                     ...this.architectureEvasionRules.evaluate(analysis),
                 );
                 issues.push(...this.transportRules.evaluate(analysis));
+                issues.push(...this.serviceOperationRules.evaluate(analysis));
                 issues.push(...this.moduleTestRules.evaluateProduction(analysis));
             }
             if (this.paths.isCompositionFile(filePath)) {

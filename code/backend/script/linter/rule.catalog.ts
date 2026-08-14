@@ -33,6 +33,32 @@ const FIXES: Readonly<Record<string, string>> = {
         'Keep lowercase *.test.ts files directly inside the module test directory without nesting.',
     TEST_CATALOG_DRIFT:
         'Run npm run generate:test-catalog and commit the deterministic catalog update.',
+    SERVICE_ROUTER_REQUIRED:
+        'Extend BaseService and regenerate the complete router with npm run module:sync.',
+    SERVICE_ROUTER_DRIFT:
+        'Run npm run module:sync for the containing module; do not edit the generated Service manually.',
+    SERVICE_ROUTER_BUSINESS_LOGIC:
+        'Move the complete behavior into one owner-bound Operation and leave only direct execute delegation.',
+    SERVICE_OPERATION_MISSING:
+        'Create one concrete Operation for each public Service method and run module:sync.',
+    OPERATION_FILE_NAME:
+        'Rename the file to <kebab-case>.operation.ts under its Service owner directory.',
+    OPERATION_CLASS_NAME:
+        'Name the class after its file as <PascalCase>Operation.',
+    OPERATION_BASE_CLASS:
+        'Extend BaseServiceOperation<Input, Output, OwnerServiceDependencies>.',
+    OPERATION_EXECUTE_CONTRACT:
+        'Expose exactly one typed public execute(input) method; keep all helpers private.',
+    OPERATION_PUBLIC_METHOD:
+        'Keep execute as the only public method and make implementation helpers private.',
+    OPERATION_INPUT_CONTRACT:
+        'Use one named module input contract or void instead of loose or primitive parameters.',
+    OPERATION_PEER_IMPORT:
+        'Remove the peer import and keep the Operation self-contained.',
+    OPERATION_ROUTING_MISSING:
+        'Run npm run module:sync for the containing module.',
+    SERVICE_AUX_FORBIDDEN:
+        'Replace the Service Aux with a *.operation.ts class extending BaseServiceOperation.',
 };
 
 /** Owns stable remediation guidance for backend architecture rules. */
