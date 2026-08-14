@@ -43,6 +43,7 @@ test('Auth registration remains disabled unless explicitly enabled', async () =>
     try {
         const runtime = new AuthRuntimeService({
             database,
+            databaseType: 'sqlite',
             options: {
                 secret: SECRET,
                 baseUrl: BASE_URL,
@@ -76,6 +77,7 @@ test('Auth supports signed Bearer sessions and explicit logout', async () => {
     try {
         const runtime = new AuthRuntimeService({
             database,
+            databaseType: 'sqlite',
             options: {
                 secret: SECRET,
                 baseUrl: BASE_URL,

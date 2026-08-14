@@ -14,9 +14,9 @@ export class CreateAuthRuntimeOperation extends BaseServiceOperation<
 > {
     /** Builds Better Auth over the application-owned Kysely connection. */
     public execute(_input: void): AuthRuntime {
-        const { database, options } = this.dependencies;
+        const { database, databaseType, options } = this.dependencies;
         return betterAuth({
-            database: { db: database, type: 'sqlite', casing: 'camel' },
+            database: { db: database, type: databaseType, casing: 'camel' },
             secret: options.secret,
             baseURL: options.baseUrl,
             trustedOrigins: [...options.trustedOrigins],

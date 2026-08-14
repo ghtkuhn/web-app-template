@@ -3,6 +3,7 @@ import type {
 } from '../../base/interfaces.ts';
 import type { Kysely } from 'kysely';
 import type { Database } from '../../database.ts';
+import type { DatabaseType } from '../../base/interfaces.ts';
 import type { AuthSessionDTO } from './dto/auth-session.dto.ts';
 import type { AuthNodeRequest } from './types.ts';
 
@@ -59,6 +60,7 @@ export interface AuthRuntimeOptions {
 /** Dependencies of the one-time Auth runtime bootstrap Operation. */
 export interface AuthRuntimeServiceDependencies {
     readonly database: Kysely<Database>;
+    readonly databaseType: DatabaseType;
     readonly options: AuthRuntimeOptions;
 }
 

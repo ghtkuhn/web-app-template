@@ -1,5 +1,4 @@
 // fallow-ignore-file code-duplication -- Declarative schema mirrors the SQLite catalog.
-// fallow-ignore-file unused-file -- Loaded dynamically by the PostgreSQL migration provider.
 import type { Kysely } from 'kysely';
 import type { Database } from '../../database.ts';
 

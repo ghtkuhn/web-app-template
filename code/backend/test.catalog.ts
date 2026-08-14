@@ -19,6 +19,7 @@ export const BACKEND_TEST_FILES = [
     'test/module.tools.test.ts',
     'test/node.communication.test.ts',
     'test/openapi.contract.test.ts',
+    'test/postgres.integration.test.ts',
     'test/scaffold.module.test.ts',
     'test/service.operation.linter.test.ts',
     'test/service.operation.scaffold.test.ts',

@@ -69,6 +69,7 @@ export class AuthOpenApiGenerator {
         try {
             const runtime = new AuthRuntimeService({
                 database,
+                databaseType: 'sqlite',
                 options: {
                     secret: 'openapi-generation-secret-with-at-least-32-characters',
                     baseUrl: 'http://localhost:3000',

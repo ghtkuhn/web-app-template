@@ -1,6 +1,7 @@
 import { BaseModule } from '../../base/base.module.ts';
 import type {
     ApplicationInfrastructure,
+    DatabaseType,
     NamedModuleDefinition,
 } from '../../base/interfaces.ts';
 import type { Kysely } from 'kysely';
@@ -36,15 +37,19 @@ export class AuthModule
             _dependencies,
             infrastructure: ApplicationInfrastructure,
         ) =>
-            new AuthModule(infrastructure.database),
+            new AuthModule(
+                infrastructure.database,
+                infrastructure.databaseType,
+            ),
     } satisfies NamedModuleDefinition;
     // module-sync:end
 
     /** Composes one shared Better Auth runtime for HTTP and Node access. */
-    constructor(database: Kysely<Database>) {
+    constructor(database: Kysely<Database>, databaseType: DatabaseType) {
         super();
         const runtime = new AuthRuntimeService({
             database,
+            databaseType,
             options: {
                 secret: config.auth.secret,
                 baseUrl: config.auth.baseUrl,
