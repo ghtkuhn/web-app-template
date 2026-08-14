@@ -14,7 +14,6 @@ export type ArchitectureFileType =
     | 'node-handler'
     | 'api-aux'
     | 'controller-aux'
-    | 'service-aux'
     | 'store-aux';
 
 /** Complete generation contract for one architecture file type. */
@@ -48,7 +47,7 @@ export class FileTypeCatalog {
             'Service',
             'BaseService',
             'base.service.ts',
-            '<never, never>',
+            '',
             true,
         ),
         this.definition(
@@ -149,17 +148,6 @@ export class FileTypeCatalog {
             true,
         ),
         this.definition(
-            'service-aux',
-            'service',
-            'service-aux',
-            'ServiceAux',
-            'BaseServiceAux',
-            'base.service.aux.ts',
-            '',
-            false,
-            true,
-        ),
-        this.definition(
             'store-aux',
             'store',
             'store-aux',
@@ -174,6 +162,11 @@ export class FileTypeCatalog {
 
     /** Returns the contract for one supported CLI file type. */
     public get(type: string): FileTypeDefinition {
+        if (type === 'service-aux') {
+            throw new ScaffoldInputError(
+                'Service Aux scaffolding is obsolete. Use npm run scaffold:operation instead.',
+            );
+        }
         const definition = this.definitions.find(
             (candidate) => candidate.type === type,
         );

@@ -213,10 +213,10 @@ export class ServiceRouterManager {
             (operation) =>
                 `    private readonly ${this.camel(operation.operationName)}Operation: ${operation.className};`,
         );
-        const assignments = operations.map(
-            (operation) =>
-                `        this.${this.camel(operation.operationName)}Operation = new ${operation.className}(dependencies);`,
-        );
+        const assignments = operations.flatMap((operation) => [
+            `        this.${this.camel(operation.operationName)}Operation =`,
+            `            new ${operation.className}(dependencies);`,
+        ]);
         const methods = operations.flatMap((operation) => {
             const fieldName = `${this.camel(operation.operationName)}Operation`;
             const methodName = this.camel(operation.operationName);
@@ -248,7 +248,7 @@ export class ServiceRouterManager {
             ...fields,
             '',
             '    /** Creates every owner-bound Operation with shared dependencies. */',
-            `    constructor(dependencies: ${owner.pascalCase}ServiceDependencies) {`,
+            `    public constructor(dependencies: ${owner.pascalCase}ServiceDependencies) {`,
             '        super();',
             ...assignments,
             '    }',

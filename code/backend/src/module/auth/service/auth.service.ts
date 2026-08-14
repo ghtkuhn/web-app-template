@@ -1,47 +1,22 @@
-import type { Kysely } from 'kysely';
-import { BaseWorkflowService } from '../../../base/base.workflow.service.ts';
-import type { Database } from '../../../database.ts';
-import { AuthSessionDTO } from '../dto/auth-session.dto.ts';
-import { AuthUserDTO } from '../dto/auth-user.dto.ts';
-import type {
-    AuthHttpProtocol,
-    AuthRuntime,
-} from '../interfaces.ts';
-import { BetterAuthServiceAux } from './auth/better-auth.service-aux.ts';
+import { BaseService } from '../../../base/base.service.ts';
+import { GetSessionOperation } from './auth/get-session.operation.ts';
+import type { AuthServiceDependencies } from '../interfaces.ts';
 
-/** Owns Better Auth session access and safe DTO mapping. */
-export class AuthService extends BaseWorkflowService {
-    public readonly protocol: AuthHttpProtocol;
-    private readonly runtime: AuthRuntime;
+/** Generated Router for auth Service Operations. */
+export class AuthService extends BaseService {
+    private readonly getSessionOperation: GetSessionOperation;
 
-    /** Creates the Better Auth runtime over shared application infrastructure. */
-    constructor(
-        database: Kysely<Database>,
-        options: {
-            secret: string;
-            baseUrl: string;
-            registrationEnabled: boolean;
-            trustedOrigins: readonly string[];
-        },
-    ) {
+    /** Creates every owner-bound Operation with shared dependencies. */
+    public constructor(dependencies: AuthServiceDependencies) {
         super();
-        this.runtime = new BetterAuthServiceAux().create(database, options);
-        this.protocol = this.runtime;
+        this.getSessionOperation =
+            new GetSessionOperation(dependencies);
     }
 
-    /** Resolves a signed Bearer session and maps only safe public fields. */
-    public async getSession(
-        bearerToken: string,
-    ): Promise<AuthSessionDTO | null> {
-        const headers = new Headers({
-            Authorization: `Bearer ${bearerToken}`,
-        });
-        const result = await this.runtime.api.getSession({ headers });
-        return result
-            ? new AuthSessionDTO(
-                  result.session,
-                  new AuthUserDTO(result.user),
-              )
-            : null;
+    /** Routes the get-session application operation. */
+    public getSession(
+        input: Parameters<GetSessionOperation['execute']>[0],
+    ): ReturnType<GetSessionOperation['execute']> {
+        return this.getSessionOperation.execute(input);
     }
 }

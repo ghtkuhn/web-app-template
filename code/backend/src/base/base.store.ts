@@ -12,7 +12,7 @@ import type { Database } from '../database.ts';
  *
  * IMPORT RULES:
  * - ALLOWED: The provided Kysely database abstraction, Domain Objects, Base classes.
- * - FORBIDDEN: Database drivers, connection creation, DTOs, Services, Controllers, Handlers.
+ * - FORBIDDEN: Database drivers, connection creation, DTOs, Service routers, Operations, Controllers, Handlers.
  *
  * CONSTRAINTS:
  * - Must NOT contain business logic or validation rules beyond data integrity.

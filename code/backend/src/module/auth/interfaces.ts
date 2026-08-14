@@ -1,6 +1,8 @@
 import type {
     IBaseModule,
 } from '../../base/interfaces.ts';
+import type { Kysely } from 'kysely';
+import type { Database } from '../../database.ts';
 import type { AuthSessionDTO } from './dto/auth-session.dto.ts';
 import type { AuthNodeRequest } from './types.ts';
 
@@ -44,6 +46,25 @@ export interface AuthOpenApiDocument {
     readonly paths: Readonly<Record<string, unknown>>;
     readonly components?: Readonly<Record<string, unknown>>;
     readonly tags?: readonly unknown[];
+}
+
+/** Validated options used to create one Better Auth runtime. */
+export interface AuthRuntimeOptions {
+    readonly secret: string;
+    readonly baseUrl: string;
+    readonly registrationEnabled: boolean;
+    readonly trustedOrigins: readonly string[];
+}
+
+/** Dependencies of the one-time Auth runtime bootstrap Operation. */
+export interface AuthRuntimeServiceDependencies {
+    readonly database: Kysely<Database>;
+    readonly options: AuthRuntimeOptions;
+}
+
+/** Dependencies shared by Auth application Operations. */
+export interface AuthServiceDependencies {
+    readonly runtime: AuthRuntime;
 }
 
 /** Public in-process contract exposed by the Auth module. */

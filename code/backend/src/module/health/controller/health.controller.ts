@@ -17,6 +17,6 @@ export class HealthController extends BaseController {
 
     /** Returns the application's current health state. */
     public getHealth(): HandlerResult<HealthStatusDTO> {
-        return this.success(this.service.getStatus());
+        return this.success(this.service.getHealth());
     }
 }

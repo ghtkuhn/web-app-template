@@ -6,3 +6,8 @@ export type AuthNodeRequest = {
     context: NodeRequestContext;
     bearerToken: string;
 };
+
+/** Internal typed input for signed Bearer-session lookup. */
+export type AuthSessionInput = {
+    readonly bearerToken: string;
+};

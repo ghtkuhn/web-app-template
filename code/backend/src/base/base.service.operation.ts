@@ -1,4 +1,3 @@
-// fallow-ignore-file unused-file -- Operation scaffolds consume this public architecture base.
 import type { IBaseServiceOperation } from './interfaces.ts';
 
 /**

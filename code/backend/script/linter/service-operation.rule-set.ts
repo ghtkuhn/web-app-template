@@ -32,13 +32,16 @@ export class ServiceOperationRuleSet {
 
     /** Rejects obsolete Service Aux files after their migration. */
     public legacyIssues(analysis: SourceAnalysis): LintIssueDraft[] {
-        return path.basename(analysis.filePath).endsWith('.service-aux.ts')
-            ? [this.issue(
-                  analysis,
-                  'SERVICE_AUX_FORBIDDEN',
-                  'Service Aux classes are obsolete. Fix: Create an owner-bound *.operation.ts class extending BaseServiceOperation and route it through module:sync.',
-              )]
-            : [];
+        if (!path.basename(analysis.filePath).endsWith('.service-aux.ts')) {
+            return [];
+        }
+        const moduleName = this.paths.moduleName(analysis.filePath) ?? '<module>';
+        const owner = this.paths.auxiliaryPath(analysis.filePath)?.owner ?? '<service>';
+        return [this.issue(
+            analysis,
+            'SERVICE_AUX_FORBIDDEN',
+            `Service Aux classes are obsolete. Fix: Run npm run scaffold:operation -- ${moduleName} ${owner} <operation> --input <type|void> --output <type>, implement execute(), then run npm run module:sync -- ${moduleName}.`,
+        )];
     }
 
     /** Checks Operation naming, inheritance, API shape, and isolation. */
@@ -85,7 +88,11 @@ export class ServiceOperationRuleSet {
                 analysis.filePath,
                 dependency.source,
             );
-            if (target?.endsWith('.operation.ts')) {
+            if (
+                target?.endsWith('.operation.ts') &&
+                this.paths.moduleName(target) ===
+                    this.paths.moduleName(analysis.filePath)
+            ) {
                 issues.push(this.issue(
                     analysis,
                     'OPERATION_PEER_IMPORT',
@@ -172,7 +179,7 @@ export class ServiceOperationRuleSet {
             analysis.filePath,
         );
         if (!expected) {
-            return [];
+            return this.unownedRouterIssues(analysis);
         }
         const issues: LintIssueDraft[] = [];
         if (analysis.classes[0]?.baseName !== 'BaseService') {
@@ -192,6 +199,9 @@ export class ServiceOperationRuleSet {
                 method.accessibility !== 'private' &&
                 method.accessibility !== 'protected',
         );
+        const implementationMethods = analysis.classMethods.filter(
+            (method) => method.name !== 'constructor',
+        );
         const delegatesOnly = publicMethods.every(
             (method) =>
                 method.name !== null &&
@@ -200,7 +210,11 @@ export class ServiceOperationRuleSet {
                 method.calledMethods.length === 1 &&
                 method.calledMethods[0] === 'execute',
         );
-        if (!delegatesOnly || analysis.controlFlowCount > 0) {
+        if (
+            !delegatesOnly ||
+            implementationMethods.length !== publicMethods.length ||
+            analysis.controlFlowCount > 0
+        ) {
             issues.push(this.issue(
                 analysis,
                 'SERVICE_ROUTER_BUSINESS_LOGIC',
@@ -237,6 +251,32 @@ export class ServiceOperationRuleSet {
             ));
         }
         return issues;
+    }
+
+    /** Rejects hand-written behavior in a concrete Service without Operations. */
+    private unownedRouterIssues(analysis: SourceAnalysis): LintIssueDraft[] {
+        const class_ = analysis.classes[0];
+        if (!class_ || class_.isAbstract) {
+            return [];
+        }
+        const methods = analysis.classMethods.filter(
+            (method) => method.name !== 'constructor',
+        );
+        if (methods.length === 0) {
+            return [];
+        }
+        return [
+            this.issue(
+                analysis,
+                'SERVICE_OPERATION_MISSING',
+                'A concrete Service declares behavior without an owner-bound Operation.',
+            ),
+            this.issue(
+                analysis,
+                'SERVICE_ROUTER_BUSINESS_LOGIC',
+                'Main Services may only contain generated Operation construction and direct execute delegation.',
+            ),
+        ];
     }
 
     /** Returns whether a source path is an owner-bound Operation. */

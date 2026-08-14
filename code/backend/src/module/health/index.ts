@@ -36,7 +36,7 @@ export class HealthModule
     /** Creates the stateless health dependency chain. */
     constructor() {
         super();
-        const controller = new HealthController(new HealthService());
+        const controller = new HealthController(new HealthService({}));
         this.registerHandler('http', new HealthHttpHandler(controller));
         this.registerHandler(
             'websocket',

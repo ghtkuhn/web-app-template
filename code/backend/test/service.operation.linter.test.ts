@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BackendLinter } from '../script/linter/backend.linter.ts';
+import { ServiceRouterManager } from '../script/module-tools/service-router.manager.ts';
 import { FixtureProject } from './linter/fixture-project.ts';
 
 test('operation rules reject public helpers, primitive inputs, and peers', () => {
@@ -49,30 +50,7 @@ test('operation rules accept a generated direct-delegation router', () => {
     }
 }`,
         );
-        fixture.write(
-            'code/backend/src/module/example/service/example.service.ts',
-            `import { BaseService } from '../../../base/base.service.ts';
-import { RunOperation } from './example/run.operation.ts';
-import type { ExampleServiceDependencies } from '../interfaces.ts';
-
-/** Generated Router for example Service Operations. */
-export class ExampleService extends BaseService {
-    private readonly runOperation: RunOperation;
-
-    /** Creates every owner-bound Operation with shared dependencies. */
-    constructor(dependencies: ExampleServiceDependencies) {
-        super();
-        this.runOperation = new RunOperation(dependencies);
-    }
-
-    /** Routes the run application operation. */
-    public run(
-        input: Parameters<RunOperation['execute']>[0],
-    ): ReturnType<RunOperation['execute']> {
-        return this.runOperation.execute(input);
-    }
-}\n`,
-        );
+        new ServiceRouterManager(fixture.root).syncModule('example');
         const operationIssues = new BackendLinter({ projectRoot: fixture.root })
             .run()
             .issues.filter((issue) =>
@@ -80,6 +58,39 @@ export class ExampleService extends BaseService {
                 issue.ruleId.startsWith('SERVICE_ROUTER_'),
             );
         assert.deepEqual(operationIssues, []);
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('operation rules reject handwritten Service behavior and legacy Service Aux files', () => {
+    const fixture = new FixtureProject();
+    try {
+        fixture.write(
+            'code/backend/src/module/example/service/example.service.ts',
+            `export class ExampleService extends BaseService {
+    public run(): OutputDTO {
+        return new OutputDTO();
+    }
+}`,
+        );
+        fixture.write(
+            'code/backend/src/module/example/service/example/legacy.service-aux.ts',
+            `export class LegacyServiceAux extends BaseServiceAux {}`,
+        );
+        const issues = new BackendLinter({ projectRoot: fixture.root })
+            .run()
+            .issues;
+        const ruleIds = issues.map((issue) => issue.ruleId);
+        assert.ok(ruleIds.includes('SERVICE_OPERATION_MISSING'));
+        assert.ok(ruleIds.includes('SERVICE_ROUTER_BUSINESS_LOGIC'));
+        assert.ok(ruleIds.includes('SERVICE_AUX_FORBIDDEN'));
+        assert.match(
+            issues.find(
+                (issue) => issue.ruleId === 'SERVICE_AUX_FORBIDDEN',
+            )?.fix ?? '',
+            /scaffold:operation -- example example/,
+        );
     } finally {
         fixture.dispose();
     }

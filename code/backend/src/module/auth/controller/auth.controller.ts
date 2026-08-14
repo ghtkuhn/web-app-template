@@ -17,7 +17,7 @@ export class AuthController extends BaseController {
     public async getSession(
         bearerToken: string,
     ): Promise<HandlerResult<AuthSessionDTO>> {
-        const session = await this.service.getSession(bearerToken);
+        const session = await this.service.getSession({ bearerToken });
         return session
             ? this.success(session)
             : {

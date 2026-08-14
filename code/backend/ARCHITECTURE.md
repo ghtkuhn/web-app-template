@@ -17,8 +17,8 @@ code/backend/src/
             types.ts        Type aliases and Node request unions
             constants.ts    Passive constants
             api/            Transport handlers
-            controller/     Transport-neutral use-case coordination
-            service/        Business logic and DTO/Object mapping
+            controller/     Transport-neutral result coordination
+            service/        Generated routers and owner-bound Operations
             store/          Persistence and row/Object mapping
             object/         Persistent Domain Objects
             dto/            Transported application data
@@ -50,16 +50,17 @@ inside the module root.
 The allowed application flow is:
 
 ```text
-API Handler → Controller → Service → Store → Database
-                              ↓
-                      Domain Object / DTO
+API Handler → Controller → Service Router → Operation → Store → Database
+                                                    ↓
+                                            Domain Object / DTO
 ```
 
 Dependencies must not point back toward a higher layer:
 
 - Handlers call Controllers, never Services or Stores.
-- Controllers call Services and use DTOs.
-- Services may use Stores, Domain Objects, and DTOs.
+- Controllers call generated Service routers and use DTOs.
+- Service routers only construct Operations and delegate to `execute()`.
+- Operations may use Stores, Domain Objects, DTOs, and public module ports.
 - Stores may use Domain Objects and the injected database abstraction.
 - DTOs and Domain Objects must not depend on higher application layers.
 
@@ -71,7 +72,7 @@ Every module requires `module/<name>/index.ts`. It must:
 - implement a `<Name>ModulePort` declared in `interfaces.ts`;
 - publicly re-export that port from `index.ts`;
 - expose a static `definition` satisfying `NamedModuleDefinition`;
-- compose its private Handler → Controller → Service → Store chain;
+- compose its private Handler → Controller → Service Router → Operation chain;
 - remain free of business logic.
 
 The port interface stays in the module-level `interfaces.ts` file:
@@ -181,14 +182,54 @@ They:
 
 Services live in `service/` and extend `BaseService`.
 
-They own:
+They are fully generated routers. A Service may only contain:
 
-- business validation and workflows;
-- Domain Object construction and validation;
-- Object-to-DTO and DTO-to-Object mapping;
-- orchestration of typed Store operations.
+- Operation imports and private Operation fields;
+- constructor injection and Operation construction;
+- one public method per Operation with direct delegation to `execute()`.
 
-Services must not bypass layer contracts with casts such as `as unknown as`.
+Services must not contain validation, persistence, mapping, branches, loops, or
+private business helpers. Do not edit `*.service.ts` files manually; run
+`npm run module:sync -- <module>` after implementing an Operation.
+
+### Service Operations
+
+Operations live under their owning Service directory:
+
+```text
+service/
+    group.service.ts
+    group/
+        create-group.operation.ts
+        delete-group.operation.ts
+```
+
+Each Operation extends
+`BaseServiceOperation<Input, Output, GroupServiceDependencies>` and contains one
+complete application operation: validation, workflow decisions, Domain Object
+construction, Store calls, and Object/DTO mapping. `execute()` is its only
+public method; private helpers are allowed. Inputs use one named module contract
+or `void`.
+
+Operations may use Stores, Domain Objects, DTOs, and public ports of other
+modules. They must not import Controllers, Handlers, or peer Operations, and
+they remain private to their module.
+
+Create and integrate an Operation with:
+
+```text
+scaffold:operation
+→ implement execute()
+→ module:sync
+→ test the Operation
+→ verify:module
+→ next slice
+```
+
+```bash
+npm run scaffold:operation -- <module> <service> <operation> \
+    --input <type|void> --output <type|void>
+```
 
 ### Stores
 
@@ -215,25 +256,27 @@ exclude those fields from serialization.
 DTOs live in `dto/` and extend `BaseDTO` or `EntityDTO`. They define public or
 inter-layer transported data and must not expose database rows or sensitive
 Domain Object fields. DTOs remain passive: validator instances, executable
-schemas, and business rules belong in Services or owner-bound Service Aux
-classes.
+schemas, and business rules belong in Service Operations.
 
 ## Auxiliary Classes
 
-The `api`, `controller`, `service`, and `store` layers may have one owner-bound
+The `api`, `controller`, and `store` layers may have one owner-bound
 auxiliary directory:
 
 ```text
-service/
-    health.service.ts
+controller/
+    health.controller.ts
     health/
-        status.service-aux.ts
+        status.controller-aux.ts
 ```
 
 An auxiliary class extends the matching `BaseApiAux`, `BaseControllerAux`,
-`BaseServiceAux`, or `BaseStoreAux`. Only its owner may import it. Auxiliaries
+or `BaseStoreAux`. Only its owner may import it. Auxiliaries
 must not import their owner, another auxiliary, or another file from the same
 layer, and they must never be re-exported.
+
+Service Aux classes are obsolete. Use owner-bound `*.operation.ts` classes and
+`BaseServiceOperation` instead.
 
 Use:
 
@@ -253,7 +296,8 @@ Consumer Module
     → dispatch("node", typed request)
     → NodeHandler
     → Controller
-    → Service
+    → Service Router
+    → Operation
 ```
 
 Node requests use a discriminated `operation` and a `NodeRequestContext` with a

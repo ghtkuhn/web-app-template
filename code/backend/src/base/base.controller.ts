@@ -4,13 +4,13 @@ import type { HandlerResult, IBaseController } from './interfaces.ts';
  * BaseController provides a standardized foundation for all internal module controllers.
  *
  * RESPONSIBILITIES:
- * - Coordinate business logic by calling Services.
+ * - Coordinate application results by calling generated Service routers.
  * - Return transport-agnostic results (HandlerResult).
- * - Act as the single source of truth for "what" happens in a request.
+ * - Translate Operation results into controlled transport-neutral outcomes.
  *
  * IMPORT RULES:
  * - ALLOWED: Services, DTOs, Base classes.
- * - FORBIDDEN: Handlers, Stores, Domain Objects (must use Services), Transport libraries (express, etc.).
+ * - FORBIDDEN: Handlers, Stores, Domain Objects (mapping belongs in Operations), Transport libraries (express, etc.).
  *
  * CONSTRAINTS:
  * - Must NOT handle HTTP responses or Socket emits directly.

@@ -113,6 +113,9 @@ export class BackendLinter {
                 );
                 issues.push(...this.transportRules.evaluate(analysis));
                 issues.push(...this.serviceOperationRules.evaluate(analysis));
+                issues.push(
+                    ...this.serviceOperationRules.legacyIssues(analysis),
+                );
                 issues.push(...this.moduleTestRules.evaluateProduction(analysis));
             }
             if (this.paths.isCompositionFile(filePath)) {

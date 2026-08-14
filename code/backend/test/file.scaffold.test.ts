@@ -92,7 +92,7 @@ class FileScaffoldFixture {
     public readonly moduleRoot: string;
     public readonly templatePath: string;
 
-    /** Creates a module with valid owners for all four Aux variants. */
+    /** Creates a module with valid owners for every supported Aux variant. */
     constructor() {
         this.root = fs.mkdtempSync(path.join(os.tmpdir(), 'file-scaffold-'));
         this.backendRoot = path.join(this.root, 'code/backend');
@@ -148,7 +148,7 @@ class FileScaffoldFixture {
         this.write(
             'src/module/example/service/owner.service.ts',
             `import { BaseService } from '../../../base/base.service.ts';
-             export abstract class OwnerService extends BaseService<never, never> {}`,
+             export abstract class OwnerService extends BaseService {}`,
         );
         this.write(
             'src/module/example/store/owner.store.ts',
@@ -255,7 +255,6 @@ const expectedFiles: readonly ExpectedFile[] = [
     { type: 'node-handler', name: 'billing', relativePath: 'api/billing.node.handler.ts', className: 'BillingNodeHandler', baseClass: 'NodeHandler' },
     { type: 'api-aux', name: 'parser', owner: 'owner', relativePath: 'api/owner/parser.api-aux.ts', className: 'ParserApiAux', baseClass: 'BaseApiAux' },
     { type: 'controller-aux', name: 'mapper', owner: 'owner', relativePath: 'controller/owner/mapper.controller-aux.ts', className: 'MapperControllerAux', baseClass: 'BaseControllerAux' },
-    { type: 'service-aux', name: 'calculator', owner: 'owner', relativePath: 'service/owner/calculator.service-aux.ts', className: 'CalculatorServiceAux', baseClass: 'BaseServiceAux' },
     { type: 'store-aux', name: 'query', owner: 'owner', relativePath: 'store/owner/query.store-aux.ts', className: 'QueryStoreAux', baseClass: 'BaseStoreAux' },
 ];
 
@@ -304,14 +303,20 @@ test('invalid requests and collisions do not mutate the module', () => {
             new RecordingFileVerification(),
         );
         const originalFiles = fixture.files();
+        assert.throws(
+            () => scaffolder.scaffold({
+                moduleName: 'example',
+                fileType: 'service-aux',
+                name: 'test',
+            }),
+            /Service Aux scaffolding is obsolete.*scaffold:operation/,
+        );
         const invalidRequests: FileScaffoldRequest[] = [
             { moduleName: 'missing', fileType: 'service', name: 'test' },
             { moduleName: '../escape', fileType: 'service', name: 'test' },
             { moduleName: 'example', fileType: 'unknown', name: 'test' },
             { moduleName: 'example', fileType: 'service', name: 'BadName' },
-            { moduleName: 'example', fileType: 'service-aux', name: 'test' },
             { moduleName: 'example', fileType: 'service', name: 'test', owner: 'owner' },
-            { moduleName: 'example', fileType: 'service-aux', name: 'test', owner: 'missing' },
         ];
         for (const request of invalidRequests) {
             assert.throws(() => scaffolder.scaffold(request));
@@ -357,14 +362,14 @@ test('write and verification failures remove files and only new directories', ()
 
         const ownerDirectory = path.join(
             fixture.moduleRoot,
-            'service/owner',
+            'controller/owner',
         );
         assert.equal(fs.existsSync(ownerDirectory), false);
         assert.throws(() =>
             fixture.scaffolder(new FailingFileVerification()).scaffold({
                 moduleName: 'example',
-                fileType: 'service-aux',
-                name: 'calculator',
+                fileType: 'controller-aux',
+                name: 'mapper',
                 owner: 'owner',
             }),
         );

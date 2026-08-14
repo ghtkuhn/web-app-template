@@ -9,3 +9,6 @@ export interface HealthModulePort {
         input: HealthNodeRequest,
     ): Promise<HandlerResult<HealthStatusDTO>>;
 }
+
+/** Stateless dependencies shared by the Health Service and its Operations. */
+export interface HealthServiceDependencies {}

@@ -57,7 +57,7 @@ export class TransportRuleSet {
                 this.issue(
                     analysis,
                     'DTO_EXECUTABLE_LOGIC',
-                    'DTOs are passive transport contracts; validator instances, schemas, and executable static initialization belong in Services or Service Aux classes.',
+                    'DTOs are passive transport contracts; validator instances, schemas, and executable static initialization belong in Service Operations.',
                 ),
             );
         }

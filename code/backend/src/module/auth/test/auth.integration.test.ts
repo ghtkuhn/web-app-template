@@ -5,6 +5,7 @@ import { Kysely, SqliteDialect } from 'kysely';
 import { up } from '../../../migration/002-better-auth.migration.ts';
 import type { Database } from '../../../database.ts';
 import { AuthService } from '../service/auth.service.ts';
+import { AuthRuntimeService } from '../service/auth-runtime.service.ts';
 
 const SECRET = 'integration-secret-with-more-than-thirty-two-characters';
 const BASE_URL = 'http://localhost:3000';
@@ -40,13 +41,16 @@ function authRequest(
 test('Auth registration remains disabled unless explicitly enabled', async () => {
     const database = await createDatabase();
     try {
-        const service = new AuthService(database, {
-            secret: SECRET,
-            baseUrl: BASE_URL,
-            registrationEnabled: false,
-            trustedOrigins: [ORIGIN],
-        });
-        const response = await service.protocol.handler(
+        const runtime = new AuthRuntimeService({
+            database,
+            options: {
+                secret: SECRET,
+                baseUrl: BASE_URL,
+                registrationEnabled: false,
+                trustedOrigins: [ORIGIN],
+            },
+        }).createAuthRuntime();
+        const response = await runtime.handler(
             authRequest('sign-up/email', {
                 method: 'POST',
                 body: JSON.stringify({
@@ -70,13 +74,19 @@ test('Auth registration remains disabled unless explicitly enabled', async () =>
 test('Auth supports signed Bearer sessions and explicit logout', async () => {
     const database = await createDatabase();
     try {
-        const service = new AuthService(database, {
-            secret: SECRET,
-            baseUrl: BASE_URL,
-            registrationEnabled: true,
-            trustedOrigins: [ORIGIN],
+        const runtime = new AuthRuntimeService({
+            database,
+            options: {
+                secret: SECRET,
+                baseUrl: BASE_URL,
+                registrationEnabled: true,
+                trustedOrigins: [ORIGIN],
+            },
+        }).createAuthRuntime();
+        const service = new AuthService({
+            runtime,
         });
-        const registration = await service.protocol.handler(
+        const registration = await runtime.handler(
             authRequest('sign-up/email', {
                 method: 'POST',
                 body: JSON.stringify({
@@ -90,18 +100,18 @@ test('Auth supports signed Bearer sessions and explicit logout', async () => {
 
         assert.equal(registration.status, 200);
         assert.ok(bearerToken);
-        const session = await service.getSession(bearerToken);
+        const session = await service.getSession({ bearerToken });
         assert.equal(session?.user.email, 'user@example.com');
         assert.equal('token' in session, false);
 
-        const logout = await service.protocol.handler(
+        const logout = await runtime.handler(
             authRequest('sign-out', {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${bearerToken}` },
             }),
         );
         assert.equal(logout.status, 200);
-        assert.equal(await service.getSession(bearerToken), null);
+        assert.equal(await service.getSession({ bearerToken }), null);
     } finally {
         await database.destroy();
     }

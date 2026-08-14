@@ -1,22 +1,20 @@
 import { betterAuth } from 'better-auth';
 import { bearer, openAPI } from 'better-auth/plugins';
-import type { Kysely } from 'kysely';
-import { BaseServiceAux } from '../../../../base/base.service.aux.ts';
-import type { Database } from '../../../../database.ts';
-import type { AuthRuntime } from '../../interfaces.ts';
+import { BaseServiceOperation } from '../../../../base/base.service.operation.ts';
+import type {
+    AuthRuntime,
+    AuthRuntimeServiceDependencies,
+} from '../../interfaces.ts';
 
-/** Creates the module-private Better Auth protocol runtime. */
-export class BetterAuthServiceAux extends BaseServiceAux {
-    /** Builds Better Auth over the process-owned Kysely client. */
-    public create(
-        database: Kysely<Database>,
-        options: {
-            secret: string;
-            baseUrl: string;
-            registrationEnabled: boolean;
-            trustedOrigins: readonly string[];
-        },
-    ): AuthRuntime {
+/** Creates the module's single Better Auth protocol runtime. */
+export class CreateAuthRuntimeOperation extends BaseServiceOperation<
+    void,
+    AuthRuntime,
+    AuthRuntimeServiceDependencies
+> {
+    /** Builds Better Auth over the application-owned Kysely connection. */
+    public execute(_input: void): AuthRuntime {
+        const { database, options } = this.dependencies;
         return betterAuth({
             database: { db: database, type: 'sqlite', casing: 'camel' },
             secret: options.secret,

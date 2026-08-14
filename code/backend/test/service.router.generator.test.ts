@@ -30,21 +30,21 @@ test('module sync generates a deterministic Service router from Operations', () 
             'code/backend/src/module/billing/service/billing.service.ts',
             'stale\n',
         );
-        write(
-            root,
-            'code/backend/src/module/billing/service/billing/create-invoice.operation.ts',
+        const createOperation =
+            'code/backend/src/module/billing/service/billing/create-invoice.operation.ts';
+        const createSource =
             `export class CreateInvoiceOperation extends BaseServiceOperation<Input, Output, BillingServiceDependencies> {
     public execute(input: Input): Output {
         return input.output;
     }
-}\n`,
-        );
+}\n`;
+        write(root, createOperation, createSource);
         write(
             root,
             'code/backend/src/module/billing/service/billing/get-status.operation.ts',
             `export class GetStatusOperation extends BaseServiceOperation<void, Output, BillingServiceDependencies> {
-    public execute(input: void): Output {
-        return input;
+    public async execute(_input: void): Promise<Output> {
+        throw new Error('fixture');
     }
 }\n`,
         );
@@ -69,10 +69,18 @@ test('module sync generates a deterministic Service router from Operations', () 
         assert.match(source, /class BillingService extends BaseService/);
         assert.match(source, /public createInvoice\(/);
         assert.match(source, /public getStatus\(\)/);
+        assert.match(
+            source,
+            /ReturnType<GetStatusOperation\['execute'\]>/,
+        );
         assert.doesNotMatch(source, /PendingOperation/);
         assert.ok(
             source.indexOf('CreateInvoiceOperation') <
                 source.indexOf('GetStatusOperation'),
+        );
+        assert.equal(
+            fs.readFileSync(path.join(root, createOperation), 'utf8'),
+            createSource,
         );
     } finally {
         fs.rmSync(root, { recursive: true, force: true });

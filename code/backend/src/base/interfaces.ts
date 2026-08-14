@@ -62,9 +62,6 @@ export interface IBaseApiAux {}
 /** Marker contract for private controller-layer auxiliary classes. */
 export interface IBaseControllerAux {}
 
-/** Legacy marker retained until Service Aux implementations migrate to Operations. */
-export interface IBaseServiceAux {}
-
 /** Executes one typed application operation with injected Service dependencies. */
 export interface IBaseServiceOperation<TInput, TOutput> {
     /** Executes the complete application operation for one typed input. */
@@ -73,16 +70,6 @@ export interface IBaseServiceOperation<TInput, TOutput> {
 
 /** Marker contract for private store-layer auxiliary classes. */
 export interface IBaseStoreAux {}
-
-/** Common domain-object workflows exposed by the generic Service base. */
-export interface IBaseService<T extends IBaseObject> {
-    /** Validates and persists one object. */
-    createOrUpdate(object: T): Promise<T>;
-    /** Returns one object or rejects when it does not exist. */
-    getById(id: string): Promise<T>;
-    /** Returns all objects visible through the Service's Store. */
-    getAll(): Promise<T[]>;
-}
 
 /** Configuration accepted by the native HTTP transport. */
 export interface HttpServerConfig {

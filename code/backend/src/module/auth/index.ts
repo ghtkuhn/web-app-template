@@ -13,6 +13,7 @@ import { AuthController } from './controller/auth.controller.ts';
 import type { AuthSessionDTO } from './dto/auth-session.dto.ts';
 import type { AuthModulePort } from './interfaces.ts';
 import { AuthService } from './service/auth.service.ts';
+import { AuthRuntimeService } from './service/auth-runtime.service.ts';
 import type { AuthNodeRequest } from './types.ts';
 
 export { AUTH_MODULE_NAME } from './constants.ts';
@@ -42,14 +43,20 @@ export class AuthModule
     /** Composes one shared Better Auth runtime for HTTP and Node access. */
     constructor(database: Kysely<Database>) {
         super();
-        const service = new AuthService(database, {
-            secret: config.auth.secret,
-            baseUrl: config.auth.baseUrl,
-            registrationEnabled: config.auth.registrationEnabled,
-            trustedOrigins: config.security.allowedOrigins,
+        const runtime = new AuthRuntimeService({
+            database,
+            options: {
+                secret: config.auth.secret,
+                baseUrl: config.auth.baseUrl,
+                registrationEnabled: config.auth.registrationEnabled,
+                trustedOrigins: config.security.allowedOrigins,
+            },
+        }).createAuthRuntime();
+        const service = new AuthService({
+            runtime,
         });
         const controller = new AuthController(service);
-        this.registerHandler('http', new AuthHttpHandler(service.protocol));
+        this.registerHandler('http', new AuthHttpHandler(runtime));
         this.registerHandler('node', new AuthNodeHandler(controller));
     }
 }

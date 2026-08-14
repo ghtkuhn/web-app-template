@@ -4,7 +4,7 @@ import BetterSqlite3 from 'better-sqlite3';
 import SwaggerParser from '@apidevtools/swagger-parser';
 import { Kysely, SqliteDialect } from 'kysely';
 import type { Database } from '../../src/database.ts';
-import { BetterAuthServiceAux } from '../../src/module/auth/service/auth/better-auth.service-aux.ts';
+import { AuthRuntimeService } from '../../src/module/auth/service/auth-runtime.service.ts';
 import { YamlSerializer } from './yaml.serializer.ts';
 
 /** Generates and checks the merged application and Better Auth OpenAPI contract. */
@@ -67,12 +67,15 @@ export class AuthOpenApiGenerator {
             }),
         });
         try {
-            const runtime = new BetterAuthServiceAux().create(database, {
-                secret: 'openapi-generation-secret-with-at-least-32-characters',
-                baseUrl: 'http://localhost:3000',
-                registrationEnabled: true,
-                trustedOrigins: [],
-            });
+            const runtime = new AuthRuntimeService({
+                database,
+                options: {
+                    secret: 'openapi-generation-secret-with-at-least-32-characters',
+                    baseUrl: 'http://localhost:3000',
+                    registrationEnabled: true,
+                    trustedOrigins: [],
+                },
+            }).createAuthRuntime();
             return await runtime.api.generateOpenAPISchema();
         } finally {
             await database.destroy();

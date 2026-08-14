@@ -11,7 +11,7 @@ import type { IBaseObject } from './interfaces.ts';
  *
  * IMPORT RULES:
  * - ALLOWED: Basic TypeScript types, Base classes.
- * - FORBIDDEN: Services, Controllers, Stores (Objects are pure domain models).
+ * - FORBIDDEN: Service routers, Operations, Controllers, Stores (Objects are pure domain models).
  *
  * CONSTRAINTS:
  * - Must NOT contain logic for persisting itself to the database.
@@ -52,7 +52,7 @@ export abstract class BaseObject implements IBaseObject {
     /**
      * Produces the object's controlled domain serialization.
      *
-     * Domain objects are not public transport contracts. Services must map them
+     * Domain objects are not public transport contracts. Operations must map them
      * to DTOs before returning data through HTTP, WebSocket, CLI, or Node ports.
      * Subclasses containing sensitive fields must exclude those fields here.
      *
