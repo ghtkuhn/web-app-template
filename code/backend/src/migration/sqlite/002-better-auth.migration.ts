@@ -1,6 +1,6 @@
 // fallow-ignore-file code-duplication -- Declarative schema repeats required timestamp columns.
 import type { Kysely } from 'kysely';
-import type { Database } from '../database.ts';
+import type { Database } from '../../database.ts';
 
 /** Creates the Better Auth core SQLite schema managed by the Auth module. */
 export async function up(database: Kysely<Database>): Promise<void> {

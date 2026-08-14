@@ -1,6 +1,6 @@
 // fallow-ignore-file unused-file
 import type { Kysely } from 'kysely';
-import type { Database } from '../database.ts';
+import type { Database } from '../../database.ts';
 
 /**
  * Establishes the initial application schema version.

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import BetterSqlite3 from 'better-sqlite3';
 import { Kysely, SqliteDialect } from 'kysely';
-import { up } from '../../../migration/002-better-auth.migration.ts';
+import { up } from '../../../migration/sqlite/002-better-auth.migration.ts';
 import type { Database } from '../../../database.ts';
 import { AuthService } from '../service/auth.service.ts';
 import { AuthRuntimeService } from '../service/auth-runtime.service.ts';

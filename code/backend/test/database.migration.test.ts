@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { sql } from 'kysely';
 import { DatabaseBackupManager } from '../src/base/base.database-backup.ts';
@@ -16,6 +17,21 @@ class FailingBackupManager extends DatabaseBackupManager {
         throw new Error('backup failed');
     }
 }
+
+test('SQLite and PostgreSQL expose the same ordered migration names', () => {
+    const migrationRoot = path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        '../src/migration',
+    );
+    const sqlite = fs.readdirSync(path.join(migrationRoot, 'sqlite')).sort();
+    const postgres = fs.readdirSync(path.join(migrationRoot, 'postgres')).sort();
+
+    assert.deepEqual(postgres, sqlite);
+    assert.deepEqual(sqlite, [
+        '001-initialize.migration.ts',
+        '002-better-auth.migration.ts',
+    ]);
+});
 
 test('pending migrations create one valid backup and do not repeat', async () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'migration-'));

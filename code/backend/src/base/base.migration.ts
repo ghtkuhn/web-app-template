@@ -2,6 +2,9 @@ import {
     FileMigrationProvider,
     Migrator,
     type Kysely,
+    type MigrationInfo,
+    type MigrationResult,
+    type MigrationResultSet,
 } from 'kysely';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -24,16 +27,16 @@ export class MigrationManager {
     /**
      * Applies all pending versioned migrations.
      *
-     * Creates exactly one integrity-checked backup when migrations are pending
-     * and serializes concurrent migration requests within this process.
+     * Creates one SQLite backup when required and relies on the configured
+     * external backup policy for PostgreSQL. Concurrent requests are serialized.
      *
      * @param database Application-owned database abstraction to migrate.
-     * @param backups Backup manager used before the first pending migration.
+     * @param backups Optional SQLite backup manager used before migration.
      * @returns Whether a pre-migration backup was created.
      */
     public static async migrate(
         database: Kysely<Database>,
-        backups = new DatabaseBackupManager(),
+        backups?: DatabaseBackupManager,
     ): Promise<MigrationOutcome> {
         if (!this.migrationPromise) {
             this.migrationPromise = this.execute(database, backups);
@@ -47,14 +50,34 @@ export class MigrationManager {
 
     private static async execute(
         database: Kysely<Database>,
-        backups: DatabaseBackupManager,
+        backups?: DatabaseBackupManager,
     ): Promise<MigrationOutcome> {
+        const migrator = await this.createMigrator(database);
+        const migrations = await migrator.getMigrations();
+        const pending = migrations.filter((migration) => !migration.executedAt);
+        if (pending.length === 0) {
+            return { backupCreated: false };
+        }
+        const backupCreated = await this.createBackupIfRequired(
+            migrations,
+            pending,
+            backups,
+        );
+        this.assertMigrationResult(await migrator.migrateToLatest());
+        this.assertSqliteIntegrityIfRequired();
+        return { backupCreated };
+    }
+
+    private static async createMigrator(
+        database: Kysely<Database>,
+    ): Promise<Migrator> {
         const migrationFolder = path.resolve(
             path.dirname(fileURLToPath(import.meta.url)),
             '../migration',
+            config.database.type,
         );
         await fs.mkdir(migrationFolder, { recursive: true });
-        const migrator = new Migrator({
+        return new Migrator({
             db: database,
             provider: new FileMigrationProvider({
                 fs,
@@ -62,27 +85,65 @@ export class MigrationManager {
                 migrationFolder,
             }),
         });
-        const migrations = await migrator.getMigrations();
-        const pending = migrations.filter((migration) => !migration.executedAt);
-        if (pending.length === 0) {
-            return { backupCreated: false };
+    }
+
+    private static async createBackupIfRequired(
+        migrations: readonly MigrationInfo[],
+        pending: readonly MigrationInfo[],
+        backups?: DatabaseBackupManager,
+    ): Promise<boolean> {
+        if (config.database.type !== 'sqlite') {
+            return false;
         }
         const executed = migrations.filter((migration) => migration.executedAt);
-        await backups.create(
+        await this.resolveBackupManager(backups).create(
             config.database.releaseId,
-            executed.at(-1)?.name ?? 'none',
-            pending.at(-1)?.name ?? 'none',
+            this.lastMigrationName(executed),
+            this.lastMigrationName(pending),
         );
-        const result = await migrator.migrateToLatest();
-        const failure = result.results?.find(
-            (migration) => migration.status === 'Error',
-        );
-        if (result.error || failure) {
-            throw result.error ?? new Error(
-                `Migration '${failure?.migrationName}' failed.`,
+        return true;
+    }
+
+    private static resolveBackupManager(
+        backups?: DatabaseBackupManager,
+    ): DatabaseBackupManager {
+        return backups === undefined
+            ? new DatabaseBackupManager()
+            : backups;
+    }
+
+    private static lastMigrationName(
+        migrations: readonly MigrationInfo[],
+    ): string {
+        return migrations.length === 0
+            ? 'none'
+            : migrations[migrations.length - 1].name;
+    }
+
+    private static assertMigrationResult(result: MigrationResultSet): void {
+        if (result.error) {
+            throw result.error;
+        }
+        const failure = this.findMigrationFailure(result.results);
+        if (failure) {
+            throw new Error(
+                `Migration '${failure.migrationName}' failed.`,
             );
         }
-        DatabaseManager.assertIntegrity();
-        return { backupCreated: true };
+    }
+
+    private static findMigrationFailure(
+        results: readonly MigrationResult[] | undefined,
+    ): MigrationResult | undefined {
+        if (!results) {
+            return undefined;
+        }
+        return results.find((migration) => migration.status === 'Error');
+    }
+
+    private static assertSqliteIntegrityIfRequired(): void {
+        if (config.database.type === 'sqlite') {
+            DatabaseManager.assertIntegrity();
+        }
     }
 }
