@@ -47,7 +47,11 @@ test('local and scaffolded profiles default to independent Docker targets', () =
     const local = profiles.load();
     expect(local.backend.enabled && local.backend.target.driver).toBe('docker');
     expect(local.frontend.enabled && local.frontend.target.driver).toBe('docker');
-    expect(local.backend.enabled && local.backend.databaseBackupRetention)
+    expect(
+        local.backend.enabled &&
+        local.backend.database.type === 'sqlite' &&
+        local.backend.database.backupRetention,
+    )
         .toBe(10);
     profiles.scaffold('staging');
     const staging = profiles.load('staging');
@@ -78,6 +82,51 @@ test('profile scaffold supports explicit Proxmox per component', () => {
         .toBe('docker');
 });
 
+test('profile scaffold supports external PostgreSQL while SQLite stays default', () => {
+    const profiles = repository();
+    profiles.scaffold(
+        'staging',
+        'local',
+        undefined,
+        undefined,
+        'postgres',
+    );
+    const postgres = profiles.load('staging');
+
+    expect(postgres.schemaVersion).toBe(2);
+    expect(
+        postgres.backend.enabled && postgres.backend.database.type,
+    ).toBe('postgres');
+    expect(postgres.requiredSecrets).toContain('DATABASE_URL');
+    expect(
+        postgres.backend.enabled &&
+        postgres.backend.database.type === 'postgres' &&
+        postgres.backend.database.backupStrategy,
+    ).toBe('external');
+});
+
+test('version-one SQLite profiles normalize to the version-two contract', () => {
+    const profiles = repository();
+    const filePath = profiles.scaffold('legacy');
+    const profile = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    profile.schemaVersion = 1;
+    profile.backend.sqlitePath = profile.backend.database.path;
+    profile.backend.databaseBackupRetention =
+        profile.backend.database.backupRetention;
+    delete profile.backend.database;
+    fs.writeFileSync(filePath, JSON.stringify(profile));
+
+    const normalized = profiles.load('legacy');
+    expect(normalized.schemaVersion).toBe(2);
+    expect(
+        normalized.backend.enabled && normalized.backend.database,
+    ).toEqual({
+        type: 'sqlite',
+        path: '/var/lib/web-app/backend.sqlite',
+        backupRetention: 10,
+    });
+});
+
 test('staging and production profiles reject insecure Proxmox TLS', () => {
     const profiles = repository();
     const filePath = profiles.scaffold(
@@ -96,7 +145,7 @@ test('deployment profiles reject backup retention below one', () => {
     const profiles = repository();
     const filePath = profiles.scaffold('dev');
     const profile = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    profile.backend.databaseBackupRetention = 0;
+    profile.backend.database.backupRetention = 0;
     fs.writeFileSync(filePath, JSON.stringify(profile));
 
     expect(() => profiles.load('dev')).toThrow(/must be >= 1/);
@@ -284,6 +333,48 @@ test('backend deployment configuration carries backup policy and release', () =>
     fs.rmSync(path.dirname(rendered), { recursive: true, force: true });
 });
 
+test('PostgreSQL deployment configuration uses only the required external URL', () => {
+    const profiles = repository();
+    profiles.scaffold(
+        'prod',
+        'local',
+        undefined,
+        undefined,
+        'postgres',
+    );
+    const profile = profiles.load('prod');
+    const rendered = new DeploymentConfigRenderer().render(
+        profile,
+        'backend',
+        {
+            APP_SECRET: 'test-secret',
+            DATABASE_URL:
+                'postgresql://user:secret@database/app?sslmode=verify-full',
+        },
+        'release-123',
+    );
+    const content = fs.readFileSync(rendered, 'utf8');
+
+    expect(content).toContain('DB_TYPE=postgres');
+    expect(content).toContain('DATABASE_URL=postgresql://');
+    expect(content).not.toContain('DB_SQLITE_PATH=');
+    expect(() => new DeploymentConfigRenderer().render(
+        profile,
+        'backend',
+        { APP_SECRET: 'test-secret' },
+    )).toThrow(/DATABASE_URL/);
+    expect(() => new DeploymentConfigRenderer().render(
+        profile,
+        'backend',
+        {
+            APP_SECRET: 'test-secret',
+            DATABASE_URL:
+                'postgresql://user:secret@database/app?sslmode=require',
+        },
+    )).toThrow(/sslmode=verify-full/);
+    fs.rmSync(path.dirname(rendered), { recursive: true, force: true });
+});
+
 test('Docker database restore stops, restores, and restarts backend', () => {
     const calls: Array<{ arguments_: readonly string[] }> = [];
     const runner = {
@@ -307,6 +398,22 @@ test('Docker database restore stops, restores, and restarts backend', () => {
     ]);
     expect(calls[1].arguments_).toContain('backup-001.sqlite');
     expect(calls[3].arguments_).toContain('retain');
+});
+
+test('Docker database commands reject externally managed PostgreSQL', () => {
+    const profiles = repository();
+    profiles.scaffold(
+        'dev',
+        'local',
+        undefined,
+        undefined,
+        'postgres',
+    );
+    const driver = new DockerDeploymentDriver('/project');
+
+    expect(() => driver.databaseList(profiles.load('dev'))).toThrow(
+        /externally managed/,
+    );
 });
 
 test('LXC release activation uses direct SSH and contains health rollback', async () => {

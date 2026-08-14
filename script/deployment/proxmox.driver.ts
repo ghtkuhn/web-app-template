@@ -130,7 +130,7 @@ export class ProxmoxLxcDeploymentDriver {
             `if ! sh ${root}/install.sh ${root}; then if [ -n "$previous" ]; then ln -sfnT "$previous" ${root}/current; sh ${root}/install.sh ${root}; fi; exit 1; fi`,
             `healthy=0; attempt=0; while [ "$attempt" -lt 30 ]; do if curl -fsS ${healthUrl}; then healthy=1; break; fi; attempt=$((attempt + 1)); sleep 1; done; if [ "$healthy" -ne 1 ]; then if [ -n "$previous" ]; then ln -sfnT "$previous" ${root}/current; sh ${root}/install.sh ${root}; fi; exit 1; fi`,
             component === 'backend'
-                ? this.databaseMaintenanceCommand('retain')
+                ? this.sqliteMaintenanceIfConfigured('retain')
                 : 'true',
         ].join(' && ');
         this.processes.run('ssh', this.sshArguments([
@@ -268,6 +268,14 @@ export class ProxmoxLxcDeploymentDriver {
             'DB_BACKUP_RETENTION="$(sed -n \'s/^DB_BACKUP_RETENTION=//p\' /etc/web-app/backend.env)"',
             'export DB_SQLITE_PATH DB_BACKUP_RETENTION',
             `/usr/local/bin/node --experimental-transform-types /opt/web-app/backend/current/script/database-maintenance.ts ${command}`,
+        ].join('; ');
+    }
+
+    private sqliteMaintenanceIfConfigured(command: 'retain'): string {
+        return [
+            'if grep -qx "DB_TYPE=sqlite" /etc/web-app/backend.env',
+            `then ${this.databaseMaintenanceCommand(command)}`,
+            'fi',
         ].join('; ');
     }
 

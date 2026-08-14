@@ -35,6 +35,25 @@ export interface ProxmoxLxcTarget {
 
 export type DeploymentTarget = DockerTarget | ProxmoxLxcTarget;
 
+export interface SqliteDeploymentDatabase {
+    readonly type: 'sqlite';
+    readonly path: string;
+    readonly backupRetention: number;
+}
+
+export interface PostgresDeploymentDatabase {
+    readonly type: 'postgres';
+    readonly connectionUrlSecret: 'DATABASE_URL';
+    readonly backupStrategy: 'external';
+    readonly poolMax?: number;
+    readonly idleTimeoutMs?: number;
+    readonly connectionTimeoutMs?: number;
+}
+
+export type DeploymentDatabase =
+    | SqliteDeploymentDatabase
+    | PostgresDeploymentDatabase;
+
 export interface BackendDeployment {
     readonly enabled: true;
     readonly target: DeploymentTarget;
@@ -43,8 +62,7 @@ export interface BackendDeployment {
     readonly allowedOrigins: readonly string[];
     readonly activeModules: readonly string[];
     readonly authRegistrationEnabled: boolean;
-    readonly sqlitePath: string;
-    readonly databaseBackupRetention?: number;
+    readonly database: DeploymentDatabase;
 }
 
 export interface FrontendDeployment {
@@ -65,7 +83,7 @@ export interface DisabledDeployment {
 }
 
 export interface DeploymentProfile {
-    readonly schemaVersion: 1;
+    readonly schemaVersion: 2;
     readonly name: string;
     readonly environment: DeploymentEnvironment;
     readonly requiredSecrets: readonly string[];

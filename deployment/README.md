@@ -8,6 +8,7 @@ Proxmox LXC driver is selected explicitly.
 npm run deployment:validate
 npm run deployment:validate -- --all
 npm run deployment:scaffold -- staging
+npm run deployment:scaffold -- staging --database postgres
 npm run deployment:build -- local backend
 npm run deployment:deploy -- local all
 npm run deployment:status -- local all
@@ -32,6 +33,11 @@ Proxmox LXC requires:
 - `PROXMOX_API_TOKEN_SECRET`
 - `DEPLOYMENT_SSH_PRIVATE_KEY`
 - every application secret named in `requiredSecrets`
+
+PostgreSQL profiles additionally require `DATABASE_URL`. The URL is supplied
+only through the deployment environment and must never be stored in the JSON
+profile. Production URLs use the `postgresql:` protocol with
+`sslmode=verify-full`.
 
 The Proxmox token needs permission to inspect nodes, storages, templates,
 containers, and tasks and to create, configure, start, and stop the configured
@@ -118,10 +124,18 @@ explicit user authorization and a read-only verification of the exact target.
 
 ## Runtime Model
 
+Profile schema version 2 models the backend database explicitly. Existing
+version-1 SQLite profiles remain readable and are normalized in memory; new and
+scaffolded profiles use version 2. SQLite remains the default unless
+`--database postgres` is selected.
+
 Docker stores SQLite data in the external `backend-data` volume. Proxmox
-backend releases use `/var/lib/web-app` for persistent data. Frontend images and
-LXC releases receive their public API, WebSocket, and presentation settings at
-runtime, so the same static frontend artifact can be used in multiple profiles.
+backend releases use `/var/lib/web-app` for persistent SQLite data. PostgreSQL
+is always externally managed: neither the Docker nor Proxmox driver provisions,
+updates, stops, or deletes a PostgreSQL server. Both drivers only pass the
+secret connection URL to the backend. Frontend images and LXC releases receive
+their public API, WebSocket, and presentation settings at runtime, so the same
+static frontend artifact can be used in multiple profiles.
 
 LXC releases are checksummed, installed below
 `/opt/web-app/<component>/releases/`, and switched through the `current`
@@ -138,6 +152,12 @@ backup, creates a pre-restore safety backup, replaces the database atomically,
 and starts and health-checks the current release. A code rollback never restores
 the database automatically. Large backfills must be separate idempotent,
 restartable jobs rather than startup migrations.
+
+The built-in database list and restore commands apply only to SQLite.
+PostgreSQL profiles declare `backupStrategy: "external"`; the operator or
+database provider owns backups, retention, point-in-time recovery, restore
+testing, and disaster recovery. Application deployment never claims that an
+external PostgreSQL backup exists and never runs `pg_dump` or `pg_restore`.
 
 When `auth` is included in `backend.activeModules`, the profile must list
 `BETTER_AUTH_SECRET` in `requiredSecrets`; the secret remains Environment-only.

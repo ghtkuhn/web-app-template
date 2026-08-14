@@ -1,7 +1,29 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import Ajv2020 from 'ajv/dist/2020.js';
-import type { DeploymentProfile } from './interfaces.ts';
+import type {
+    BackendDeployment,
+    DeploymentDatabase,
+    DeploymentProfile,
+    DeploymentTarget,
+    DisabledDeployment,
+} from './interfaces.ts';
+
+interface LegacyBackendDeployment
+    extends Omit<BackendDeployment, 'database'>
+{
+    readonly sqlitePath: string;
+    readonly databaseBackupRetention?: number;
+}
+
+interface LegacyDeploymentProfile
+    extends Omit<DeploymentProfile, 'schemaVersion' | 'backend'>
+{
+    readonly schemaVersion: 1;
+    readonly backend: LegacyBackendDeployment | DisabledDeployment;
+}
+
+type StoredDeploymentProfile = DeploymentProfile | LegacyDeploymentProfile;
 
 /** Loads, validates, and safely scaffolds deployment profiles. */
 export class DeploymentProfileRepository {
@@ -46,14 +68,17 @@ export class DeploymentProfileRepository {
         const filePath = fs.existsSync(versionedPath)
             ? versionedPath
             : localPath;
-        const profile = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-        if (!this.validateProfile(profile)) {
+        const parsed: unknown = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        if (!this.validateProfile(parsed)) {
             throw new Error(
                 `Invalid deployment profile '${name}': ${this.validateProfile.errors?.map((error) => error.message).join(', ')}`,
             );
         }
-        this.assertSecurity(profile as DeploymentProfile);
-        return profile as DeploymentProfile;
+        const stored = parsed as StoredDeploymentProfile;
+        this.assertStoredVersion(stored);
+        const profile = this.normalize(stored);
+        this.assertSecurity(profile);
+        return profile;
     }
 
     /** Loads every checked-in profile in deterministic name order. */
@@ -74,19 +99,49 @@ export class DeploymentProfileRepository {
         sourceName = 'local',
         backendDriver?: string,
         frontendDriver?: string,
+        databaseType = 'sqlite',
     ): string {
         this.assertName(name);
         const target = path.join(this.profilesRoot, `${name}.json`);
         if (fs.existsSync(target)) {
             throw new Error(`Deployment profile '${name}' already exists.`);
         }
-        const profile = structuredClone(this.load(sourceName)) as any;
-        profile.name = name;
-        profile.environment = ['local', 'dev', 'staging', 'prod'].includes(name)
-            ? name
-            : 'dev';
-        this.applyDriver(profile, 'backend', backendDriver ?? 'docker');
-        this.applyDriver(profile, 'frontend', frontendDriver ?? 'docker');
+        const source = this.load(sourceName);
+        const environment = this.environment(name);
+        const database = this.database(databaseType);
+        const profile: DeploymentProfile = {
+            ...source,
+            schemaVersion: 2,
+            name,
+            environment,
+            requiredSecrets: this.requiredSecrets(
+                source.requiredSecrets,
+                database,
+            ),
+            backend: source.backend.enabled
+                ? {
+                      ...source.backend,
+                      target: this.target(
+                          name,
+                          environment,
+                          'backend',
+                          backendDriver ?? 'docker',
+                      ),
+                      database,
+                  }
+                : source.backend,
+            frontend: source.frontend.enabled
+                ? {
+                      ...source.frontend,
+                      target: this.target(
+                          name,
+                          environment,
+                          'frontend',
+                          frontendDriver ?? 'docker',
+                      ),
+                  }
+                : source.frontend,
+        };
         if (!this.validateProfile(profile)) {
             throw new Error(
                 `Generated deployment profile is invalid: ${this.validateProfile.errors?.map((error) => error.message).join(', ')}`,
@@ -97,50 +152,82 @@ export class DeploymentProfileRepository {
         return target;
     }
 
-    private applyDriver(
-        profile: DeploymentProfile,
+    private target(
+        profileName: string,
+        environment: DeploymentProfile['environment'],
         component: 'backend' | 'frontend',
         driver: string,
-    ): void {
+    ): DeploymentTarget {
         if (!['docker', 'proxmox-lxc'].includes(driver)) {
             throw new Error(`Unknown deployment driver '${driver}'.`);
         }
-        const selected = profile[component] as any;
-        if (selected.enabled) {
-            selected.target = driver === 'docker'
-                ? {
-                      driver: 'docker',
-                      image: `web-app-${component}:${profile.name}`,
-                      hostPort: component === 'backend' ? 3000 : 8080,
-                  }
-                : {
-                      driver: 'proxmox-lxc',
-                      apiUrl: 'https://proxmox.local:8006',
-                      node: 'pve',
-                      vmid: component === 'backend' ? 200 : 201,
-                      hostname: `web-app-${component}`,
-                      storage: 'local-lvm',
-                      template:
-                          'local:vztmpl/debian-13-standard_13.0-1_amd64.tar.zst',
-                      bridge: 'vmbr0',
-                      address: 'dhcp',
-                      gateway: '192.168.1.1',
-                      nameserver: '1.1.1.1',
-                      firewall: true,
-                      startOnBoot: true,
-                      stopContainer: true,
-                      sshHost: `${component}.local`,
-                      sshUser: 'root',
-                      sshPublicKey: 'replace-with-public-key',
-                      cores: 2,
-                      memoryMb: component === 'backend' ? 1024 : 512,
-                      swapMb: 512,
-                      diskGb: 8,
-                      allowInsecureTls:
-                          profile.environment === 'local' ||
-                          profile.environment === 'dev',
-                  };
+        if (driver === 'docker') {
+            return {
+                driver: 'docker',
+                image: `web-app-${component}:${profileName}`,
+                hostPort: component === 'backend' ? 3000 : 8080,
+            };
         }
+        return {
+            driver: 'proxmox-lxc',
+            apiUrl: 'https://proxmox.local:8006',
+            node: 'pve',
+            vmid: component === 'backend' ? 200 : 201,
+            hostname: `web-app-${component}`,
+            storage: 'local-lvm',
+            template:
+                'local:vztmpl/debian-13-standard_13.0-1_amd64.tar.zst',
+            bridge: 'vmbr0',
+            address: 'dhcp',
+            gateway: '192.168.1.1',
+            nameserver: '1.1.1.1',
+            firewall: true,
+            startOnBoot: true,
+            stopContainer: true,
+            sshHost: `${component}.local`,
+            sshUser: 'root',
+            sshPublicKey: 'replace-with-public-key',
+            cores: 2,
+            memoryMb: component === 'backend' ? 1024 : 512,
+            swapMb: 512,
+            diskGb: 8,
+            allowInsecureTls:
+                environment === 'local' || environment === 'dev',
+        };
+    }
+
+    private database(type: string): DeploymentDatabase {
+        if (type === 'sqlite') {
+            return {
+                type,
+                path: '/var/lib/web-app/backend.sqlite',
+                backupRetention: 10,
+            };
+        }
+        if (type === 'postgres') {
+            return {
+                type,
+                connectionUrlSecret: 'DATABASE_URL',
+                backupStrategy: 'external',
+                poolMax: 10,
+                idleTimeoutMs: 30000,
+                connectionTimeoutMs: 10000,
+            };
+        }
+        throw new Error(`Unknown database type '${type}'.`);
+    }
+
+    private requiredSecrets(
+        source: readonly string[],
+        database: DeploymentDatabase,
+    ): readonly string[] {
+        const secrets = new Set(source);
+        if (database.type === 'postgres') {
+            secrets.add(database.connectionUrlSecret);
+        } else {
+            secrets.delete('DATABASE_URL');
+        }
+        return [...secrets].sort((left, right) => left.localeCompare(right));
     }
 
     private assertSecurity(profile: DeploymentProfile): void {
@@ -150,6 +237,7 @@ export class DeploymentProfileRepository {
                 throw new Error(`Profiles must not contain '${forbidden}'.`);
             }
         }
+        this.assertDatabaseConfiguration(profile);
         this.assertAuthConfiguration(profile);
         if (
             profile.environment !== 'local' &&
@@ -157,6 +245,75 @@ export class DeploymentProfileRepository {
         ) {
             this.assertVerifiedProxmoxTls(profile);
         }
+    }
+
+    private assertDatabaseConfiguration(profile: DeploymentProfile): void {
+        if (!profile.backend.enabled) {
+            return;
+        }
+        const database = profile.backend.database;
+        if (
+            database.type === 'postgres' &&
+            !profile.requiredSecrets.includes(database.connectionUrlSecret)
+        ) {
+            throw new Error(
+                'PostgreSQL deployments must require DATABASE_URL.',
+            );
+        }
+    }
+
+    private assertStoredVersion(profile: StoredDeploymentProfile): void {
+        if (!profile.backend.enabled) {
+            return;
+        }
+        if (profile.schemaVersion === 1 && !('sqlitePath' in profile.backend)) {
+            throw new Error('Deployment profile version 1 requires sqlitePath.');
+        }
+        if (profile.schemaVersion === 2 && !('database' in profile.backend)) {
+            throw new Error('Deployment profile version 2 requires database.');
+        }
+    }
+
+    private normalize(profile: StoredDeploymentProfile): DeploymentProfile {
+        if (profile.schemaVersion === 2) {
+            return profile;
+        }
+        if (!profile.backend.enabled) {
+            return {
+                ...profile,
+                schemaVersion: 2,
+                backend: { enabled: false },
+            };
+        }
+        const {
+            sqlitePath,
+            databaseBackupRetention,
+            ...backend
+        } = profile.backend;
+        return {
+            ...profile,
+            schemaVersion: 2,
+            backend: {
+                ...backend,
+                database: {
+                    type: 'sqlite',
+                    path: sqlitePath,
+                    backupRetention: databaseBackupRetention ?? 10,
+                },
+            },
+        };
+    }
+
+    private environment(name: string): DeploymentProfile['environment'] {
+        if (
+            name === 'local' ||
+            name === 'dev' ||
+            name === 'staging' ||
+            name === 'prod'
+        ) {
+            return name;
+        }
+        return 'dev';
     }
 
     /** Validates alignment between Backend Auth and public Frontend flags. */

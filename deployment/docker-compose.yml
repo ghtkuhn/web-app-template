@@ -11,9 +11,13 @@ services:
             PORT: "3000"
             WEBSOCKET_ENABLED: "true"
             WEBSOCKET_PORT: "3001"
-            DB_TYPE: sqlite
+            DB_TYPE: ${DEPLOY_DB_TYPE:-sqlite}
             DB_SQLITE_PATH: ${DEPLOY_SQLITE_PATH:-/var/lib/web-app/backend.sqlite}
             DB_BACKUP_RETENTION: ${DB_BACKUP_RETENTION:-10}
+            DATABASE_URL: ${DEPLOY_DATABASE_URL:-}
+            DB_POSTGRES_POOL_MAX: ${DB_POSTGRES_POOL_MAX:-10}
+            DB_POSTGRES_IDLE_TIMEOUT_MS: ${DB_POSTGRES_IDLE_TIMEOUT_MS:-30000}
+            DB_POSTGRES_CONNECTION_TIMEOUT_MS: ${DB_POSTGRES_CONNECTION_TIMEOUT_MS:-10000}
             DEPLOYMENT_RELEASE_ID: ${DEPLOYMENT_RELEASE_ID:-development}
             ACTIVE_MODULES: ${DEPLOY_ACTIVE_MODULES:-health}
             ALLOWED_ORIGINS: ${DEPLOY_ALLOWED_ORIGINS:-http://localhost:8080}

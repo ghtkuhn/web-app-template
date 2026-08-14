@@ -116,11 +116,13 @@ export class DeploymentCli {
         const source = this.option(arguments_, '--from') ?? 'local';
         const backend = this.option(arguments_, '--backend-driver');
         const frontend = this.option(arguments_, '--frontend-driver');
+        const database = this.option(arguments_, '--database') ?? 'sqlite';
         const target = this.profiles.scaffold(
             name,
             source,
             backend,
             frontend,
+            database,
         );
         process.stdout.write(`Created ${path.relative(this.root, target)}.\n`);
         return 0;
@@ -216,6 +218,11 @@ export class DeploymentCli {
         if (!profile.backend.enabled) {
             throw new Error('Backend is disabled.');
         }
+        if (profile.backend.database.type !== 'sqlite') {
+            throw new Error(
+                'PostgreSQL backups are externally managed; deployment database commands support only SQLite.',
+            );
+        }
         return profile.backend;
     }
 
@@ -293,6 +300,9 @@ export class DeploymentCli {
         );
         if (missing.length > 0) {
             throw new Error(`Missing deployment secrets: ${missing.join(', ')}.`);
+        }
+        if (profile.backend.enabled) {
+            this.configurations.validateBackend(profile, process.env);
         }
     }
 

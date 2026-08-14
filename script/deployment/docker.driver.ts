@@ -39,7 +39,11 @@ export class DockerDeploymentDriver {
             ['up', '--detach', '--wait', ...components],
             releaseId,
         );
-        if (components.includes('backend')) {
+        if (
+            components.includes('backend') &&
+            profile.backend.enabled &&
+            profile.backend.database.type === 'sqlite'
+        ) {
             this.databaseCommand(profile, ['retain']);
         }
     }
@@ -110,16 +114,7 @@ export class DockerDeploymentDriver {
                         profile.environment === 'prod'
                             ? 'production'
                             : 'development',
-                    DEPLOY_SQLITE_PATH:
-                        profile.backend.enabled
-                            ? profile.backend.sqlitePath
-                            : '/var/lib/web-app/backend.sqlite',
-                    DB_BACKUP_RETENTION:
-                        profile.backend.enabled
-                            ? String(
-                                  profile.backend.databaseBackupRetention ?? 10,
-                              )
-                            : '10',
+                    ...this.databaseEnvironment(profile),
                     DEPLOYMENT_RELEASE_ID: releaseId,
                     DEPLOY_ACTIVE_MODULES:
                         profile.backend.enabled
@@ -172,6 +167,7 @@ export class DockerDeploymentDriver {
 
     /** Lists persistent SQLite backups through a one-shot backend container. */
     public databaseList(profile: DeploymentProfile): string {
+        this.assertSqlite(profile);
         return this.databaseCommand(profile, ['list']);
     }
 
@@ -180,6 +176,7 @@ export class DockerDeploymentDriver {
         profile: DeploymentProfile,
         backupId: string,
     ): string {
+        this.assertSqlite(profile);
         this.stop(profile, ['backend']);
         const output = this.databaseCommand(profile, ['restore', backupId]);
         this.deploy(profile, ['backend'], `restore-${Date.now()}`);
@@ -200,5 +197,58 @@ export class DockerDeploymentDriver {
             'code/backend/script/database-maintenance.ts',
             ...arguments_,
         ]);
+    }
+
+    private databaseEnvironment(
+        profile: DeploymentProfile,
+    ): Readonly<Record<string, string>> {
+        if (!profile.backend.enabled) {
+            return {
+                DEPLOY_DB_TYPE: 'sqlite',
+                DEPLOY_SQLITE_PATH: '/var/lib/web-app/backend.sqlite',
+                DB_BACKUP_RETENTION: '10',
+                DEPLOY_DATABASE_URL: '',
+                DB_POSTGRES_POOL_MAX: '10',
+                DB_POSTGRES_IDLE_TIMEOUT_MS: '30000',
+                DB_POSTGRES_CONNECTION_TIMEOUT_MS: '10000',
+            };
+        }
+        const database = profile.backend.database;
+        if (database.type === 'sqlite') {
+            return {
+                DEPLOY_DB_TYPE: 'sqlite',
+                DEPLOY_SQLITE_PATH: database.path,
+                DB_BACKUP_RETENTION: String(database.backupRetention),
+                DEPLOY_DATABASE_URL: '',
+                DB_POSTGRES_POOL_MAX: '10',
+                DB_POSTGRES_IDLE_TIMEOUT_MS: '30000',
+                DB_POSTGRES_CONNECTION_TIMEOUT_MS: '10000',
+            };
+        }
+        return {
+            DEPLOY_DB_TYPE: 'postgres',
+            DEPLOY_SQLITE_PATH: '/var/lib/web-app/backend.sqlite',
+            DB_BACKUP_RETENTION: '10',
+            DEPLOY_DATABASE_URL:
+                process.env[database.connectionUrlSecret] ?? '',
+            DB_POSTGRES_POOL_MAX: String(database.poolMax ?? 10),
+            DB_POSTGRES_IDLE_TIMEOUT_MS: String(
+                database.idleTimeoutMs ?? 30000,
+            ),
+            DB_POSTGRES_CONNECTION_TIMEOUT_MS: String(
+                database.connectionTimeoutMs ?? 10000,
+            ),
+        };
+    }
+
+    private assertSqlite(profile: DeploymentProfile): void {
+        if (
+            !profile.backend.enabled ||
+            profile.backend.database.type !== 'sqlite'
+        ) {
+            throw new Error(
+                'PostgreSQL backups are externally managed; deployment database commands support only SQLite.',
+            );
+        }
     }
 }

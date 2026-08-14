@@ -1,5 +1,5 @@
 {
-    "schemaVersion": 1,
+    "schemaVersion": 2,
     "name": "local",
     "environment": "local",
     "requiredSecrets": ["APP_SECRET"],
@@ -15,8 +15,11 @@
         "allowedOrigins": ["http://localhost:8080"],
         "activeModules": ["health"],
         "authRegistrationEnabled": false,
-        "sqlitePath": "/var/lib/web-app/backend.sqlite",
-        "databaseBackupRetention": 10
+        "database": {
+            "type": "sqlite",
+            "path": "/var/lib/web-app/backend.sqlite",
+            "backupRetention": 10
+        }
     },
     "frontend": {
         "enabled": true,
