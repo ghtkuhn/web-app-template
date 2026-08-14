@@ -9,6 +9,9 @@ services:
             APP_SECRET: ${APP_SECRET:?APP_SECRET is required}
             HTTP_ENABLED: "true"
             PORT: "3000"
+            HTTP_MAX_BODY_BYTES: ${HTTP_MAX_BODY_BYTES:-1048576}
+            HTTP_REQUEST_TIMEOUT_MS: ${HTTP_REQUEST_TIMEOUT_MS:-30000}
+            HTTP_HEADERS_TIMEOUT_MS: ${HTTP_HEADERS_TIMEOUT_MS:-10000}
             WEBSOCKET_ENABLED: "true"
             WEBSOCKET_PORT: "3001"
             DB_TYPE: ${DEPLOY_DB_TYPE:-sqlite}

@@ -60,6 +60,9 @@ export class DeploymentConfigRenderer {
             `APP_SECRET=${environment.APP_SECRET ?? ''}`,
             'HTTP_ENABLED=true',
             'PORT=3000',
+            `HTTP_MAX_BODY_BYTES=${environment.HTTP_MAX_BODY_BYTES ?? '1048576'}`,
+            `HTTP_REQUEST_TIMEOUT_MS=${environment.HTTP_REQUEST_TIMEOUT_MS ?? '30000'}`,
+            `HTTP_HEADERS_TIMEOUT_MS=${environment.HTTP_HEADERS_TIMEOUT_MS ?? '10000'}`,
             'WEBSOCKET_ENABLED=true',
             'WEBSOCKET_PORT=3001',
             ...this.database(

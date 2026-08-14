@@ -34,6 +34,62 @@ export interface PostgresDatabaseConfig extends CommonDatabaseConfig {
 /** Runtime database configuration narrowed by the selected dialect. */
 export type DatabaseConfig = SqliteDatabaseConfig | PostgresDatabaseConfig;
 
+/** Validated native HTTP transport configuration. */
+export interface HttpTransportConfig {
+    enabled: boolean;
+    port: number;
+    nodeEnv: string;
+    maxBodyBytes: number;
+    requestTimeoutMs: number;
+    headersTimeoutMs: number;
+}
+
+/** Parses the native HTTP transport environment contract. */
+export class HttpTransportConfigLoader {
+    /** Builds one validated HTTP transport configuration. */
+    public static load(environment: NodeJS.ProcessEnv): HttpTransportConfig {
+        return {
+            enabled: environment.HTTP_ENABLED !== 'false',
+            port: parseInt(environment.PORT || '3000', 10),
+            nodeEnv: environment.NODE_ENV || 'development',
+            maxBodyBytes: this.parsePositiveInteger(
+                environment.HTTP_MAX_BODY_BYTES,
+                1_048_576,
+                'HTTP_MAX_BODY_BYTES',
+            ),
+            requestTimeoutMs: this.parsePositiveInteger(
+                environment.HTTP_REQUEST_TIMEOUT_MS,
+                30_000,
+                'HTTP_REQUEST_TIMEOUT_MS',
+            ),
+            headersTimeoutMs: this.parsePositiveInteger(
+                environment.HTTP_HEADERS_TIMEOUT_MS,
+                10_000,
+                'HTTP_HEADERS_TIMEOUT_MS',
+            ),
+        };
+    }
+
+    /** Parses one strictly positive decimal integer or returns its default. */
+    private static parsePositiveInteger(
+        value: string | undefined,
+        fallback: number,
+        name: string,
+    ): number {
+        if (value === undefined) {
+            return fallback;
+        }
+        if (!/^[1-9][0-9]*$/u.test(value)) {
+            throw new Error(`${name} must be a positive integer.`);
+        }
+        const parsed = Number(value);
+        if (!Number.isSafeInteger(parsed)) {
+            throw new Error(`${name} must be a positive safe integer.`);
+        }
+        return parsed;
+    }
+}
+
 /** Parses and validates the database-specific environment contract. */
 export class DatabaseConfigLoader {
     /** Builds one validated database configuration from environment values. */
@@ -169,11 +225,7 @@ export class DatabaseConfigLoader {
 
 /** Central validated application configuration. */
 export const config = {
-    server: {
-        enabled: process.env.HTTP_ENABLED !== 'false',
-        port: parseInt(process.env.PORT || '3000', 10),
-        nodeEnv: process.env.NODE_ENV || 'development',
-    },
+    server: HttpTransportConfigLoader.load(process.env),
     websocket: {
         enabled: process.env.WEBSOCKET_ENABLED !== 'false',
         port: parseInt(process.env.WEBSOCKET_PORT || '3001', 10),

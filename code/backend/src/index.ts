@@ -34,6 +34,9 @@ export class BackendApplication {
                 this.server = new HttpServer({
                     port: config.server.port,
                     modules,
+                    maxBodyBytes: config.server.maxBodyBytes,
+                    requestTimeoutMs: config.server.requestTimeoutMs,
+                    headersTimeoutMs: config.server.headersTimeoutMs,
                     allowedOrigins: config.security.allowedOrigins,
                 });
                 await this.server.start();

@@ -4,8 +4,51 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { DatabaseManager } from '../src/base/base.database.ts';
-import { config } from '../src/config.ts';
+import {
+    config,
+    HttpTransportConfigLoader,
+} from '../src/config.ts';
 import { BackendApplication } from '../src/index.ts';
+
+test('HTTP transport configuration validates limits and preserves defaults', () => {
+    assert.deepEqual(HttpTransportConfigLoader.load({}), {
+        enabled: true,
+        port: 3000,
+        nodeEnv: 'development',
+        maxBodyBytes: 1_048_576,
+        requestTimeoutMs: 30_000,
+        headersTimeoutMs: 10_000,
+    });
+    assert.deepEqual(
+        HttpTransportConfigLoader.load({
+            HTTP_ENABLED: 'false',
+            PORT: '4100',
+            NODE_ENV: 'test',
+            HTTP_MAX_BODY_BYTES: '2048',
+            HTTP_REQUEST_TIMEOUT_MS: '45000',
+            HTTP_HEADERS_TIMEOUT_MS: '12000',
+        }),
+        {
+            enabled: false,
+            port: 4100,
+            nodeEnv: 'test',
+            maxBodyBytes: 2048,
+            requestTimeoutMs: 45_000,
+            headersTimeoutMs: 12_000,
+        },
+    );
+
+    for (const [name, value] of [
+        ['HTTP_MAX_BODY_BYTES', '0'],
+        ['HTTP_REQUEST_TIMEOUT_MS', '-1'],
+        ['HTTP_HEADERS_TIMEOUT_MS', 'invalid'],
+    ] as const) {
+        assert.throws(
+            () => HttpTransportConfigLoader.load({ [name]: value }),
+            new RegExp(`${name} must be a positive integer`),
+        );
+    }
+});
 
 test('backend stop closes application-owned database infrastructure', async () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'backend-app-'));
