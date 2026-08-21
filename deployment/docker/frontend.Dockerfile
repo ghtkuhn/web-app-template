@@ -1,9 +1,9 @@
-FROM node:22.23.1-bookworm-slim AS build
+FROM node:24.19.0-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY code/backend/package.json code/backend/package.json
 COPY code/frontend/web/package.json code/frontend/web/package.json
-RUN npm ci --workspace @app/web
+RUN npm ci --ignore-scripts --workspace @app/web
 COPY code/backend/openapi code/backend/openapi
 COPY code/frontend/web code/frontend/web
 RUN npm run build --workspace @app/web

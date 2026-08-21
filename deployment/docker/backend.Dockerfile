@@ -1,10 +1,10 @@
-FROM node:22.23.1-bookworm-slim
+FROM node:24.19.0-bookworm-slim
 
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY code/backend/package.json code/backend/package.json
 COPY code/frontend/web/package.json code/frontend/web/package.json
-RUN npm ci --omit=dev --workspace @app/backend
+RUN npm ci --ignore-scripts --omit=dev --workspace @app/backend
 
 COPY code/backend code/backend
 RUN mkdir -p /var/lib/web-app && chown -R node:node /app /var/lib/web-app

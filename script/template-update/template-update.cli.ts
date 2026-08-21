@@ -203,7 +203,7 @@ export class TemplateUpdateCli {
             '  npm run template:update -- --continue <version>',
             '  npm run template:update -- --abort <version>',
             '',
-            'Requirements: Node 22, Git, npm, tar, and HTTPS access to GitHub.',
+            'Requirements: Node 24.19.0, npm 11, Git, tar, and HTTPS access to GitHub.',
             'Exit codes: 0 success/current, 1 input/conflict/verify follow-up, 2 execution failure.',
             '',
         ].join('\n');

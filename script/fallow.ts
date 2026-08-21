@@ -4,6 +4,8 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 type FallowReport = {
+    kind?: string;
+    version?: string;
     verdict?: string;
     summary?: {
         dead_code_issues?: number;
@@ -23,34 +25,64 @@ type FallowReport = {
             instances?: Array<{ file?: string; start_line?: number }>;
         }>;
     };
+    attribution?: {
+        dead_code_introduced?: number;
+        complexity_introduced?: number;
+        duplication_introduced?: number;
+        styling_introduced?: number;
+    };
 };
+
+interface FallowProcessResult {
+    readonly error?: Error;
+    readonly status: number | null;
+    readonly stdout?: string;
+    readonly stderr?: string;
+}
 
 /** Runs Fallow while keeping console output bounded for agents and CI logs. */
 export class FallowAudit {
+    private static readonly VERSION = '3.15.0';
     private static readonly MAX_EXAMPLES = 10;
     private static readonly MAX_STDERR_CHARACTERS = 2_000;
     private readonly reportPath: string;
+    private readonly projectRoot: string;
+    private readonly execute: (
+        command: string,
+        arguments_: readonly string[],
+    ) => FallowProcessResult;
 
     /** Creates an audit writing its complete report below ignored local state. */
-    constructor(projectRoot = process.cwd()) {
+    constructor(
+        projectRoot = process.cwd(),
+        execute = FallowAudit.execute,
+    ) {
+        this.projectRoot = projectRoot;
         this.reportPath = path.join(projectRoot, '.fallow/audit.json');
+        this.execute = execute;
     }
 
     /**
-     * Executes Fallow and treats findings as a successful audit.
+     * Executes Fallow and rejects findings attributed to the current change.
      *
-     * Fallow exits with code 1 when it reports findings. Only execution errors,
-     * malformed reports, and exit codes of 2 or greater fail verification.
+     * Fallow exits with code 1 when it reports findings. Inherited findings are
+     * report-only; introduced findings fail with 1 and execution errors with 2.
      */
     public run(): number {
-        const command = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-        const result = spawnSync(
-            command,
-            ['fallow', 'audit', '--format', 'json'],
-            {
-                encoding: 'utf8',
-                maxBuffer: 64 * 1024 * 1024,
-            },
+        if (!this.installedVersionIsExact()) {
+            console.error(
+                `Fallow ${FallowAudit.VERSION} must be installed locally.`,
+            );
+            return 2;
+        }
+        const executable = path.join(
+            this.projectRoot,
+            'node_modules/.bin',
+            process.platform === 'win32' ? 'fallow.cmd' : 'fallow',
+        );
+        const result = this.execute(
+            executable,
+            ['audit', '--format', 'json'],
         );
 
         if (result.error) {
@@ -71,11 +103,21 @@ export class FallowAudit {
             return 2;
         }
 
-        this.writeSummary(report);
-        if (result.status === 0 || result.status === 1) {
-            return 0;
+        if (
+            report.kind !== 'audit' ||
+            report.version !== FallowAudit.VERSION ||
+            !report.attribution
+        ) {
+            console.error(
+                `Fallow returned an unsupported report. Full output: ${this.relativeReportPath()}`,
+            );
+            return 2;
         }
-        return 2;
+        this.writeSummary(report);
+        if (result.status !== 0 && result.status !== 1) {
+            return 2;
+        }
+        return this.introducedFindingCount(report) === 0 ? 0 : 1;
     }
 
     /** Persists the complete machine-readable result outside console output. */
@@ -128,6 +170,31 @@ export class FallowAudit {
         console.log(`Full Fallow report: ${this.relativeReportPath()}`);
     }
 
+    private introducedFindingCount(report: FallowReport): number {
+        const attribution = report.attribution ?? {};
+        const count =
+            (attribution.dead_code_introduced ?? 0) +
+            (attribution.complexity_introduced ?? 0) +
+            (attribution.duplication_introduced ?? 0) +
+            (attribution.styling_introduced ?? 0);
+        if (count > 0) {
+            console.error(`Fallow found ${count} introduced finding(s).`);
+        }
+        return count;
+    }
+
+    private installedVersionIsExact(): boolean {
+        try {
+            const manifest = JSON.parse(fs.readFileSync(
+                path.join(this.projectRoot, 'node_modules/fallow/package.json'),
+                'utf8',
+            )) as { version?: string };
+            return manifest.version === FallowAudit.VERSION;
+        } catch {
+            return false;
+        }
+    }
+
     /** Selects compact examples without serializing complete finding payloads. */
     // fallow-ignore-next-line complexity -- Flattens two optional report collections.
     private examples(report: FallowReport): string[] {
@@ -155,6 +222,16 @@ export class FallowAudit {
             .relative(process.cwd(), this.reportPath)
             .split(path.sep)
             .join('/');
+    }
+
+    private static execute(
+        command: string,
+        arguments_: readonly string[],
+    ): FallowProcessResult {
+        return spawnSync(command, [...arguments_], {
+            encoding: 'utf8',
+            maxBuffer: 64 * 1024 * 1024,
+        });
     }
 }
 

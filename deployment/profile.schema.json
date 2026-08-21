@@ -36,9 +36,10 @@
         "lxcTarget": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["driver", "apiUrl", "node", "vmid", "hostname", "storage", "template", "bridge", "address", "gateway", "nameserver", "firewall", "startOnBoot", "stopContainer", "sshHost", "sshUser", "sshPublicKey", "cores", "memoryMb", "swapMb", "diskGb"],
+            "required": ["driver", "installationId", "apiUrl", "node", "vmid", "hostname", "storage", "template", "bridge", "address", "gateway", "nameserver", "firewall", "startOnBoot", "stopContainer", "sshAuthentication", "sshHost", "sshPort", "sshUser", "sshHostKeyFingerprint", "sshPublicKey", "cores", "memoryMb", "swapMb", "diskGb"],
             "properties": {
                 "driver": { "const": "proxmox-lxc" },
+                "installationId": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" },
                 "apiUrl": { "type": "string", "format": "uri" },
                 "node": { "type": "string", "minLength": 1 },
                 "vmid": { "type": "integer", "minimum": 100 },
@@ -53,7 +54,10 @@
                 "startOnBoot": { "type": "boolean" },
                 "stopContainer": { "type": "boolean" },
                 "sshHost": { "type": "string", "minLength": 1 },
-                "sshUser": { "type": "string", "minLength": 1 },
+                "sshPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
+                "sshUser": { "type": "string", "pattern": "^[a-z_][a-z0-9_-]*$" },
+                "sshAuthentication": { "enum": ["private-key", "password"] },
+                "sshHostKeyFingerprint": { "type": "string", "pattern": "^SHA256:[A-Za-z0-9+/]{43}$" },
                 "sshPublicKey": { "type": "string", "minLength": 1 },
                 "cores": { "type": "integer", "minimum": 1 },
                 "memoryMb": { "type": "integer", "minimum": 128 },
@@ -62,10 +66,25 @@
                 "allowInsecureTls": { "type": "boolean", "default": false }
             }
         },
+        "existingLxcTarget": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["driver", "installationId", "sshAuthentication", "sshHost", "sshPort", "sshUser", "sshHostKeyFingerprint"],
+            "properties": {
+                "driver": { "const": "existing-lxc" },
+                "installationId": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" },
+                "sshAuthentication": { "enum": ["private-key", "password"] },
+                "sshHost": { "type": "string", "minLength": 1 },
+                "sshPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
+                "sshUser": { "type": "string", "pattern": "^[a-z_][a-z0-9_-]*$" },
+                "sshHostKeyFingerprint": { "type": "string", "pattern": "^SHA256:[A-Za-z0-9+/]{43}$" }
+            }
+        },
         "target": {
             "oneOf": [
                 { "$ref": "#/$defs/dockerTarget" },
-                { "$ref": "#/$defs/lxcTarget" }
+                { "$ref": "#/$defs/lxcTarget" },
+                { "$ref": "#/$defs/existingLxcTarget" }
             ]
         },
         "sqliteDatabase": {

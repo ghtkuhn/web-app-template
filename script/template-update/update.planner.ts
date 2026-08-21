@@ -8,6 +8,17 @@ import type {
 import { AgentInstructionPlanner } from './agent-instruction.planner.ts';
 import { PackageManifestMerger } from './package-manifest.merger.ts';
 
+export const TEMPLATE_UPDATE_EXACT_IGNORES = new Set([
+    '.git',
+    '.template',
+    'package.json',
+    'package-lock.json',
+    'CODEX-INBOX.md',
+    '.env',
+    '.credentials.env',
+    'data/ai/MEMORY.md',
+]);
+
 /** Produces a deterministic three-way update plan. */
 export class UpdatePlanner {
     private readonly agentInstructions = new AgentInstructionPlanner();
@@ -273,15 +284,6 @@ export class UpdatePlanner {
     private ignored(relativePath: string): boolean {
         const normalized = relativePath.split(path.sep).join('/');
         const segments = normalized.split('/');
-        const exact = new Set([
-            '.git',
-            '.template',
-            'package.json',
-            'package-lock.json',
-            'CODEX-INBOX.md',
-            '.env',
-            'data/ai/MEMORY.md',
-        ]);
         const prefixes = [
             '.git/',
             '.template/',
@@ -293,7 +295,7 @@ export class UpdatePlanner {
             'deployment/tmp/',
             'deployment/artifacts/',
             'deployment/releases/',
-            'deployment/profiles/private/',
+            'deployment/profiles/',
         ];
         const suffixes = [
             '.local.json',
@@ -302,7 +304,7 @@ export class UpdatePlanner {
             '.pem',
             '.sqlite',
         ];
-        return exact.has(normalized) ||
+        return TEMPLATE_UPDATE_EXACT_IGNORES.has(normalized) ||
             prefixes.some((prefix) => normalized.startsWith(prefix)) ||
             suffixes.some((suffix) => normalized.endsWith(suffix)) ||
             ['dist', 'node_modules', '.cache'].some(

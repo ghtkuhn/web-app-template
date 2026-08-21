@@ -47,23 +47,11 @@ export interface IEntityDTO<T extends IBaseObject> extends IBaseDTO {
     toObject(): Partial<T>;
 }
 
-/** Typed persistence operations implemented by every Store. */
-export interface IBaseStore<T extends IBaseObject> {
-    /** Creates or fully updates one mapped domain object. */
-    save(object: T): Promise<T>;
-    /** Finds one mapped domain object by its identifier. */
-    findById(id: string): Promise<T | null>;
-    /** Returns all mapped objects visible through this Store. */
-    findAll(): Promise<T[]>;
-    /** Deletes or soft-deletes one persisted object by identifier. */
-    delete(id: string): Promise<void>;
-}
+/** Marker contract for Stores with domain-specific persistence methods. */
+export interface IBaseStore<T extends IBaseObject> {}
 
 /** Marker contract for private API-layer auxiliary classes. */
 export interface IBaseApiAux {}
-
-/** Marker contract for private controller-layer auxiliary classes. */
-export interface IBaseControllerAux {}
 
 /** Executes one typed application operation with injected Service dependencies. */
 export interface IBaseServiceOperation<TInput, TOutput> {

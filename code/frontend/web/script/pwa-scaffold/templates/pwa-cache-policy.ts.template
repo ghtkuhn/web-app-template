@@ -1,0 +1,38 @@
+const EXCLUDED_PATHS = [
+    /^\/api(?:\/|$)/u,
+    /^\/auth(?:\/|$)/u,
+    /^\/ws(?:\/|$)/u,
+];
+
+/** Matches transport, authentication, and foreign-origin requests that must never be cached. */
+export function isNeverCachedRequest(
+    origin: string,
+    pathname: string,
+    applicationOrigin: string,
+): boolean {
+    return origin !== applicationOrigin ||
+        EXCLUDED_PATHS.some((pattern) => pattern.test(pathname));
+}
+
+/** Matches only the same-origin public runtime configuration. */
+export function isRuntimeConfigRequest(
+    method: string,
+    origin: string,
+    pathname: string,
+    applicationOrigin: string,
+): boolean {
+    return method === 'GET' && origin === applicationOrigin &&
+        pathname === '/runtime-config.js';
+}
+
+/** Matches safe same-origin navigations after all excluded paths are removed. */
+export function isShellNavigation(
+    method: string,
+    mode: string,
+    origin: string,
+    pathname: string,
+    applicationOrigin: string,
+): boolean {
+    return method === 'GET' && mode === 'navigate' &&
+        !isNeverCachedRequest(origin, pathname, applicationOrigin);
+}

@@ -142,15 +142,14 @@ export class DeploymentConfigRenderer {
         if (!profile.frontend.enabled) {
             throw new Error('Frontend is disabled.');
         }
-        return [
-            'window.__APP_CONFIG__ = {',
-            `    apiBaseUrl: ${JSON.stringify(profile.frontend.runtime.apiBaseUrl)},`,
-            `    webSocketUrl: ${JSON.stringify(profile.frontend.runtime.webSocketUrl)},`,
-            `    presentationLock: ${JSON.stringify(profile.frontend.runtime.presentationLock)},`,
-            `    authEnabled: ${JSON.stringify(profile.frontend.runtime.authEnabled)},`,
-            `    registrationEnabled: ${JSON.stringify(profile.frontend.runtime.registrationEnabled)},`,
-            '};',
-            '',
-        ].join('\n');
+        const runtime = {
+            apiBaseUrl: profile.frontend.runtime.apiBaseUrl,
+            webSocketUrl: profile.frontend.runtime.webSocketUrl,
+            presentationLock: profile.frontend.runtime.presentationLock,
+            authEnabled: profile.frontend.runtime.authEnabled,
+            registrationEnabled:
+                profile.frontend.runtime.registrationEnabled,
+        };
+        return `window.__APP_CONFIG__ = ${JSON.stringify(runtime, null, 4)};\n`;
     }
 }

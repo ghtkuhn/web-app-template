@@ -1,0 +1,32 @@
+import { expect, test } from '@playwright/test';
+
+test('production PWA installs and cold-starts offline without caching private data', async ({ context, page }) => {
+    await page.goto('/');
+    await page.waitForFunction(async () => {
+        const registration = await navigator.serviceWorker.ready;
+        return Boolean(registration.active);
+    });
+    await page.reload();
+    await expect(page.locator('#app')).not.toBeEmpty();
+    expect(await page.evaluate(async () => {
+        for (const name of await caches.keys()) {
+            const cache = await caches.open(name);
+            for (const path of ['/api/health', '/auth/session', '/ws']) {
+                if (await cache.match(path)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    })).toBe(false);
+
+    await context.setOffline(true);
+    await page.close();
+    const offlinePage = await context.newPage();
+    await offlinePage.goto('/');
+    await expect(offlinePage.locator('#app')).not.toBeEmpty();
+    for (const path of ['/api/health', '/auth/session', '/ws']) {
+        await expect(offlinePage.evaluate((url) => fetch(url), path))
+            .rejects.toThrow();
+    }
+});

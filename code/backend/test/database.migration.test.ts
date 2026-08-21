@@ -7,7 +7,9 @@ import { test } from 'node:test';
 import { sql } from 'kysely';
 import { DatabaseBackupManager } from '../src/base/base.database-backup.ts';
 import { DatabaseManager } from '../src/base/base.database.ts';
+import { MigrationChecksumManager } from '../src/base/base.migration-checksum.ts';
 import { MigrationManager } from '../src/base/base.migration.ts';
+import { MigrationCatalog } from '../src/base/migration.catalog.ts';
 import { config } from '../src/config.ts';
 
 /** Backup manager used to prove that migration execution is gated. */
@@ -57,6 +59,69 @@ test('pending migrations create one valid backup and do not repeat', async () =>
         const second = await MigrationManager.migrate(database);
         assert.equal(second.backupCreated, false);
         assert.equal(new DatabaseBackupManager().list().length, 1);
+
+        await sql`
+            update template_migration_checksum
+            set checksum = ${'0'.repeat(64)}
+            where dialect = 'sqlite'
+                and migration_name = '001-initialize.migration'
+        `.execute(database);
+        await assert.rejects(
+            MigrationManager.migrate(database),
+            /does not match its recorded SHA-256 checksum/,
+        );
+    } finally {
+        await DatabaseManager.close();
+        config.database = originalDatabase;
+        fs.rmSync(directory, { recursive: true, force: true });
+    }
+});
+
+test('legacy applied migrations receive one immutable checksum baseline', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'baseline-'));
+    const originalDatabase = config.database;
+    config.database = {
+        type: 'sqlite',
+        sqlitePath: path.join(directory, 'backend.sqlite'),
+        backupRetention: 10,
+        releaseId: 'baseline',
+    };
+    const migrationRoot = path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        '../src/migration',
+    );
+
+    try {
+        const database = await DatabaseManager.getInstance();
+        const sources = new MigrationCatalog(migrationRoot).sources('sqlite');
+        const manager = new MigrationChecksumManager(
+            database,
+            'sqlite',
+            sources,
+        );
+        const applied = sources.map((source) => ({
+            name: source.name,
+            executedAt: new Date(),
+            migration: {
+                up: async () => {},
+                down: async () => {},
+            },
+        }));
+
+        await manager.verify(applied);
+        await manager.verify(applied);
+
+        const rows = await sql<{ baseline: number; migration_name: string }>`
+            select migration_name, baseline
+            from template_migration_checksum
+            where dialect = 'sqlite'
+            order by migration_name
+        `.execute(database);
+        assert.deepEqual(rows.rows, [
+            { baseline: 1, migration_name: '001-initialize.migration' },
+            { baseline: 1, migration_name: '002-better-auth.migration' },
+            { baseline: 1, migration_name: '__baseline__' },
+        ]);
     } finally {
         await DatabaseManager.close();
         config.database = originalDatabase;

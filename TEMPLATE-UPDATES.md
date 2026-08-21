@@ -60,7 +60,7 @@ uncommitted for review.
 
 ## Requirements and Security
 
-- Node.js 22, Git, npm, and `tar`
+- Node.js 24.19.0, npm 11, Git, and `tar`
 - HTTPS access to GitHub
 - stable release tags following `v<major>.<minor>.<patch>`
 - a clean Git worktree for updates

@@ -143,6 +143,7 @@ function authRequest(path: string, init: RequestInit = {}): Request {
     });
 }
 
+// fallow-ignore-next-line complexity -- One lifecycle test owns and reliably cleans up its disposable PostgreSQL container.
 test('PostgreSQL runtime, migrations, and Better Auth work end to end', async () => {
     const server = new PostgresTestServer();
     const connectionString = await server.start();
@@ -186,6 +187,28 @@ test('PostgreSQL runtime, migrations, and Better Auth work end to end', async ()
             migrations.rows.map((migration) => migration.name),
             ['001-initialize.migration', '002-better-auth.migration'],
         );
+        const storedChecksum = await sql<{ checksum: string }>`
+            select checksum
+            from template_migration_checksum
+            where dialect = 'postgres'
+                and migration_name = '001-initialize.migration'
+        `.execute(database);
+        await sql`
+            update template_migration_checksum
+            set checksum = ${'0'.repeat(64)}
+            where dialect = 'postgres'
+                and migration_name = '001-initialize.migration'
+        `.execute(database);
+        await assert.rejects(
+            MigrationManager.migrate(database),
+            /does not match its recorded SHA-256 checksum/,
+        );
+        await sql`
+            update template_migration_checksum
+            set checksum = ${storedChecksum.rows[0]?.checksum ?? ''}
+            where dialect = 'postgres'
+                and migration_name = '001-initialize.migration'
+        `.execute(database);
         const physicalColumns = await sql<{
             column_name: string;
             data_type: string;

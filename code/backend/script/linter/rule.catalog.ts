@@ -57,6 +57,14 @@ const FIXES: Readonly<Record<string, string>> = {
         'Remove the peer import and keep the Operation self-contained.',
     OPERATION_ROUTING_MISSING:
         'Run npm run module:sync for the containing module.',
+    OPERATION_GLOBAL_STORE_READ:
+        'Replace findAll() with a scoped Store query that applies actor, tenant, order, limit, offset, and count in the database.',
+    OPERATION_IN_MEMORY_QUERY:
+        'Move filtering and paging into a typed, domain-specific Store query.',
+    OPERATION_GENERIC_UPSERT:
+        'Use a purpose-specific Store mutation that cannot overwrite immutable tenant or actor scope.',
+    STORE_GENERIC_METHOD:
+        'Rename and narrow the Store method around one domain operation and include the complete persistence scope in its input contract.',
     SERVICE_AUX_FORBIDDEN:
         'Replace the Service Aux with a *.operation.ts class extending BaseServiceOperation.',
     MIGRATION_DIALECT_STRUCTURE:

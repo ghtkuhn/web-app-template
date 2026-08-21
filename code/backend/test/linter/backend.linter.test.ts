@@ -584,15 +584,6 @@ test('supported auxiliary layers accept owner-bound helper classes', () => {
             'export class ParserApiAux extends BaseApiAux {}',
         );
         fixture.write(
-            'code/backend/src/module/example/controller/health.controller.ts',
-            `import { ResultControllerAux } from './health/result.controller-aux.ts';
-             export class HealthController extends BaseController {}`,
-        );
-        fixture.write(
-            'code/backend/src/module/example/controller/health/result.controller-aux.ts',
-            'export class ResultControllerAux extends BaseControllerAux {}',
-        );
-        fixture.write(
             'code/backend/src/module/example/store/health.store.ts',
             `import { QueryStoreAux } from './health/query.store-aux.ts';
              export class HealthStore extends BaseStore {}`,
@@ -613,22 +604,22 @@ test('auxiliary classes require their matching base and exactly one class', () =
     const fixture = new FixtureProject();
     try {
         fixture.write(
-            'code/backend/src/module/example/controller/health.controller.ts',
-            'export class HealthController extends BaseController {}',
+            'code/backend/src/module/example/store/health.store.ts',
+            'export class HealthStore extends BaseStore {}',
         );
         fixture.write(
-            'code/backend/src/module/example/controller/health/missing.ts',
+            'code/backend/src/module/example/store/health/missing.ts',
             'export const value = 1;',
         );
         fixture.write(
-            'code/backend/src/module/example/controller/health/multiple.ts',
-            `export class First extends BaseControllerAux {}
-             export class Second extends BaseControllerAux {}`,
+            'code/backend/src/module/example/store/health/multiple.ts',
+            `export class First extends BaseStoreAux {}
+             export class Second extends BaseStoreAux {}`,
         );
         fixture.write(
-            'code/backend/src/module/example/controller/health/wrong.ts',
+            'code/backend/src/module/example/store/health/wrong.ts',
             `export function loose() {}
-             export class Wrong extends BaseController {}`,
+             export class Wrong extends BaseStore {}`,
         );
 
         const ruleIds = new BackendLinter({ projectRoot: fixture.root })
@@ -653,19 +644,19 @@ test('auxiliary paths require a supported layer, one level, and an owner', () =>
     const fixture = new FixtureProject();
     try {
         fixture.write(
-            'code/backend/src/module/example/controller/orphan/helper.ts',
-            'export class Helper extends BaseControllerAux {}',
+            'code/backend/src/module/example/store/orphan/helper.ts',
+            'export class Helper extends BaseStoreAux {}',
         );
         fixture.write(
-            'code/backend/src/module/example/controller/health/nested/helper.ts',
-            'export class Nested extends BaseControllerAux {}',
+            'code/backend/src/module/example/store/health/nested/helper.ts',
+            'export class Nested extends BaseStoreAux {}',
         );
         fixture.write(
             'code/backend/src/module/example/dto/health/helper.ts',
             'export class DTOHelper extends BaseDTO {}',
         );
         fixture.write(
-            'code/backend/src/module/example/controller/health/readme.txt',
+            'code/backend/src/module/example/store/health/readme.txt',
             'Auxiliary folders contain TypeScript sources only.',
         );
 
@@ -673,12 +664,12 @@ test('auxiliary paths require a supported layer, one level, and an owner', () =>
             .run()
             .issues.map((issue) => issue.ruleId);
         assert.deepEqual(ruleIds, [
+            'AUX_LAYER_UNSUPPORTED',
+            'LAYER_FILE_NAME',
             'AUX_PATH_DEPTH',
             'LAYER_FILE_NAME',
             'AUX_FILE_TYPE',
             'AUX_OWNER_MISSING',
-            'LAYER_FILE_NAME',
-            'AUX_LAYER_UNSUPPORTED',
             'LAYER_FILE_NAME',
         ]);
     } finally {
@@ -690,42 +681,42 @@ test('auxiliary imports are private, one-way, and never re-exported', () => {
     const fixture = new FixtureProject();
     try {
         fixture.write(
-            'code/backend/src/module/example/controller/health.controller.ts',
+            'code/backend/src/module/example/api/health.http.handler.ts',
             `import { OwnAux } from './health/own.ts';
              export { OwnAux as PublicAux } from './health/own.ts';
-             export class HealthController extends BaseController {}`,
+             export class HealthHttpHandler extends HttpHandler {}`,
         );
         fixture.write(
-            'code/backend/src/module/example/controller/other.controller.ts',
+            'code/backend/src/module/example/api/other.http.handler.ts',
             `import { OwnAux } from './health/own.ts';
-             export class OtherController extends BaseController {}`,
+             export class OtherHttpHandler extends HttpHandler {}`,
         );
         fixture.write(
-            'code/backend/src/module/example/controller/health/own.ts',
-            `import { HealthController } from '../health.controller.ts';
-             export class OwnAux extends BaseControllerAux {}`,
+            'code/backend/src/module/example/api/health/own.ts',
+            `import { HealthHttpHandler } from '../health.http.handler.ts';
+             export class OwnAux extends BaseApiAux {}`,
         );
         fixture.write(
-            'code/backend/src/module/example/controller/health/peer.ts',
+            'code/backend/src/module/example/api/health/peer.ts',
             `import { OwnAux } from './own.ts';
-             export class PeerAux extends BaseControllerAux {}`,
+             export class PeerAux extends BaseApiAux {}`,
         );
         fixture.write(
-            'code/backend/src/module/example/api/example.http.handler.ts',
-            `import { OwnAux } from '../controller/health/own.ts';
-             export abstract class ExampleHttpHandler extends HttpHandler {}`,
+            'code/backend/src/module/example/object/example.object.ts',
+            `import { OwnAux } from '../api/health/own.ts';
+             export class ExampleObject extends BaseObject {}`,
         );
 
         const ruleIds = new BackendLinter({ projectRoot: fixture.root })
             .run()
             .issues.map((issue) => issue.ruleId);
         assert.deepEqual(ruleIds, [
-            'AUX_IMPORT_OWNER',
             'AUX_REEXPORT',
             'AUX_IMPORT_DIRECTION',
             'LAYER_FILE_NAME',
             'AUX_IMPORT_OWNER',
             'LAYER_FILE_NAME',
+            'AUX_IMPORT_OWNER',
             'AUX_IMPORT_OWNER',
         ]);
     } finally {
@@ -959,7 +950,7 @@ test('stores and services enforce typed mapping and validation', () => {
         for (const ruleId of [
             'STORE_ANY_TYPE',
             'STORE_QUERY_OBJECT_MAPPING',
-            'STORE_SAVE_SEMANTICS',
+            'STORE_GENERIC_METHOD',
             'DATABASE_OBJECT_METADATA',
             'OBJECT_VALIDATION_BEFORE_PERSIST',
         ]) {

@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 /** Architecture layers that may own one level of auxiliary classes. */
-const AUXILIARY_LAYERS = ['api', 'controller', 'service', 'store'] as const;
+const AUXILIARY_LAYERS = ['api', 'service', 'store'] as const;
 
 /** Resolved ownership metadata for one auxiliary source file. */
 export interface AuxiliaryPath {

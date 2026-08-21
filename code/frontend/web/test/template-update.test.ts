@@ -278,6 +278,8 @@ test('planner excludes local secrets, runtime data, and agent state', () => {
     const incoming = temporaryRoot('template-incoming-');
     for (const relativePath of [
         '.env',
+        '.credentials.env',
+        'deployment/profiles/production.json',
         'deployment/profiles/work.local.json',
         'deployment/secrets/token.txt',
         'data/ai/MEMORY.md',
@@ -294,6 +296,66 @@ test('planner excludes local secrets, runtime data, and agent state', () => {
 
     expect(plan.actions).toEqual([]);
     expect(plan.conflicts).toEqual([]);
+});
+
+test('major update preserves application state and keeps opt-ins disabled', () => {
+    const base = temporaryRoot('template-2-base-');
+    const local = temporaryRoot('template-2-app-');
+    const incoming = temporaryRoot('template-3-incoming-');
+    for (const relativePath of [
+        'code/backend/src/module/billing/index.ts',
+        'deployment/profiles/production.json',
+        'data/ai/MEMORY.md',
+        'data/ai/kanban/todo/0001-billing-create-invoice.md',
+        '.credentials.env',
+    ]) {
+        write(local, relativePath, `local:${relativePath}`);
+    }
+    write(base, 'managed.txt', '2.x');
+    write(local, 'managed.txt', '2.x');
+    write(incoming, 'managed.txt', '3.x');
+    write(
+        incoming,
+        'code/backend/script/store-migration-status.ts',
+        'store diagnostics',
+    );
+    write(
+        incoming,
+        'code/backend/script/migration-check.ts',
+        'migration diagnostics',
+    );
+    write(
+        incoming,
+        'code/frontend/web/script/pwa-scaffold.ts',
+        'opt-in PWA scaffold',
+    );
+    write(
+        incoming,
+        'script/deployment/existing-lxc.driver.ts',
+        'opt-in existing LXC driver',
+    );
+    writeCanonicalInstructions([base, local, incoming]);
+
+    const plan = new UpdatePlanner().plan(base, local, incoming);
+    const paths = plan.actions.map((action) => action.relativePath);
+
+    expect(plan.conflicts).toEqual([]);
+    expect(paths).toEqual(expect.arrayContaining([
+        'code/backend/script/migration-check.ts',
+        'code/backend/script/store-migration-status.ts',
+        'code/frontend/web/script/pwa-scaffold.ts',
+        'managed.txt',
+        'script/deployment/existing-lxc.driver.ts',
+    ]));
+    expect(paths).not.toContain('code/backend/src/module/billing/index.ts');
+    expect(paths).not.toContain('deployment/profiles/production.json');
+    expect(paths).not.toContain('data/ai/MEMORY.md');
+    expect(paths).not.toContain(
+        'data/ai/kanban/todo/0001-billing-create-invoice.md',
+    );
+    expect(paths).not.toContain('.credentials.env');
+    expect(paths).not.toContain('code/frontend/web/.pwa-scaffold.json');
+    expect(paths).not.toContain('code/frontend/web/src/app/sw.ts');
 });
 
 test('package planning preserves app identity and merges template properties', () => {
@@ -359,6 +421,63 @@ test('package planning preserves app identity and merges template properties', (
         old: '1.0.0',
     });
     expect(plan.conflicts).toEqual([]);
+});
+
+test('package planning migrates a legacy application to the template runtime', () => {
+    const base = temporaryRoot('template-2-base-');
+    const local = temporaryRoot('template-2-app-');
+    const incoming = temporaryRoot('template-3-incoming-');
+    const legacy = {
+        name: 'template',
+        version: '2.9.0',
+        engines: { node: '22.23.1' },
+    };
+    write(base, 'package.json', JSON.stringify(legacy));
+    write(local, 'package.json', JSON.stringify({
+        ...legacy,
+        name: 'customer-app',
+        version: '8.1.0',
+    }));
+    write(incoming, 'package.json', JSON.stringify({
+        ...legacy,
+        version: '3.0.0',
+        packageManager: 'npm@11.17.0',
+        engines: { node: '24.19.0', npm: '>=11 <12' },
+        devEngines: {
+            runtime: {
+                name: 'node',
+                version: '24.19.0',
+                onFail: 'error',
+            },
+            packageManager: {
+                name: 'npm',
+                version: '>=11 <12',
+                onFail: 'error',
+            },
+        },
+    }));
+    writeCanonicalInstructions([base, local, incoming]);
+
+    const plan = new UpdatePlanner().plan(base, local, incoming);
+    const packageAction = plan.actions.find(
+        (action) => action.relativePath === 'package.json',
+    );
+    const merged = JSON.parse(fs.readFileSync(
+        (packageAction as { sourcePath: string }).sourcePath,
+        'utf8',
+    )) as Record<string, unknown>;
+
+    expect(plan.conflicts).toEqual([]);
+    expect(merged).toMatchObject({
+        name: 'customer-app',
+        version: '8.1.0',
+        packageManager: 'npm@11.17.0',
+        engines: { node: '24.19.0', npm: '>=11 <12' },
+        devEngines: {
+            runtime: { name: 'node', version: '24.19.0', onFail: 'error' },
+            packageManager: { name: 'npm', version: '>=11 <12', onFail: 'error' },
+        },
+    });
 });
 
 test('package planning reports property-level concurrent changes', () => {

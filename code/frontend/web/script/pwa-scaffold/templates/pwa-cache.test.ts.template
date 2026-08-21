@@ -1,0 +1,62 @@
+import { expect, test } from 'vitest';
+import { isNeverCachedRequest, isShellNavigation } from '../../src/app/pwa-cache-policy.ts';
+import {
+    ACTIVE_RUNTIME_CONFIG_CACHE,
+    activateRuntimeConfigCandidate,
+    requireValidRuntimeConfig,
+} from '../../src/app/runtime-config-cache.ts';
+
+const validConfig = 'window.__APP_CONFIG__ = {"apiBaseUrl":"/api","webSocketUrl":"wss://app.example/ws","presentationLock":null,"authEnabled":false,"registrationEnabled":false};';
+
+test('PWA cache policy excludes API, auth, WebSocket, and foreign origins', () => {
+    const origin = 'https://app.example';
+    for (const path of ['/api/health', '/auth/session', '/ws']) {
+        expect(isNeverCachedRequest(origin, path, origin)).toBe(true);
+        expect(isShellNavigation('GET', 'navigate', origin, path, origin)).toBe(false);
+    }
+    expect(isNeverCachedRequest('https://foreign.example', '/', origin)).toBe(true);
+});
+
+test('invalid update configuration is rejected before it can be promoted', async () => {
+    await expect(requireValidRuntimeConfig(new Response(
+        'window.__APP_CONFIG__ = {broken: true};',
+        { status: 200 },
+    ))).rejects.toThrow(/JSON|payload is invalid/);
+});
+
+test('a missing update candidate leaves the active configuration untouched', async () => {
+    const entries = new Map<string, Map<string, Response>>([
+        [ACTIVE_RUNTIME_CONFIG_CACHE, new Map([
+            ['https://app.example/runtime-config.js', new Response(validConfig)],
+        ])],
+    ]);
+    const storage = {
+        async delete(name: string): Promise<boolean> {
+            return entries.delete(name);
+        },
+        async keys(): Promise<string[]> {
+            return [...entries.keys()];
+        },
+        async open(name: string) {
+            const cache = entries.get(name) ?? new Map<string, Response>();
+            entries.set(name, cache);
+            return {
+                async match(request: Request): Promise<Response | undefined> {
+                    return cache.get(request.url)?.clone();
+                },
+                async put(request: Request, response: Response): Promise<void> {
+                    cache.set(request.url, response.clone());
+                },
+            };
+        },
+    };
+
+    await expect(activateRuntimeConfigCandidate(
+        storage,
+        'missing-candidate',
+        'https://app.example',
+    )).rejects.toThrow(/candidate is missing/);
+    const active = await (await storage.open(ACTIVE_RUNTIME_CONFIG_CACHE))
+        .match(new Request('https://app.example/runtime-config.js'));
+    await expect(active?.text()).resolves.toBe(validConfig);
+});

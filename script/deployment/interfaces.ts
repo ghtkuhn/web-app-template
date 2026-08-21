@@ -10,6 +10,7 @@ export interface DockerTarget {
 
 export interface ProxmoxLxcTarget {
     readonly driver: 'proxmox-lxc';
+    readonly installationId: string;
     readonly apiUrl: string;
     readonly node: string;
     readonly vmid: number;
@@ -24,7 +25,10 @@ export interface ProxmoxLxcTarget {
     readonly startOnBoot: boolean;
     readonly stopContainer: boolean;
     readonly sshHost: string;
+    readonly sshPort: number;
     readonly sshUser: string;
+    readonly sshAuthentication: 'private-key' | 'password';
+    readonly sshHostKeyFingerprint: string;
     readonly sshPublicKey: string;
     readonly cores: number;
     readonly memoryMb: number;
@@ -33,7 +37,20 @@ export interface ProxmoxLxcTarget {
     readonly allowInsecureTls?: boolean;
 }
 
-export type DeploymentTarget = DockerTarget | ProxmoxLxcTarget;
+export interface ExistingLxcTarget {
+    readonly driver: 'existing-lxc';
+    readonly installationId: string;
+    readonly sshAuthentication: 'private-key' | 'password';
+    readonly sshHost: string;
+    readonly sshPort: number;
+    readonly sshUser: string;
+    readonly sshHostKeyFingerprint: string;
+}
+
+export type DeploymentTarget =
+    | DockerTarget
+    | ExistingLxcTarget
+    | ProxmoxLxcTarget;
 
 export interface SqliteDeploymentDatabase {
     readonly type: 'sqlite';

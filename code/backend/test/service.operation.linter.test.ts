@@ -63,6 +63,34 @@ test('operation rules accept a generated direct-delegation router', () => {
     }
 });
 
+test('operation rules reject global reads, in-memory queries, and upserts', () => {
+    const fixture = new FixtureProject();
+    try {
+        fixture.write(
+            'code/backend/src/module/example/service/example/query.operation.ts',
+            `export class QueryOperation extends BaseServiceOperation<InputDTO, OutputDTO, ExampleServiceDependencies> {
+    public async execute(input: InputDTO): Promise<OutputDTO> {
+        const rows = await this.store.findAll();
+        rows.filter(input.filter).slice(input.offset);
+        await this.store.upsert(input);
+        return input.output;
+    }
+}`,
+        );
+        new ServiceRouterManager(fixture.root).syncModule('example');
+
+        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+            .run()
+            .issues.map((issue) => issue.ruleId);
+
+        assert.ok(ruleIds.includes('OPERATION_GLOBAL_STORE_READ'));
+        assert.ok(ruleIds.includes('OPERATION_IN_MEMORY_QUERY'));
+        assert.ok(ruleIds.includes('OPERATION_GENERIC_UPSERT'));
+    } finally {
+        fixture.dispose();
+    }
+});
+
 test('operation rules reject handwritten Service behavior and legacy Service Aux files', () => {
     const fixture = new FixtureProject();
     try {

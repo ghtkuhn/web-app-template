@@ -38,18 +38,12 @@ export class ReleaseBuilder {
             path.join(os.tmpdir(), 'web-app-release-'),
         );
         const archive = path.join(directory, `${component}-${release}.tgz`);
+        const included = component === 'frontend'
+            ? ['.']
+            : ['package.json', 'src', 'script/database-maintenance.ts'];
         this.processes.run(
             'tar',
-            [
-                '--exclude=node_modules',
-                '--exclude=test',
-                '--exclude=.env',
-                '-czf',
-                archive,
-                '-C',
-                source,
-                '.',
-            ],
+            ['-czf', archive, '-C', source, ...included],
             {
                 cwd: this.projectRoot,
                 env: {

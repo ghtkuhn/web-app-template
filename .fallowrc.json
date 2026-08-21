@@ -2,7 +2,8 @@
     "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
     "entry": [
         "code/backend/test/**/*.test.ts",
-        "code/backend/src/module/*/test/*.test.ts"
+        "code/backend/src/module/*/test/*.test.ts",
+        "code/backend/src/module/*/service/**/*.operation.ts"
     ],
     "ignorePatterns": [
         "**/script/**",
@@ -14,12 +15,18 @@
         "**/test/test.catalog.test.ts",
         "**/test/safe-project.remover.test.ts",
         "**/test/deployment.test.ts",
-        "**/generated/**"
+        "**/generated/**",
+        "code/backend/src/module/*/service/*.service.ts"
     ],
     "ignoreDependencies": [
         "@babel/parser",
         "@vue/compiler-sfc",
-        "postcss-value-parser"
+        "postcss-value-parser",
+        "vite-plugin-pwa",
+        "workbox-core",
+        "workbox-precaching",
+        "workbox-routing",
+        "workbox-strategies"
     ],
     "workspaces": {
         "patterns": [

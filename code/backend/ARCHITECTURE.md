@@ -240,8 +240,19 @@ They:
 - receive the application-owned Kysely client through constructor injection;
 - implement typed persistence contracts without `any`;
 - explicitly map database rows to Domain Objects;
-- implement complete save semantics rather than update-only aliases;
+- expose fach-named methods with complete Tenant and Actor scope instead of
+  generic `save`, `findById`, `findAll`, `delete`, or `upsert` methods;
+- execute scope filters, ordering, pagination, and counts in the database;
+- protect idempotent creates with Tenant, Actor, `clientMutationId`, and a
+  complete persisted payload fingerprint;
 - never create database connections or import database drivers.
+
+Operations must not load a global collection and then filter or page it in
+memory. Immutable scope fields must never be overwritten by a generic upsert.
+Correctness across application instances relies on database constraints,
+transactions, or persisted version checks; a process-local queue is only an
+optimization. Run `npm run store:migration-status` to inventory legacy generic
+methods and their callers without changing source.
 
 ### Domain Objects
 
@@ -260,23 +271,23 @@ schemas, and business rules belong in Service Operations.
 
 ## Auxiliary Classes
 
-The `api`, `controller`, and `store` layers may have one owner-bound
-auxiliary directory:
+The `api` and `store` layers may have one owner-bound auxiliary directory:
 
 ```text
-controller/
-    health.controller.ts
-    health/
-        status.controller-aux.ts
+store/
+    account.store.ts
+    account/
+        row-projection.store-aux.ts
 ```
 
-An auxiliary class extends the matching `BaseApiAux`, `BaseControllerAux`,
-or `BaseStoreAux`. Only its owner may import it. Auxiliaries
+An auxiliary class extends the matching `BaseApiAux` or `BaseStoreAux`. Only
+its owner may import it. Auxiliaries
 must not import their owner, another auxiliary, or another file from the same
 layer, and they must never be re-exported.
 
-Service Aux classes are obsolete. Use owner-bound `*.operation.ts` classes and
-`BaseServiceOperation` instead.
+Controller and Service Aux classes are obsolete. Application behavior belongs
+in owner-bound `*.operation.ts` classes extending `BaseServiceOperation`; API
+auxiliaries are transport-local and Store auxiliaries are persistence-local.
 
 Use:
 
@@ -354,6 +365,12 @@ belong exclusively to `src/base/base.database.ts`; Domain modules never import
 SQLite migration startup retains its verified pre-migration backup and
 integrity checks. PostgreSQL migration startup relies on Kysely's transactional
 migration lock; PostgreSQL backup and restore are external deployment concerns.
+Applied migrations are bound to SHA-256 checksums per dialect. An existing
+database creates one baseline for migrations already applied when it first runs
+this major version. Every later mismatch blocks startup before backup or pending
+migration execution; a new checksum is registered only after that migration
+succeeds. `npm run check:migrations` verifies sequence, dialect pairs, generated
+catalog entries, and hashes.
 
 Root verification starts a disposable PostgreSQL 17 container from a pinned
 image digest and proves the real driver lifecycle, migration catalog, physical
@@ -368,9 +385,9 @@ adapter; declaring external ownership is not a general escape from Object and
 Store rules.
 
 Every row-to-Object mapping explicitly maps `id`, `created_at`, `updated_at`,
-`is_deleted`, and `deleted_at`. Normal finders exclude soft-deleted rows.
-`delete()` updates `is_deleted`, `deleted_at`, and `updated_at`; it never performs
-a hard `deleteFrom()` for Domain Object tables.
+`is_deleted`, and `deleted_at`. Normal scoped finders exclude soft-deleted rows.
+Fach deletion methods update `is_deleted`, `deleted_at`, and `updated_at`; they
+never perform a hard `deleteFrom()` for Domain Object tables.
 
 ## HTTP and OpenAPI
 

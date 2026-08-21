@@ -109,6 +109,22 @@ export class DeploymentProfileRepository {
         const source = this.load(sourceName);
         const environment = this.environment(name);
         const database = this.database(databaseType);
+        const backendTarget = source.backend.enabled
+            ? this.target(
+                  name,
+                  environment,
+                  'backend',
+                  backendDriver ?? 'docker',
+              )
+            : undefined;
+        const frontendTarget = source.frontend.enabled
+            ? this.target(
+                  name,
+                  environment,
+                  'frontend',
+                  frontendDriver ?? 'docker',
+              )
+            : undefined;
         const profile: DeploymentProfile = {
             ...source,
             schemaVersion: 2,
@@ -117,28 +133,49 @@ export class DeploymentProfileRepository {
             requiredSecrets: this.requiredSecrets(
                 source.requiredSecrets,
                 database,
+                [backendTarget, frontendTarget].filter(
+                    (target): target is DeploymentTarget => Boolean(target),
+                ),
             ),
             backend: source.backend.enabled
                 ? {
                       ...source.backend,
-                      target: this.target(
-                          name,
-                          environment,
-                          'backend',
-                          backendDriver ?? 'docker',
-                      ),
-                      database,
+                      publicHttpUrl: environment === 'prod'
+                          ? `https://api.${name}.example.com`
+                          : source.backend.publicHttpUrl,
+                      publicWebSocketUrl: environment === 'prod'
+                          ? `wss://api.${name}.example.com/ws`
+                          : source.backend.publicWebSocketUrl,
+                      allowedOrigins: environment === 'prod'
+                          ? [`https://${name}.example.com`]
+                          : source.backend.allowedOrigins,
+                      target: backendTarget as DeploymentTarget,
+                      database: database.type === 'sqlite' &&
+                          backendTarget !== undefined &&
+                          backendTarget.driver !== 'docker'
+                          ? {
+                                ...database,
+                                path: `/var/lib/${backendTarget.installationId}/backend.sqlite`,
+                            }
+                          : database,
                   }
                 : source.backend,
             frontend: source.frontend.enabled
                 ? {
                       ...source.frontend,
-                      target: this.target(
-                          name,
-                          environment,
-                          'frontend',
-                          frontendDriver ?? 'docker',
-                      ),
+                      publicUrl: environment === 'prod'
+                          ? `https://${name}.example.com`
+                          : source.frontend.publicUrl,
+                      target: frontendTarget as DeploymentTarget,
+                      runtime: environment === 'prod'
+                          ? {
+                                ...source.frontend.runtime,
+                                apiBaseUrl:
+                                    `https://api.${name}.example.com`,
+                                webSocketUrl:
+                                    `wss://api.${name}.example.com/ws`,
+                            }
+                          : source.frontend.runtime,
                   }
                 : source.frontend,
         };
@@ -147,7 +184,7 @@ export class DeploymentProfileRepository {
                 `Generated deployment profile is invalid: ${this.validateProfile.errors?.map((error) => error.message).join(', ')}`,
             );
         }
-        this.assertSecurity(profile as DeploymentProfile);
+        this.assertSecurity(profile as DeploymentProfile, true);
         fs.writeFileSync(target, `${JSON.stringify(profile, null, 4)}\n`);
         return target;
     }
@@ -158,7 +195,7 @@ export class DeploymentProfileRepository {
         component: 'backend' | 'frontend',
         driver: string,
     ): DeploymentTarget {
-        if (!['docker', 'proxmox-lxc'].includes(driver)) {
+        if (!['docker', 'proxmox-lxc', 'existing-lxc'].includes(driver)) {
             throw new Error(`Unknown deployment driver '${driver}'.`);
         }
         if (driver === 'docker') {
@@ -168,8 +205,25 @@ export class DeploymentProfileRepository {
                 hostPort: component === 'backend' ? 3000 : 8080,
             };
         }
+        const ssh = {
+            installationId: profileName,
+            sshAuthentication: 'private-key' as const,
+            sshHost: `${component}.local`,
+            sshPort: 22,
+            sshUser: 'root',
+            sshHostKeyFingerprint:
+                'SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        };
+        if (driver === 'existing-lxc') {
+            return {
+                driver,
+                ...ssh,
+                sshUser: 'app',
+            };
+        }
         return {
             driver: 'proxmox-lxc',
+            ...ssh,
             apiUrl: 'https://proxmox.local:8006',
             node: 'pve',
             vmid: component === 'backend' ? 200 : 201,
@@ -184,8 +238,6 @@ export class DeploymentProfileRepository {
             firewall: true,
             startOnBoot: true,
             stopContainer: true,
-            sshHost: `${component}.local`,
-            sshUser: 'root',
             sshPublicKey: 'replace-with-public-key',
             cores: 2,
             memoryMb: component === 'backend' ? 1024 : 512,
@@ -220,6 +272,7 @@ export class DeploymentProfileRepository {
     private requiredSecrets(
         source: readonly string[],
         database: DeploymentDatabase,
+        targets: readonly DeploymentTarget[],
     ): readonly string[] {
         const secrets = new Set(source);
         if (database.type === 'postgres') {
@@ -227,18 +280,36 @@ export class DeploymentProfileRepository {
         } else {
             secrets.delete('DATABASE_URL');
         }
+        for (const target of targets) {
+            if (target.driver === 'docker') {
+                continue;
+            }
+            secrets.add(
+                target.sshAuthentication === 'password'
+                    ? 'DEPLOYMENT_SSH_PASSWORD'
+                    : 'DEPLOYMENT_SSH_PRIVATE_KEY',
+            );
+        }
         return [...secrets].sort((left, right) => left.localeCompare(right));
     }
 
-    private assertSecurity(profile: DeploymentProfile): void {
-        const serialized = JSON.stringify(profile).toLowerCase();
+    private assertSecurity(
+        profile: DeploymentProfile,
+        allowScaffoldHostKeyPlaceholder = false,
+    ): void {
+        const serialized = JSON.stringify(profile);
         for (const forbidden of ['password', 'privatekey', 'tokensecret']) {
-            if (serialized.includes(`"${forbidden}"`)) {
+            if (new RegExp(`"${forbidden}"\\s*:`, 'iu').test(serialized)) {
                 throw new Error(`Profiles must not contain '${forbidden}'.`);
             }
         }
         this.assertDatabaseConfiguration(profile);
         this.assertAuthConfiguration(profile);
+        this.assertSshSecrets(profile);
+        this.assertProductionUrls(profile);
+        if (!allowScaffoldHostKeyPlaceholder) {
+            this.assertProductionHostKeys(profile);
+        }
         if (
             profile.environment !== 'local' &&
             profile.environment !== 'dev'
@@ -247,11 +318,79 @@ export class DeploymentProfileRepository {
         }
     }
 
+    private assertSshSecrets(profile: DeploymentProfile): void {
+        for (const component of [profile.backend, profile.frontend]) {
+            if (!component.enabled || component.target.driver === 'docker') {
+                continue;
+            }
+            const secret = component.target.sshAuthentication === 'password'
+                ? 'DEPLOYMENT_SSH_PASSWORD'
+                : 'DEPLOYMENT_SSH_PRIVATE_KEY';
+            if (!profile.requiredSecrets.includes(secret)) {
+                throw new Error(`${component.target.driver} requires ${secret}.`);
+            }
+        }
+    }
+
+    private assertProductionUrls(profile: DeploymentProfile): void {
+        if (profile.environment !== 'prod') {
+            return;
+        }
+        if (
+            !profile.backend.enabled ||
+            profile.backend.allowedOrigins.length === 0 ||
+            new URL(profile.backend.publicHttpUrl).protocol !== 'https:' ||
+            new URL(profile.backend.publicWebSocketUrl).protocol !== 'wss:' ||
+            profile.backend.allowedOrigins.some(
+                (origin) => new URL(origin).protocol !== 'https:',
+            )
+        ) {
+            throw new Error(
+                'Production backend requires TLS URLs and an HTTPS Origin allowlist.',
+            );
+        }
+        if (
+            !profile.frontend.enabled ||
+            new URL(profile.frontend.publicUrl).protocol !== 'https:' ||
+            new URL(profile.frontend.runtime.apiBaseUrl).protocol !== 'https:' ||
+            new URL(profile.frontend.runtime.webSocketUrl).protocol !== 'wss:'
+        ) {
+            throw new Error('Production frontend requires TLS runtime URLs.');
+        }
+    }
+
+    private assertProductionHostKeys(profile: DeploymentProfile): void {
+        if (profile.environment !== 'prod') {
+            return;
+        }
+        for (const component of [profile.backend, profile.frontend]) {
+            if (
+                component.enabled &&
+                component.target.driver !== 'docker' &&
+                component.target.sshHostKeyFingerprint ===
+                    'SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+            ) {
+                throw new Error(
+                    'Production LXC targets require a real SSH host-key fingerprint.',
+                );
+            }
+        }
+    }
+
     private assertDatabaseConfiguration(profile: DeploymentProfile): void {
         if (!profile.backend.enabled) {
             return;
         }
         const database = profile.backend.database;
+        if (
+            profile.environment === 'prod' &&
+            database.type === 'sqlite' &&
+            !path.isAbsolute(database.path)
+        ) {
+            throw new Error(
+                'Production SQLite requires an absolute persistent path.',
+            );
+        }
         if (
             database.type === 'postgres' &&
             !profile.requiredSecrets.includes(database.connectionUrlSecret)

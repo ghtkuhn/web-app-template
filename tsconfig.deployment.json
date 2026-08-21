@@ -4,12 +4,20 @@
         "types": ["node"]
     },
     "include": [
+        "script/credentials.ts",
+        "script/credentials/**/*.ts",
         "script/deployment/**/*.ts",
+        "script/fallow.ts",
+        "script/git-hooks.ts",
         "script/memory-check.ts",
         "script/memory-check/**/*.ts",
+        "script/runtime-check.ts",
+        "script/runtime-check/**/*.ts",
         "script/safe-remove.ts",
         "script/safe-remove/**/*.ts",
         "script/template-update.ts",
-        "script/template-update/**/*.ts"
+        "script/template-update/**/*.ts",
+        "script/workflow.ts",
+        "script/workflow/**/*.ts"
     ]
 }

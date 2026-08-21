@@ -8,14 +8,33 @@ import {
     type ProxmoxApi,
 } from '../../../../script/deployment/proxmox.driver.ts';
 import { DockerDeploymentDriver } from '../../../../script/deployment/docker.driver.ts';
+import { ExistingLxcDeploymentDriver } from '../../../../script/deployment/existing-lxc.driver.ts';
 import { DeploymentConfigRenderer } from '../../../../script/deployment/config.renderer.ts';
+import { ReleaseBuilder } from '../../../../script/deployment/release.builder.ts';
 import type {
     DockerTarget,
+    ExistingLxcTarget,
     ProxmoxLxcTarget,
 } from '../../../../script/deployment/interfaces.ts';
 import type { ProcessRunner } from '../../../../script/deployment/process.runner.ts';
 
 const roots: string[] = [];
+const HOST_KEY_FINGERPRINT =
+    'SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+
+function existingTarget(
+    sshAuthentication: ExistingLxcTarget['sshAuthentication'] = 'private-key',
+): ExistingLxcTarget {
+    return {
+        driver: 'existing-lxc',
+        installationId: 'sample-app',
+        sshAuthentication,
+        sshHost: 'existing.test',
+        sshPort: 2222,
+        sshUser: 'app',
+        sshHostKeyFingerprint: HOST_KEY_FINGERPRINT,
+    };
+}
 
 function repository(): DeploymentProfileRepository {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'deployment-profile-'));
@@ -82,6 +101,49 @@ test('profile scaffold supports explicit Proxmox per component', () => {
         .toBe('docker');
 });
 
+test('profile scaffold supports isolated Existing-LXC targets and SQLite', () => {
+    const profiles = repository();
+    profiles.scaffold('dev', 'local', 'existing-lxc', 'existing-lxc');
+    const profile = profiles.load('dev');
+
+    expect(profile.backend.enabled && profile.backend.target.driver)
+        .toBe('existing-lxc');
+    expect(profile.frontend.enabled && profile.frontend.target.driver)
+        .toBe('existing-lxc');
+    expect(profile.requiredSecrets).toContain('DEPLOYMENT_SSH_PRIVATE_KEY');
+    expect(
+        profile.backend.enabled && profile.backend.target.driver ===
+            'existing-lxc' && profile.backend.target.sshUser,
+    ).toBe('app');
+    expect(
+        profile.backend.enabled &&
+        profile.backend.database.type === 'sqlite' &&
+        profile.backend.database.path,
+    ).toBe('/var/lib/dev/backend.sqlite');
+});
+
+test('Existing-LXC password authentication requires only its secret name', () => {
+    const profiles = repository();
+    const filePath = profiles.scaffold(
+        'dev',
+        'local',
+        'existing-lxc',
+        'docker',
+    );
+    const profile = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    profile.backend.target.sshAuthentication = 'password';
+    fs.writeFileSync(filePath, JSON.stringify(profile));
+
+    expect(() => profiles.load('dev')).toThrow(/DEPLOYMENT_SSH_PASSWORD/);
+    profile.requiredSecrets = profile.requiredSecrets.filter(
+        (name: string) => name !== 'DEPLOYMENT_SSH_PRIVATE_KEY',
+    );
+    profile.requiredSecrets.push('DEPLOYMENT_SSH_PASSWORD');
+    fs.writeFileSync(filePath, JSON.stringify(profile));
+    expect(profiles.load('dev').requiredSecrets)
+        .toContain('DEPLOYMENT_SSH_PASSWORD');
+});
+
 test('profile scaffold supports external PostgreSQL while SQLite stays default', () => {
     const profiles = repository();
     profiles.scaffold(
@@ -139,6 +201,23 @@ test('staging and production profiles reject insecure Proxmox TLS', () => {
     profile.backend.target.allowInsecureTls = true;
     fs.writeFileSync(filePath, JSON.stringify(profile));
     expect(() => profiles.load('staging')).toThrow(/verified Proxmox TLS/);
+});
+
+test('production LXC profiles require a non-placeholder host key', () => {
+    const profiles = repository();
+    const filePath = profiles.scaffold(
+        'prod',
+        'local',
+        'existing-lxc',
+        'docker',
+    );
+
+    expect(() => profiles.load('prod')).toThrow(/real SSH host-key/);
+    const profile = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    profile.backend.target.sshHostKeyFingerprint =
+        'SHA256:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
+    fs.writeFileSync(filePath, JSON.stringify(profile));
+    expect(profiles.load('prod').environment).toBe('prod');
 });
 
 test('deployment profiles reject backup retention below one', () => {
@@ -201,6 +280,7 @@ test('Proxmox provision creates and starts a missing LXC through REST', async ()
     };
     const target: ProxmoxLxcTarget = {
         driver: 'proxmox-lxc',
+        installationId: 'web-app',
         apiUrl: 'https://pve.test:8006',
         node: 'pve',
         vmid: 200,
@@ -215,7 +295,10 @@ test('Proxmox provision creates and starts a missing LXC through REST', async ()
         startOnBoot: true,
         stopContainer: true,
         sshHost: 'backend.test',
+        sshPort: 22,
         sshUser: 'root',
+        sshAuthentication: 'private-key',
+        sshHostKeyFingerprint: HOST_KEY_FINGERPRINT,
         sshPublicKey: 'ssh-ed25519 test',
         cores: 2,
         memoryMb: 1024,
@@ -259,6 +342,7 @@ test('Proxmox task failures stop provisioning with a controlled error', async ()
     };
     const target: ProxmoxLxcTarget = {
         driver: 'proxmox-lxc',
+        installationId: 'web-app',
         apiUrl: 'https://pve.test:8006',
         node: 'pve',
         vmid: 200,
@@ -273,7 +357,10 @@ test('Proxmox task failures stop provisioning with a controlled error', async ()
         startOnBoot: true,
         stopContainer: true,
         sshHost: 'backend.test',
+        sshPort: 22,
         sshUser: 'root',
+        sshAuthentication: 'private-key',
+        sshHostKeyFingerprint: HOST_KEY_FINGERPRINT,
         sshPublicKey: 'ssh-ed25519 test',
         cores: 2,
         memoryMb: 1024,
@@ -318,6 +405,36 @@ test('Docker driver builds only the selected component image', () => {
     }]);
 });
 
+test('release builder uses a backend allowlist that excludes credentials', () => {
+    const calls: Array<{ command: string; arguments_: readonly string[] }> = [];
+    const runner = {
+        run(command: string, arguments_: readonly string[]): string {
+            calls.push({ command, arguments_ });
+            if (command === 'tar') {
+                fs.writeFileSync(arguments_[1] as string, 'archive');
+            }
+            return '';
+        },
+    } as ProcessRunner;
+    const projectRoot = path.resolve(
+        path.dirname(new URL(import.meta.url).pathname),
+        '../../../..',
+    );
+    const release = new ReleaseBuilder(projectRoot, runner).build('backend');
+
+    expect(calls[0]?.arguments_).toEqual([
+        '-czf',
+        release.archive,
+        '-C',
+        'code/backend',
+        'package.json',
+        'src',
+        'script/database-maintenance.ts',
+    ]);
+    expect(JSON.stringify(calls)).not.toContain('.credentials.env');
+    fs.rmSync(path.dirname(release.archive), { recursive: true, force: true });
+});
+
 test('backend deployment configuration carries backup policy and release', () => {
     const profile = repository().load();
     const rendered = new DeploymentConfigRenderer().render(
@@ -330,6 +447,24 @@ test('backend deployment configuration carries backup policy and release', () =>
 
     expect(content).toContain('DB_BACKUP_RETENTION=10');
     expect(content).toContain('DEPLOYMENT_RELEASE_ID=release-123');
+    fs.rmSync(path.dirname(rendered), { recursive: true, force: true });
+});
+
+test('frontend runtime configuration uses the validated JSON assignment contract', () => {
+    const profile = repository().load();
+    const rendered = new DeploymentConfigRenderer().render(
+        profile,
+        'frontend',
+    );
+    const content = fs.readFileSync(rendered, 'utf8').trim();
+    const prefix = 'window.__APP_CONFIG__ = ';
+
+    expect(content.startsWith(prefix)).toBe(true);
+    expect(content.endsWith(';')).toBe(true);
+    expect(JSON.parse(content.slice(prefix.length, -1))).toMatchObject({
+        authEnabled: false,
+        registrationEnabled: false,
+    });
     fs.rmSync(path.dirname(rendered), { recursive: true, force: true });
 });
 
@@ -437,6 +572,7 @@ test('LXC release activation uses direct SSH and contains health rollback', asyn
     };
     const target: ProxmoxLxcTarget = {
         driver: 'proxmox-lxc',
+        installationId: 'web-app',
         apiUrl: 'https://pve.test:8006',
         node: 'pve',
         vmid: 200,
@@ -451,7 +587,10 @@ test('LXC release activation uses direct SSH and contains health rollback', asyn
         startOnBoot: true,
         stopContainer: true,
         sshHost: 'backend.test',
+        sshPort: 22,
         sshUser: 'root',
+        sshAuthentication: 'private-key',
+        sshHostKeyFingerprint: HOST_KEY_FINGERPRINT,
         sshPublicKey: 'ssh-ed25519 test',
         cores: 2,
         memoryMb: 1024,
@@ -462,7 +601,7 @@ test('LXC release activation uses direct SSH and contains health rollback', asyn
         target,
         runner,
         { DEPLOYMENT_SSH_PRIVATE_KEY: '/keys/deploy' },
-        '/project',
+        path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../../..'),
         api,
     ).deploy(
         'backend',
@@ -501,6 +640,7 @@ test('LXC database restore keeps stop, restore, restart, and health ordered', as
     } as ProcessRunner;
     const target: ProxmoxLxcTarget = {
         driver: 'proxmox-lxc',
+        installationId: 'web-app',
         apiUrl: 'https://pve.test:8006',
         node: 'pve',
         vmid: 200,
@@ -515,7 +655,10 @@ test('LXC database restore keeps stop, restore, restart, and health ordered', as
         startOnBoot: true,
         stopContainer: true,
         sshHost: 'backend.test',
+        sshPort: 22,
         sshUser: 'root',
+        sshAuthentication: 'private-key',
+        sshHostKeyFingerprint: HOST_KEY_FINGERPRINT,
         sshPublicKey: 'ssh-ed25519 test',
         cores: 2,
         memoryMb: 1024,
@@ -537,7 +680,7 @@ test('LXC database restore keeps stop, restore, restart, and health ordered', as
         target,
         runner,
         { DEPLOYMENT_SSH_PRIVATE_KEY: '/keys/deploy' },
-        '/project',
+        path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../../..'),
         api,
     );
 
@@ -553,4 +696,117 @@ test('LXC database restore keeps stop, restore, restart, and health ordered', as
     await expect(driver.databaseRestore('../escape.sqlite')).rejects.toThrow(
         /Invalid database backup identifier/,
     );
+});
+
+test('Existing-LXC pins host keys and supports release lifecycle operations', async () => {
+    const calls: Array<{
+        command: string;
+        arguments_: readonly string[];
+        environment?: NodeJS.ProcessEnv;
+    }> = [];
+    const runner = {
+        run(
+            command: string,
+            arguments_: readonly string[],
+            options?: { env?: NodeJS.ProcessEnv },
+        ): string {
+            calls.push({
+                command,
+                arguments_,
+                environment: options?.env,
+            });
+            return command === 'ssh' ? 'active' : '';
+        },
+    } as ProcessRunner;
+    const projectRoot = path.resolve(
+        path.dirname(new URL(import.meta.url).pathname),
+        '../../../..',
+    );
+    const driver = new ExistingLxcDeploymentDriver(
+        existingTarget(),
+        runner,
+        { DEPLOYMENT_SSH_PRIVATE_KEY: '/keys/deploy' },
+        projectRoot,
+    );
+
+    await driver.deploy(
+        'backend',
+        '/tmp/backend-release.tgz',
+        'release-1',
+        '/tmp/backend.env',
+    );
+    expect(await driver.status('backend')).toBe('active');
+    await driver.stop('backend');
+    await driver.rollback('backend', 'release-1');
+
+    expect(calls.some((call) => call.command === 'ssh-keyscan')).toBe(false);
+    const argumentsText = calls.flatMap((call) => call.arguments_).join(' ');
+    expect(argumentsText).toContain('StrictHostKeyChecking=yes');
+    expect(argumentsText).toContain('KnownHostsCommand=');
+    expect(argumentsText).toContain('/opt/sample-app/backend');
+    expect(argumentsText).toContain('releases/release-1');
+});
+
+test('Existing-LXC password stays out of arguments and missing secrets fail', async () => {
+    const calls: string[][] = [];
+    const runner = {
+        run(_command: string, arguments_: readonly string[]): string {
+            calls.push([...arguments_]);
+            return 'active';
+        },
+    } as ProcessRunner;
+    const projectRoot = path.resolve(
+        path.dirname(new URL(import.meta.url).pathname),
+        '../../../..',
+    );
+    await expect(new ExistingLxcDeploymentDriver(
+        existingTarget('password'),
+        runner,
+        {},
+        projectRoot,
+    ).status('backend')).rejects.toThrow(/DEPLOYMENT_SSH_PASSWORD/);
+
+    const password = 'must-not-appear-in-arguments';
+    expect(await new ExistingLxcDeploymentDriver(
+        existingTarget('password'),
+        runner,
+        { DEPLOYMENT_SSH_PASSWORD: password },
+        projectRoot,
+    ).status('backend')).toBe('active');
+    expect(JSON.stringify(calls)).not.toContain(password);
+});
+
+test('Existing-LXC bootstrap is explicit and passes validated parameters', async () => {
+    const calls: Array<{ command: string; arguments_: readonly string[] }> = [];
+    const runner = {
+        run(command: string, arguments_: readonly string[]): string {
+            calls.push({ command, arguments_ });
+            return '';
+        },
+    } as ProcessRunner;
+    const projectRoot = path.resolve(
+        path.dirname(new URL(import.meta.url).pathname),
+        '../../../..',
+    );
+
+    await new ExistingLxcDeploymentDriver(
+        existingTarget(),
+        runner,
+        { DEPLOYMENT_SSH_PRIVATE_KEY: '/keys/deploy' },
+        projectRoot,
+    ).bootstrap('24.19.0');
+
+    expect(calls.some((call) =>
+        call.arguments_.at(-1)?.includes(
+            'bootstrap-existing-lxc.sh sample-app 24.19.0',
+        ),
+    )).toBe(true);
+    expect(calls.some((call) =>
+        call.arguments_.some((argument) =>
+            argument.includes('root@existing.test'),
+        ),
+    )).toBe(true);
+    expect(calls.some((call) =>
+        call.arguments_.at(-1)?.includes('deployment:deploy'),
+    )).toBe(false);
 });

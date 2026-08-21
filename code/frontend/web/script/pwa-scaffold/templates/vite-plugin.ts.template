@@ -1,0 +1,32 @@
+    define: {
+        __PWA_SHELL_VERSION__: JSON.stringify(pwaShellVersion),
+    },
+    plugins: [
+        vue(),
+        VitePWA({
+            strategies: 'injectManifest',
+            srcDir: 'src/app',
+            filename: 'sw.ts',
+            injectRegister: null,
+            registerType: 'prompt',
+            manifest: {
+                id: '/{{APP_ID}}',
+                name: '{{NAME}}',
+                short_name: '{{SHORT_NAME}}',
+                start_url: '/',
+                scope: '/',
+                display: 'standalone',
+                theme_color: '#3457d5',
+                background_color: '#f4f7fb',
+                icons: [
+                    { src: '/icons/{{APP_ID}}-192.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+                    { src: '/icons/{{APP_ID}}-512.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+                    { src: '/icons/{{APP_ID}}-maskable.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
+                ],
+            },
+            injectManifest: {
+                globPatterns: ['**/*.{html,js,css,svg,woff2,webmanifest}'],
+                globIgnores: ['runtime-config.js'],
+            },
+        }),
+    ],

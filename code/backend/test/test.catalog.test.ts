@@ -69,6 +69,7 @@ test('central runner executes validated catalog entries exactly once', () => {
         assert.equal(runner.run(), 0);
         assert.deepEqual(invocation, [
             '--test',
+            '--test-concurrency=1',
             'test/one.test.ts',
             'src/module/health/test/two.test.ts',
         ]);

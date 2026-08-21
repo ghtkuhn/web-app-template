@@ -31,6 +31,20 @@ export class PersistenceRuleSet {
             );
         }
         if (layer === 'store') {
+            const genericMethod = analysis.classMethods.find((method) =>
+                ['save', 'findById', 'findAll', 'delete', 'upsert'].includes(
+                    method.name ?? '',
+                ),
+            );
+            if (genericMethod) {
+                issues.push(
+                    this.issue(
+                        analysis,
+                        'STORE_GENERIC_METHOD',
+                        `Store method '${genericMethod.name}' is too broad; declare a domain-specific method whose input carries its complete tenant and actor scope.`,
+                    ),
+                );
+            }
             if (analysis.anyTypeCount > 0) {
                 issues.push(
                     this.issue(
@@ -129,22 +143,6 @@ export class PersistenceRuleSet {
                         ),
                     );
                 }
-            }
-            const saveBody = analysis.source.match(
-                /\bsave\s*\([^)]*\)[^{]*\{([\s\S]*?)\n\s*\}/u,
-            )?.[1];
-            if (
-                saveBody &&
-                /\.updateTable\s*\(/u.test(saveBody) &&
-                !/\.insertInto\s*\(|\bcreate\s*\(/u.test(saveBody)
-            ) {
-                issues.push(
-                    this.issue(
-                        analysis,
-                        'STORE_SAVE_SEMANTICS',
-                        'save() must support persistence semantics and may not be an update-only alias.',
-                    ),
-                );
             }
         }
 

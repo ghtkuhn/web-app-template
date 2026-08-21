@@ -10,6 +10,7 @@ import type {
 import { DeploymentProfileRepository } from './profile.repository.ts';
 import { DockerDeploymentDriver } from './docker.driver.ts';
 import { ProxmoxLxcDeploymentDriver } from './proxmox.driver.ts';
+import { ExistingLxcDeploymentDriver } from './existing-lxc.driver.ts';
 import { ReleaseBuilder } from './release.builder.ts';
 import { DeploymentConfigRenderer } from './config.renderer.ts';
 
@@ -57,6 +58,8 @@ export class DeploymentCli {
                 });
             } else if (command === 'deploy') {
                 await this.deploy(profile, selection);
+            } else if (command === 'bootstrap') {
+                await this.bootstrap(profile, selection);
             } else if (command === 'status') {
                 await this.status(profile, selection);
             } else if (command === 'stop') {
@@ -99,13 +102,20 @@ export class DeploymentCli {
         if (!component.enabled) {
             throw new Error(`${selection} is disabled.`);
         }
-        if (component.target.driver !== 'proxmox-lxc') {
-            throw new Error('Explicit rollback is available for Proxmox LXC.');
+        if (component.target.driver === 'docker') {
+            throw new Error('Explicit rollback is available for LXC targets.');
         }
-        new ProxmoxLxcDeploymentDriver(component.target).rollback(
-            selection,
-            release,
-        );
+        if (component.target.driver === 'proxmox-lxc') {
+            await new ProxmoxLxcDeploymentDriver(component.target).rollback(
+                selection,
+                release,
+            );
+        } else {
+            await new ExistingLxcDeploymentDriver(component.target).rollback(
+                selection,
+                release,
+            );
+        }
     }
 
     private scaffold(arguments_: readonly string[]): number {
@@ -142,8 +152,12 @@ export class DeploymentCli {
                 dockerComponents.push(component);
                 return;
             }
-            const driver = new ProxmoxLxcDeploymentDriver(target);
-            await driver.provision();
+            const driver = target.driver === 'proxmox-lxc'
+                ? new ProxmoxLxcDeploymentDriver(target)
+                : new ExistingLxcDeploymentDriver(target);
+            if (driver instanceof ProxmoxLxcDeploymentDriver) {
+                await driver.provision();
+            }
             const release = this.releases.build(component);
             const configuration = this.configurations.render(
                 profile,
@@ -176,6 +190,27 @@ export class DeploymentCli {
                 deploymentRelease,
             );
         }
+    }
+
+    private async bootstrap(
+        profile: DeploymentProfile,
+        selection: ComponentSelection,
+    ): Promise<void> {
+        const bootstrapped = new Set<string>();
+        await this.each(profile, selection, async (_component, target) => {
+            if (target.driver !== 'existing-lxc') {
+                throw new Error(
+                    'Explicit bootstrap applies only to existing-lxc targets.',
+                );
+            }
+            const key = `${target.sshUser}@${target.sshHost}:${target.sshPort}/${target.installationId}`;
+            if (!bootstrapped.has(key)) {
+                await new ExistingLxcDeploymentDriver(target).bootstrap(
+                    fs.readFileSync(path.join(this.root, '.nvmrc'), 'utf8').trim(),
+                );
+                bootstrapped.add(key);
+            }
+        });
     }
 
     private async databaseList(
@@ -227,12 +262,16 @@ export class DeploymentCli {
     }
 
     private async proxmoxDatabase(
-        target: Extract<DeploymentTarget, { driver: 'proxmox-lxc' }>,
+        target: Exclude<DeploymentTarget, { driver: 'docker' }>,
         command: 'list' | 'restore',
         backupId?: string,
     ): Promise<string> {
-        const driver = new ProxmoxLxcDeploymentDriver(target);
-        await driver.start();
+        const driver = target.driver === 'proxmox-lxc'
+            ? new ProxmoxLxcDeploymentDriver(target)
+            : new ExistingLxcDeploymentDriver(target);
+        if (driver instanceof ProxmoxLxcDeploymentDriver) {
+            await driver.start();
+        }
         return command === 'list'
             ? driver.databaseList()
             : driver.databaseRestore(backupId ?? '');
@@ -248,7 +287,9 @@ export class DeploymentCli {
                 dockerComponents.push(component);
                 return;
             }
-            const status = await new ProxmoxLxcDeploymentDriver(target).status();
+            const status = target.driver === 'proxmox-lxc'
+                ? await new ProxmoxLxcDeploymentDriver(target).status()
+                : await new ExistingLxcDeploymentDriver(target).status(component);
             process.stdout.write(`${component}: ${status}\n`);
         });
         if (dockerComponents.length > 0) {
@@ -267,7 +308,11 @@ export class DeploymentCli {
             if (target.driver === 'docker') {
                 dockerComponents.push(component);
             } else {
-                await new ProxmoxLxcDeploymentDriver(target).stop(component);
+                if (target.driver === 'proxmox-lxc') {
+                    await new ProxmoxLxcDeploymentDriver(target).stop(component);
+                } else {
+                    await new ExistingLxcDeploymentDriver(target).stop(component);
+                }
             }
         });
         if (dockerComponents.length > 0) {

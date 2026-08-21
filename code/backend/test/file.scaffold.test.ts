@@ -254,7 +254,6 @@ const expectedFiles: readonly ExpectedFile[] = [
     { type: 'cli-handler', name: 'billing', relativePath: 'api/billing.cli.handler.ts', className: 'BillingCliHandler', baseClass: 'CliHandler' },
     { type: 'node-handler', name: 'billing', relativePath: 'api/billing.node.handler.ts', className: 'BillingNodeHandler', baseClass: 'NodeHandler' },
     { type: 'api-aux', name: 'parser', owner: 'owner', relativePath: 'api/owner/parser.api-aux.ts', className: 'ParserApiAux', baseClass: 'BaseApiAux' },
-    { type: 'controller-aux', name: 'mapper', owner: 'owner', relativePath: 'controller/owner/mapper.controller-aux.ts', className: 'MapperControllerAux', baseClass: 'BaseControllerAux' },
     { type: 'store-aux', name: 'query', owner: 'owner', relativePath: 'store/owner/query.store-aux.ts', className: 'QueryStoreAux', baseClass: 'BaseStoreAux' },
 ];
 
@@ -309,7 +308,7 @@ test('invalid requests and collisions do not mutate the module', () => {
                 fileType: 'service-aux',
                 name: 'test',
             }),
-            /Service Aux scaffolding is obsolete.*scaffold:operation/,
+            /service-aux scaffolding is obsolete.*scaffold:operation/,
         );
         const invalidRequests: FileScaffoldRequest[] = [
             { moduleName: 'missing', fileType: 'service', name: 'test' },
@@ -360,15 +359,12 @@ test('write and verification failures remove files and only new directories', ()
         );
         assert.equal(fs.existsSync(objectPath), false);
 
-        const ownerDirectory = path.join(
-            fixture.moduleRoot,
-            'controller/owner',
-        );
+        const ownerDirectory = path.join(fixture.moduleRoot, 'store/owner');
         assert.equal(fs.existsSync(ownerDirectory), false);
         assert.throws(() =>
             fixture.scaffolder(new FailingFileVerification()).scaffold({
                 moduleName: 'example',
-                fileType: 'controller-aux',
+                fileType: 'store-aux',
                 name: 'mapper',
                 owner: 'owner',
             }),

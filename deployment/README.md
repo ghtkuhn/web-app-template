@@ -9,23 +9,27 @@ npm run deployment:validate
 npm run deployment:validate -- --all
 npm run deployment:scaffold -- staging
 npm run deployment:scaffold -- staging --database postgres
+npm run deployment:scaffold -- staging --backend-driver existing-lxc
 npm run deployment:build -- local backend
-npm run deployment:deploy -- local all
-npm run deployment:status -- local all
-npm run deployment:stop -- local all
-npm run deployment:database:list -- local
-npm run deployment:database:restore -- local <backup-id>
+npm run credentials:run -- deployment:bootstrap -- staging backend
+npm run credentials:run -- deployment:deploy -- local all
+npm run credentials:run -- deployment:status -- local all
+npm run credentials:run -- deployment:stop -- local all
+npm run credentials:run -- deployment:database:list -- local
+npm run credentials:run -- deployment:database:restore -- local <backup-id>
 ```
 
-Backend and frontend targets are independent. A profile can therefore use
-Docker for one component and Proxmox LXC for the other.
+Backend and frontend targets are independent. A profile can therefore select
+`docker`, `proxmox-lxc`, or `existing-lxc` separately for each component.
 
 ## Secrets
 
-Profiles contain only the names of required secrets. Copy the relevant
-`.env.example` files into your local secret-management workflow and export the
-values before deployment. Never commit API token secrets, passwords, or private
-SSH keys.
+Profiles contain only the names of required secrets. Run `npm run
+credentials:init`, populate the ignored root `/.credentials.env`, and invoke
+deployment scripts through `npm run credentials:run -- ...`. The file remains
+local, mode `0600`, and is never included in releases, images, or updater
+payloads. Never put secret values in profiles, documentation, logs, fixtures,
+Memory, Kanban, or command arguments.
 
 Proxmox LXC requires:
 
@@ -33,6 +37,12 @@ Proxmox LXC requires:
 - `PROXMOX_API_TOKEN_SECRET`
 - `DEPLOYMENT_SSH_PRIVATE_KEY`
 - every application secret named in `requiredSecrets`
+
+Existing LXC requires either `DEPLOYMENT_SSH_PRIVATE_KEY` or, only when the
+profile explicitly selects password authentication,
+`DEPLOYMENT_SSH_PASSWORD`. Private-key authentication is the default. Both LXC
+drivers pin `sshHostKeyFingerprint` with `StrictHostKeyChecking=yes`; they do
+not use `ssh-keyscan` or interactive trust.
 
 PostgreSQL profiles additionally require `DATABASE_URL`. The URL is supplied
 only through the deployment environment and must never be stored in the JSON
@@ -98,6 +108,32 @@ The REST identity and the LXC SSH identity serve different purposes:
 - releases are installed by SSH directly into the LXC;
 - SSH access to the Proxmox host is neither required nor used by deployment.
 
+## Existing LXC Requirements
+
+The `existing-lxc` driver manages releases in a container that already exists;
+it never creates the LXC through Proxmox. The target must be Debian 13 on
+x86_64, reachable directly over SSH, and configured with the exact host-key
+fingerprint stored in the profile.
+
+All local tooling, Docker build stages, and LXC installations use the single
+runtime pinned in `.nvmrc`: Node.js 24.19.0 with npm 11. Deployment artifacts
+must not contain a locally built `node_modules` directory. Dependency lifecycle
+scripts are disabled; `better-sqlite3` 13 uses its bundled Node-API binary, and
+trusted repository setup remains available explicitly through `npm run prepare`.
+
+Bootstrap is an explicit one-time operation:
+
+```bash
+npm run credentials:run -- deployment:bootstrap -- <profile> <backend|frontend|all>
+```
+
+It connects as `root`, installs the Node version from `.nvmrc`, creates the
+`app` deployment user,
+systemd units, Nginx configuration, persistent directories, and narrowly scoped
+sudo helpers. Scaffolded profiles use that `app` user for normal releases.
+`deployment:deploy` never invokes bootstrap and does not otherwise
+provision or mutate the operating system.
+
 ### Guidance for AI Agents
 
 Before changing external infrastructure, an AI agent must:
@@ -129,8 +165,8 @@ version-1 SQLite profiles remain readable and are normalized in memory; new and
 scaffolded profiles use version 2. SQLite remains the default unless
 `--database postgres` is selected.
 
-Docker stores SQLite data in the external `backend-data` volume. Proxmox
-backend releases use `/var/lib/web-app` for persistent SQLite data. PostgreSQL
+Docker stores SQLite data in the external `backend-data` volume. LXC backend
+releases use `/var/lib/<installationId>` for persistent SQLite data. PostgreSQL
 is always externally managed: neither the Docker nor Proxmox driver provisions,
 updates, stops, or deletes a PostgreSQL server. Both drivers only pass the
 secret connection URL to the backend. Frontend images and LXC releases receive
@@ -138,11 +174,12 @@ their public API, WebSocket, and presentation settings at runtime, so the same
 static frontend artifact can be used in multiple profiles.
 
 LXC releases are checksummed, installed below
-`/opt/web-app/<component>/releases/`, and switched through the `current`
-symlink. A failed install or health check restores the previous release.
+`/opt/<installationId>/<component>/releases/`, and switched through the
+`current` symlink. Configuration lives below `/etc/<installationId>`. A failed
+install or health check restores the previous release.
 
 Before pending SQLite migrations, the backend creates and validates an online
-backup under `/var/lib/web-app/backups`. The default retention is ten backups
+backup under `/var/lib/<installationId>/backups`. The default retention is ten backups
 and can be changed with `databaseBackupRetention` in the backend profile.
 Backups are local recovery points, not protection against loss of the Docker
 host, volume, or Proxmox storage.

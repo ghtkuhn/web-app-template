@@ -13,6 +13,8 @@ import type { Database } from '../database.ts';
 import { config } from '../config.ts';
 import { DatabaseBackupManager } from './base.database-backup.ts';
 import { DatabaseManager } from './base.database.ts';
+import { MigrationChecksumManager } from './base.migration-checksum.ts';
+import { MigrationCatalog } from './migration.catalog.ts';
 
 /** Result metadata returned after checking and applying pending migrations. */
 export interface MigrationOutcome {
@@ -52,8 +54,17 @@ export class MigrationManager {
         database: Kysely<Database>,
         backups?: DatabaseBackupManager,
     ): Promise<MigrationOutcome> {
-        const migrator = await this.createMigrator(database);
+        const migrationFolder = this.migrationFolder();
+        const migrator = await this.createMigrator(database, migrationFolder);
         const migrations = await migrator.getMigrations();
+        const checksums = new MigrationChecksumManager(
+            database,
+            config.database.type,
+            new MigrationCatalog(path.dirname(migrationFolder)).sources(
+                config.database.type,
+            ),
+        );
+        await checksums.verify(migrations);
         const pending = migrations.filter((migration) => !migration.executedAt);
         if (pending.length === 0) {
             return { backupCreated: false };
@@ -64,18 +75,15 @@ export class MigrationManager {
             backups,
         );
         this.assertMigrationResult(await migrator.migrateToLatest());
+        await checksums.register(pending);
         this.assertSqliteIntegrityIfRequired();
         return { backupCreated };
     }
 
     private static async createMigrator(
         database: Kysely<Database>,
+        migrationFolder: string,
     ): Promise<Migrator> {
-        const migrationFolder = path.resolve(
-            path.dirname(fileURLToPath(import.meta.url)),
-            '../migration',
-            config.database.type,
-        );
         await fs.mkdir(migrationFolder, { recursive: true });
         return new Migrator({
             db: database,
@@ -85,6 +93,14 @@ export class MigrationManager {
                 migrationFolder,
             }),
         });
+    }
+
+    private static migrationFolder(): string {
+        return path.resolve(
+            path.dirname(fileURLToPath(import.meta.url)),
+            '../migration',
+            config.database.type,
+        );
     }
 
     private static async createBackupIfRequired(

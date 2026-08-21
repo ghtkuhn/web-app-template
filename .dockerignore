@@ -1,5 +1,6 @@
 .git
 .fallow
+/.credentials.env
 **/.DS_Store
 **/dist
 **/node_modules

@@ -1,0 +1,114 @@
+/// <reference lib="webworker" />
+
+import { cacheNames, clientsClaim, setCacheNameDetails } from 'workbox-core';
+import { createHandlerBoundToURL, precacheAndRoute } from 'workbox-precaching';
+import { registerRoute } from 'workbox-routing';
+import { NetworkOnly } from 'workbox-strategies';
+import { isNeverCachedRequest, isRuntimeConfigRequest, isShellNavigation } from './pwa-cache-policy.ts';
+import {
+    ACTIVE_RUNTIME_CONFIG_CACHE,
+    activateRuntimeConfigCandidate,
+    candidateCacheName,
+    installRuntimeConfigCandidate,
+    requireValidRuntimeConfig,
+} from './runtime-config-cache.ts';
+
+declare const self: ServiceWorkerGlobalScope & {
+    readonly __WB_MANIFEST: readonly (string | {
+        readonly revision?: string;
+        readonly url: string;
+    })[];
+};
+declare const __PWA_SHELL_VERSION__: string;
+
+const manifest = self.__WB_MANIFEST;
+setCacheNameDetails({
+    prefix: '{{APP_ID}}',
+    suffix: `shell-${__PWA_SHELL_VERSION__}`,
+});
+precacheAndRoute(manifest, {
+    ignoreURLParametersMatching: [/^utm_/u, /^fbclid$/u, /^v3\.46\.0$/u],
+});
+clientsClaim();
+
+registerRoute(
+    ({ url }) => isNeverCachedRequest(
+        url.origin,
+        url.pathname,
+        self.location.origin,
+    ),
+    new NetworkOnly(),
+);
+
+registerRoute(
+    ({ request, url }) => isRuntimeConfigRequest(
+        request.method,
+        url.origin,
+        url.pathname,
+        self.location.origin,
+    ),
+    async ({ request }) => {
+        try {
+            return await requireValidRuntimeConfig(await fetch(request));
+        } catch {
+            const cached = await (await caches.open(
+                ACTIVE_RUNTIME_CONFIG_CACHE,
+            )).match(request);
+            if (!cached) {
+                throw new Error('No active runtime configuration is available.');
+            }
+            return requireValidRuntimeConfig(cached);
+        }
+    },
+);
+
+registerRoute(
+    ({ request, url }) => isShellNavigation(
+        request.method,
+        request.mode,
+        url.origin,
+        url.pathname,
+        self.location.origin,
+    ),
+    createHandlerBoundToURL('/index.html'),
+);
+
+self.addEventListener('install', (event) => {
+    event.waitUntil((async () => {
+        const candidate = await candidateCacheName(
+            manifest,
+            __PWA_SHELL_VERSION__,
+        );
+        await installRuntimeConfigCandidate(
+            caches,
+            fetch,
+            self.location.origin,
+            candidate,
+        );
+    })());
+});
+
+self.addEventListener('activate', (event) => {
+    event.waitUntil((async () => {
+        const candidate = await candidateCacheName(
+            manifest,
+            __PWA_SHELL_VERSION__,
+        );
+        await activateRuntimeConfigCandidate(
+            caches,
+            candidate,
+            self.location.origin,
+        );
+        const obsoleteShells = (await caches.keys()).filter((name) =>
+            name.startsWith('{{APP_ID}}-precache-') &&
+            name !== cacheNames.precache,
+        );
+        await Promise.all(obsoleteShells.map((name) => caches.delete(name)));
+    })());
+});
+
+self.addEventListener('message', (event) => {
+    if (event.data?.type === 'SKIP_WAITING') {
+        void self.skipWaiting();
+    }
+});

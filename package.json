@@ -14,14 +14,37 @@
   "license": "ISC",
   "author": "",
   "type": "module",
+  "packageManager": "npm@11.17.0",
   "engines": {
-    "node": ">=22.23.1 <23"
+    "node": "24.19.0",
+    "npm": ">=11 <12"
+  },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "24.19.0",
+      "onFail": "error"
+    },
+    "packageManager": {
+      "name": "npm",
+      "version": ">=11 <12",
+      "onFail": "error"
+    }
   },
   "workspaces": [
     "code/backend",
     "code/frontend/web"
   ],
   "scripts": {
+    "prepare": "node script/git-hooks.ts",
+    "runtime:check": "node script/runtime-check.ts",
+    "credentials:init": "node script/credentials.ts init",
+    "credentials:check": "node script/credentials.ts check",
+    "credentials:run": "node script/credentials.ts run",
+    "workflow:init": "node script/workflow.ts init",
+    "task:new": "node script/workflow.ts task:new",
+    "task:close": "node script/workflow.ts task:close",
+    "check:kanban": "node script/workflow.ts check:kanban",
     "lint": "npm run lint --workspaces --if-present",
     "lint:backend": "npm run lint --workspace @app/backend",
     "module:status": "node code/backend/script/module-tools.ts status",
@@ -32,21 +55,26 @@
     "check:api": "npm run check:openapi --workspace @app/backend && npm run check:api --workspace @app/web",
     "check:memory": "node script/memory-check.ts",
     "check:modules": "node code/backend/script/module-tools.ts check",
+    "generate:migrations": "node code/backend/script/migration-check.ts generate",
+    "check:migrations": "node code/backend/script/migration-check.ts check",
     "generate:test-catalog": "npm run generate:test-catalog --workspace @app/backend",
     "check:test-catalog": "npm run check:test-catalog --workspace @app/backend",
     "icons": "npm run icons --workspace @app/web --",
     "scaffold:file": "node code/backend/script/scaffold-file.ts",
     "scaffold:module": "node code/backend/script/scaffold-module.ts",
     "scaffold:operation": "node code/backend/script/scaffold-operation.ts",
+    "store:migration-status": "node code/backend/script/store-migration-status.ts",
     "scaffold:test": "node code/backend/script/scaffold-test.ts",
     "scaffold:route": "npm run scaffold:route --workspace @app/web --",
     "scaffold:component": "npm run scaffold:component --workspace @app/web --",
     "scaffold:feature": "npm run scaffold:feature --workspace @app/web --",
+    "scaffold:pwa": "npm run scaffold:pwa --workspace @app/web --",
     "template:check": "node script/template-update.ts check",
     "template:init": "node script/template-update.ts init",
     "template:update": "node script/template-update.ts update",
     "deployment:validate": "node script/deployment/deployment.cli.ts validate",
     "deployment:scaffold": "node script/deployment/deployment.cli.ts scaffold",
+    "deployment:bootstrap": "node script/deployment/deployment.cli.ts bootstrap",
     "deployment:build": "node script/deployment/deployment.cli.ts build",
     "deployment:deploy": "node script/deployment/deployment.cli.ts deploy",
     "deployment:status": "node script/deployment/deployment.cli.ts status",
@@ -58,11 +86,12 @@
     "typecheck": "tsc --project tsconfig.deployment.json && npm run typecheck --workspaces --if-present",
     "test": "npm test --workspaces --if-present",
     "audit": "node script/fallow.ts",
-    "verify": "npm run check:memory && npm run check:modules && npm run deployment:validate -- --all && npm run check:api && npm run lint && npm run typecheck && npm test && npm run build && npm run test:e2e --workspace @app/web && npm run audit",
+    "verify": "npm run runtime:check && npm run credentials:check && npm run check:memory && npm run check:kanban && npm run check:modules && npm run check:migrations && npm run deployment:validate -- --all && npm run check:api && npm run lint && npm run typecheck && npm test && npm run build && npm run test:e2e --workspace @app/web && npm run test:e2e:pwa --workspaces --if-present && npm run audit",
     "verify:module": "node code/backend/script/module-tools.ts verify"
   },
   "devDependencies": {
     "ajv": "^8.20.0",
+    "fallow": "3.15.0",
     "typescript": "^5.0.0"
   }
 }

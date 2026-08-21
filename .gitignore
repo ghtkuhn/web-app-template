@@ -20,12 +20,10 @@ CODEX-INBOX.md
 .template/cache/
 .template/logs/
 .template/status.json
-data/ai/MEMORY.md
-data/ai/kanban/todo/
-data/ai/kanban/done/
 
 # Local project details and credentials
 project.json
+/.credentials.env
 
 # Local database files
 data/sqlite/

@@ -1,0 +1,93 @@
+const CACHE_PREFIX = '{{APP_ID}}-runtime-config-';
+export const ACTIVE_RUNTIME_CONFIG_CACHE = `${CACHE_PREFIX}active-v1`;
+
+export type PrecacheManifestEntry = string | {
+    readonly revision?: string;
+    readonly url: string;
+};
+
+interface RuntimeCacheStorage {
+    delete(cacheName: string): Promise<boolean>;
+    keys(): Promise<string[]>;
+    open(cacheName: string): Promise<Pick<Cache, 'match' | 'put'>>;
+}
+
+function runtimeConfigRequest(origin: string): Request {
+    return new Request(new URL('/runtime-config.js', origin), {
+        cache: 'no-store',
+        credentials: 'same-origin',
+    });
+}
+
+/** Validates the versioned JSON-assignment contract without executing source. */
+export async function requireValidRuntimeConfig(
+    response: Response,
+): Promise<Response> {
+    if (!response.ok || response.type === 'opaque' ||
+        response.type === 'opaqueredirect') {
+        throw new Error('Runtime configuration response is not usable.');
+    }
+    const text = await response.clone().text();
+    const prefix = 'window.__APP_CONFIG__ = ';
+    if (!text.startsWith(prefix) || !text.trimEnd().endsWith(';')) {
+        throw new Error('Runtime configuration does not use the JSON assignment contract.');
+    }
+    const value = JSON.parse(text.slice(prefix.length, text.trimEnd().length - 1)) as Record<string, unknown>;
+    if (typeof value.apiBaseUrl !== 'string' ||
+        typeof value.webSocketUrl !== 'string' ||
+        typeof value.authEnabled !== 'boolean' ||
+        typeof value.registrationEnabled !== 'boolean' ||
+        ![null, 'desktop', 'tablet', 'mobile'].includes(value.presentationLock as string | null)) {
+        throw new Error('Runtime configuration payload is invalid.');
+    }
+    new URL(value.apiBaseUrl, 'https://frontend.invalid');
+    new URL(value.webSocketUrl);
+    return response;
+}
+
+export async function candidateCacheName(
+    manifest: readonly PrecacheManifestEntry[],
+    shellVersion: string,
+): Promise<string> {
+    const bytes = new TextEncoder().encode(JSON.stringify([
+        shellVersion,
+        manifest,
+    ]));
+    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+    return `${CACHE_PREFIX}candidate-${[...digest]
+        .map((byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+}
+
+/** Stages validated public configuration without changing the active shell pair. */
+export async function installRuntimeConfigCandidate(
+    storage: RuntimeCacheStorage,
+    fetcher: typeof fetch,
+    origin: string,
+    cacheName: string,
+): Promise<void> {
+    const request = runtimeConfigRequest(origin);
+    const response = await requireValidRuntimeConfig(await fetcher(request));
+    await (await storage.open(cacheName)).put(request, response);
+}
+
+/** Promotes only the candidate belonging to the activating shell manifest. */
+export async function activateRuntimeConfigCandidate(
+    storage: RuntimeCacheStorage,
+    candidate: string,
+    origin: string,
+): Promise<void> {
+    const request = runtimeConfigRequest(origin);
+    const response = await (await storage.open(candidate)).match(request);
+    if (!response) {
+        throw new Error('Runtime configuration candidate is missing.');
+    }
+    await (await storage.open(ACTIVE_RUNTIME_CONFIG_CACHE)).put(
+        request,
+        await requireValidRuntimeConfig(response),
+    );
+    const obsolete = (await storage.keys()).filter((name) =>
+        name.startsWith(CACHE_PREFIX) &&
+        name !== ACTIVE_RUNTIME_CONFIG_CACHE,
+    );
+    await Promise.all(obsolete.map((name) => storage.delete(name)));
+}

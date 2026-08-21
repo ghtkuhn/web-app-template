@@ -166,7 +166,6 @@ export class DomainRuleSet {
         const layer = this.paths.layer(analysis.filePath);
         const auxiliaryBases: Record<string, readonly string[]> = {
             api: ['BaseApiAux'],
-            controller: ['BaseControllerAux'],
             service: ['BaseServiceOperation'],
             store: ['BaseStoreAux'],
         };

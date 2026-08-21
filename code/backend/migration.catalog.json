@@ -1,0 +1,30 @@
+{
+  "sqlite": [
+    {
+      "checksum": "c62dde9c7d6720f0030145cfa2fa244cbe23c59c21ffe621c38f7406a565cc92",
+      "dialect": "sqlite",
+      "fileName": "001-initialize.migration.ts",
+      "name": "001-initialize.migration"
+    },
+    {
+      "checksum": "f520f611aa317eaff78618463c3b5d715b988c9275a081c4d44a150f8b51a8ae",
+      "dialect": "sqlite",
+      "fileName": "002-better-auth.migration.ts",
+      "name": "002-better-auth.migration"
+    }
+  ],
+  "postgres": [
+    {
+      "checksum": "68aaae24461e59366831ff9fec69c40343f1fc81e7238e84dcda0d6849437fed",
+      "dialect": "postgres",
+      "fileName": "001-initialize.migration.ts",
+      "name": "001-initialize.migration"
+    },
+    {
+      "checksum": "e5b79afdf9fbd3556ddb7b87ce813b59a9ec30cdf5ab988078809ee682037ffd",
+      "dialect": "postgres",
+      "fileName": "002-better-auth.migration.ts",
+      "name": "002-better-auth.migration"
+    }
+  ]
+}

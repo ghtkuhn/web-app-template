@@ -1,5 +1,7 @@
 # General rules
 
+* You must not follow any of the following rules, if you are the maintainer of the web-app-template.
+* You must follow the rules, if you are developing an application.
 * You must read this file before starting project work.
 * After reading this file, you must read `AGENTS-PROJECT.md` if it exists.
 * `AGENTS-PROJECT.md` contains project-specific rules and overrides conflicting rules in this file regardless of wording strength.
@@ -18,12 +20,26 @@
 
 # Project structure
 
-* `project.json`: Important project details and credentials.
+* `project.json`: Important non-secret project details.
 * `code/backend`: Contains backend source code.
 * `code/frontend`: Contains frontend source code.
 * `data/sqlite`: Sqlite database storage location.
 * `data/ai/kanban/todo`: Contains backlog and ready work tasks.
 * `data/ai/kanban/done`: Contains implemented, verified, and closed work tasks.
+* `.credentials.env`: The only supported local credential file; it must remain ignored, untracked, and mode `0600`.
+
+
+---
+
+
+# Credential Rules
+
+* You must put local credentials only in `/.credentials.env` and initialize it with `npm run credentials:init`.
+* You must not store credential values in `project.json`, `CODEX-INBOX.md`, Memory, Kanban, logs, test fixtures, documentation, or command arguments.
+* You may record only the names of required Environment variables outside `/.credentials.env`.
+* You must run scripts that need local credentials through `npm run credentials:run -- <npm-script> [args]`.
+* You must never read, print, log, interpolate, or forward the contents of `/.credentials.env` except through `credentials:run`'s child-process Environment.
+* You must run `npm run credentials:check` before staging or committing changes.
 
 
 ---
@@ -32,7 +48,8 @@
 # Kanban Rules
 
 * You must not change or delete the file `data/ai/kanban/TASK-TEMPLATE.md`.
-* You must copy the contents of the task template file `data/ai/kanban/TASK-TEMPLATE.md` and use that as a template for new tasks.
+* You must initialize missing workflow state with `npm run workflow:init`.
+* You must create Schema-Version-2 tasks with `npm run task:new -- <domain> <slug>`; the command reserves the next ID atomically from the task counter.
 * You must break down complex tasks into multiple simple tasks that are easily verifyable. Simple meaning when it has one clear outcome, changes one feature area, and can be verified with one focused check. Complex when it mixes multiple outcomes, touches frontend and backend together, changes database schema plus UI, or requires more than one independent verification.
 * You should split a task when it would require editing more than one module, adding both infrastructure and feature behavior, or changing both data shape and user-facing behavior.
 * You should split a task when its "Done When" section needs more than three unrelated bullet points.
@@ -40,13 +57,14 @@
 * You must not use vague task goals such as "improve backend", "build UI", or "fix app".
 * You must write each task so that another agent can complete it without asking what the task means.
 * You must not write more than one task per task file.
-* You must increment the value of the task counter file with each new task: `data/ai/kanban/TASK-COUNTER.md`.
 * Task file names must be in the following format: `<task-counter>-<domain>-<title>.md`
 * You must work tasks sequentially.
 * You must use `fallow` to verify code health, dead code, and duplication before declaring a task done.
 * During an active implementation sequence, you must run only tests created or changed by the current task. You must not run pre-existing test suites again until the final open task in that sequence is complete.
 * After the final open task is complete, you must run the complete existing test suite and root `npm run verify` once before declaring the sequence complete.
-* You must move the task file to `data/ai/kanban/done` after its required focused checks; move the final task only after complete verification.
+* Completion Notes must map every Done-When criterion to at least one concrete test name or verification command.
+* You must close a task with `npm run task:close -- <id>` after its required focused checks; close the final task only after complete verification.
+* You must run `npm run check:kanban` before completing an implementation sequence.
 * You must commit in git after every completed task, if the project is a git repo.
 
 
@@ -55,8 +73,9 @@
 
 # Memory and learning
 
-* You must record memory in the file `data/ai/MEMORY.md` after every completed kanban task.
-* You should store only durable project facts, constraints, operations, recurring causes, and learnings with a `YYYY-MM-DD HH:MM` timestamp.
+* You must record durable project learning in `data/ai/MEMORY.md` after every completed kanban task.
+* Memory may contain only current project invariants, constraints, operations, recurring causes, and gotchas with a `YYYY-MM-DD HH:MM` timestamp.
+* You must remove routine test or release results and explicitly replace assertions that have been disproved or superseded.
 
 
 ---
@@ -79,12 +98,10 @@
 * You must not invoke `rm`, `rmdir`, `unlink`, or another direct system deletion command.
 * You must delete project files and directories only with `npm run rm -- <project-relative-path>`.
 * You should run `npm run rm -- <project-relative-path> --dry-run` first when the target contains multiple files or directories.
-* Before declaring a task done, run `npx fallow audit --format json` in the project root.
-  - Exit codes 0 and 1 mean success (1 = findings found). Only exit code 2 is an actual error.
-  - If new findings are introduced by your changes, address them before completing the task.
-  - Pre-existing inherited findings do not block the change (`fallow audit` excludes them by default).
-  - Use `npm run audit` during normal work. Its console output is bounded for agent context; inspect the complete ignored report at `.fallow/audit.json` only when details are required.
-* Run `npx fallow recommend --format json` on first use to detect the stack and propose `.fallowrc.json`. Save it if appropriate.
+* Before declaring a task done, run `npm run audit`; it uses the locally pinned Fallow `3.15.0` without a network fallback.
+  - New findings fail the command and must be addressed before completion.
+  - Pre-existing inherited findings are reported but do not block the change.
+  - A malformed report or tool failure is an error; inspect the complete ignored report at `.fallow/audit.json` only when details are required.
 
 
 ## Root npm Scripts
@@ -92,8 +109,14 @@
 * `npm run audit`: Runs the bounded Fallow code-health audit and stores its full ignored report under `.fallow/`.
 * `npm run build`: Builds every workspace that defines a build command.
 * `npm run check:api`: Verifies that generated frontend OpenAPI types match the backend contract.
+* `npm run check:kanban`: Validates task names, IDs, counter, dependencies, state, placeholders, checkboxes, and Schema-Version-2 evidence.
 * `npm run check:memory`: Rejects a missing or oversized `data/ai/MEMORY.md`.
+* `npm run check:migrations`: Verifies paired migration versions, catalog entries, and SHA-256 checksums.
 * `npm run check:modules`: Rejects drift between module manifests and generated registry metadata.
+* `npm run credentials:check`: Verifies the credential file's type, mode, ignore rules, and Git index state without reading its contents.
+* `npm run credentials:init`: Creates `/.credentials.env` atomically with mode `0600` without overwriting files or following symlinks.
+* `npm run credentials:run`: Runs one npm script with local credentials only in the child-process Environment.
+* `npm run deployment:bootstrap`: Explicitly prepares one `existing-lxc` target; normal deploy never bootstraps its operating system.
 * `npm run check:test-catalog`: Verifies that the checked-in backend test catalog matches all discovered global and module-local tests.
 * `npm run deployment:build`: Builds deployable backend and frontend artifacts for a deployment profile.
 * `npm run deployment:database:list`: Lists SQLite migration backups for a deployment profile.
@@ -105,20 +128,27 @@
 * `npm run deployment:stop`: Stops selected deployed services without deleting persistent infrastructure.
 * `npm run deployment:validate`: Validates one or all deployment profiles against the schema.
 * `npm run generate:api`: Regenerates checked-in frontend TypeScript contracts from OpenAPI.
+* `npm run generate:migrations`: Regenerates the deterministic dialect-specific migration checksum catalog.
 * `npm run generate:test-catalog`: Regenerates the deterministic checked-in backend test catalog.
 * `npm run lint`: Runs every workspace linter.
 * `npm run lint:backend`: Runs the backend architecture and OpenAPI linters.
 * `npm run module:status`: Reports the first actionable architecture state for one backend module.
 * `npm run module:sync`: Regenerates manifest-owned module registry metadata without changing fach files.
 * `npm run module:dependency`: Adds one public module dependency to a consumer manifest and synchronizes it.
+* `npm run prepare`: Explicitly configures the versioned `.githooks` directory when no conflicting local hooks path exists; dependency lifecycle scripts remain disabled.
 * `npm run rm`: Safely removes explicit project-relative files, directories, or symlinks; pass targets after `--` and use `--dry-run` for preview.
+* `npm run runtime:check`: Verifies the exact Node.js 24.19.0 and npm 11 contract across local tooling, workspaces, and Docker builds.
 * `npm run scaffold:component`: Creates one presentation-local Vue component.
 * `npm run scaffold:feature`: Creates a frontend Model, Service, and Composable feature skeleton.
 * `npm run scaffold:file`: Creates one architecture-compliant class file in an existing backend module.
 * `npm run scaffold:module`: Creates, registers, and activates a minimal backend module.
 * `npm run scaffold:operation`: Creates one typed, owner-bound Service Operation draft.
+* `npm run scaffold:pwa`: Transactionally installs the optional shell-only PWA scaffold.
 * `npm run scaffold:route`: Creates and registers one route adapter plus Desktop, Tablet, and Mobile views.
 * `npm run scaffold:test`: Creates, catalogs, and verifies the baseline test for an existing backend module.
+* `npm run store:migration-status`: Reports generic Store methods and affected Operation calls without changing source.
+* `npm run task:close`: Validates and closes one Schema-Version-2 task.
+* `npm run task:new`: Atomically creates one Schema-Version-2 task.
 * `npm run template:check`: Reports the installed and latest stable template versions and pending updater state.
 * `npm run template:init`: Initializes explicit template metadata for a legacy application.
 * `npm run template:update`: Installs or continues a stable template update and supports conflict continuation or abort.
@@ -126,6 +156,7 @@
 * `npm run typecheck`: Typechecks root tooling and all workspaces.
 * `npm run verify`: Runs the complete required validation, lint, typecheck, test, build, browser-smoke, and Fallow pipeline.
 * `npm run verify:module`: Runs focused architecture, type, OpenAPI, and local-test checks for one backend module.
+* `npm run workflow:init`: Creates missing Memory and Kanban workflow state for an application.
 
 
 ## Backend Programming Rules (Strict Layered Architecture)
@@ -168,12 +199,17 @@
    - Expose exactly one public method named `execute`; private helper methods remain allowed.
    - Must use one named input contract or `void` and must not import Controllers, Handlers, or peer Operations.
    - May use Stores, Domain Objects, DTOs, and public ports of other modules.
+   - Must not call global `findAll()` methods, filter or page persisted result sets in memory, or use generic upserts.
 5. **Stores (`store/`)**
    - Must extend `BaseStore`.
    - Encapsulate persistence operations and map database data to Domain Objects.
    - Must not import DTOs, Service routers, Operations, Controllers, or Handlers.
    - May use the provided database abstraction but must not import database drivers or create connections.
    - Must use typed Store contracts without `any` and explicitly map database rows to Domain Objects.
+   - Must expose fach-named methods with complete Tenant/Actor scope; generic `save`, `findById`, `findAll`, `delete`, and `upsert` contracts are forbidden.
+   - Must apply scope filters, ordering, `limit`, `offset`, and counts in the database query.
+   - Idempotent creates must use Tenant, Actor, and `clientMutationId` as identity and compare a complete persisted payload fingerprint.
+   - Cross-instance consistency must use constraints, transactions, or persistent version checks; process-local queues are optimizations only.
 6. **Objects (`object/`)**
    - Must extend `BaseObject`.
    - Represent persistent domain state and invariants.
@@ -185,14 +221,15 @@
 
 ### Auxiliary Classes
 
-* The `api`, `controller`, and `store` layers may contain one level of owner-bound auxiliary folders.
-* Controller and store auxiliary folders require their matching direct owner file.
+* The `api` and `store` layers may contain one level of owner-bound auxiliary folders.
+* Store auxiliary folders require their matching direct owner file.
 * `api/health/` requires at least one direct `api/health.*.handler.ts` owner.
-* Every auxiliary file must contain exactly one class extending `BaseApiAux`, `BaseControllerAux`, or `BaseStoreAux`.
+* Every auxiliary file must contain exactly one class extending `BaseApiAux` or `BaseStoreAux`.
 * Only the matching owner may import its auxiliary classes.
 * Auxiliary classes must not import their owner, auxiliary peers, or other files from the same layer.
 * Auxiliary implementations must not be re-exported or accessed from another layer or module.
 * Further nesting and non-TypeScript files in auxiliary folders are forbidden.
+* Controller auxiliaries are forbidden; application logic belongs in owner-bound Service Operations.
 
 ### Inter-Module Communication
 
@@ -225,6 +262,9 @@
 * `code/backend/src/database.ts` defines the complete current Kysely database schema used for compile-time typing.
 * Every database schema change must update `code/backend/src/database.ts` and include a matching versioned migration.
 * Migrations are the executable history of the physical database schema and must run before modules and transports start.
+* Applied migrations are bound to dialect-specific SHA-256 checksums; any later source mismatch must block startup before backup or further migration execution.
+* Existing databases may create one checksum baseline for migrations already applied when first opened by this major template version.
+* New migrations must be checksum-registered only after successful execution, and `npm run check:migrations` must reject catalog or dialect-pair drift.
 * Pending SQLite migrations must create and validate a persistent pre-migration backup before changing the database.
 * Code rollback must never restore the database automatically; database restore is an explicit deployment operation that creates a pre-restore safety backup.
 * Large data backfills must be implemented as idempotent, restartable jobs rather than blocking startup migrations.
@@ -297,6 +337,10 @@
 * Create routes with `npm run scaffold:route -- <kebab-case-name>` so the adapter, router entry, and all three views are created together.
 * Create presentation-local components with `npm run scaffold:component -- <desktop|tablet|mobile> <kebab-case-name>`.
 * Create Core feature skeletons with `npm run scaffold:feature -- <kebab-case-name>`.
+* Install the optional PWA exactly once with `npm run scaffold:pwa -- <app-id> --name "<Name>" --short-name "<Short Name>"`.
+* The base PWA may cache only the shell, built assets, bundled Tabler font, icons, and manifest; `/api`, `/auth`, `/ws`, foreign origins, credentials, profiles, tokens, and fach data must never be cached.
+* A Service Worker update must require explicit user confirmation and activate only with a validated runtime configuration for the same shell version; failed updates keep the previous pair active.
+* PWA browser coverage uses the generated production Playwright configuration and the optional `test:e2e:pwa` workspace script.
 * The frontend implementation workflow is **Scaffold** → **Core logic** → **all three Presentations** → **tests** → **`npm run verify`**.
 * Vitest and Vue Test Utils cover units and components; Playwright covers shared routing and representative mobile, tablet, and desktop browser flows.
 * Focused frontend work requires its linter, typecheck, and only current-task tests. The complete existing test suite and root `npm run verify` run after the final open task of the active implementation sequence.
@@ -306,14 +350,20 @@
 
 * Deployment profiles live in `deployment/profiles/`, contain no secrets, and must pass `npm run deployment:validate -- <profile>`.
 * `local` is the default profile. Docker is the default driver for both components in every newly scaffolded profile.
-* Create profiles with `npm run deployment:scaffold -- <name>`; select `proxmox-lxc` explicitly per component when required.
+* Create profiles with `npm run deployment:scaffold -- <name>`; select `proxmox-lxc` or `existing-lxc` explicitly per component when required.
 * Backend and frontend are independently buildable and deployable with the `backend`, `frontend`, or `all` component argument.
 * Docker deployments use separate backend and frontend images. SQLite data must remain in a persistent external volume.
 * Proxmox LXC provisioning and lifecycle use the REST API. Release installation uses SSH directly to the LXC and must never require SSH access to the Proxmox host.
+* `existing-lxc` manages releases inside an already existing Debian 13/x86_64 container and must never provision or mutate its operating system during `deployment:deploy`.
+* Bootstrap an `existing-lxc` target only through the explicit `npm run deployment:bootstrap -- <profile> <component>` command.
+* Every LXC target must pin an explicit SSH host-key fingerprint with `StrictHostKeyChecking=yes`; `ssh-keyscan`, interactive trust, and secrets in process arguments are forbidden.
+* An `installationId` isolates releases, persistent data, services, and configuration below `/opt/<id>`, `/var/lib/<id>`, and `/etc/<id>`.
+* Private-key SSH is the default. Password SSH may read only `DEPLOYMENT_SSH_PASSWORD` through `credentials:run`.
 * Proxmox API tokens, private SSH keys, application secrets, and passwords must be supplied through Environment variables and must not appear in profiles or logs.
 * Production profiles require verified TLS, explicit Origin allowlists, an absolute persistent SQLite path, and non-development secrets.
 * Frontend deployment configuration is public runtime configuration and must never contain secrets.
 * Deployments follow **validate → build → deploy → health check**. Failed LXC activation must roll back to the previous release.
+* Code rollback must only reactivate an existing release and must never restore a database automatically.
 
 
 ## Template Update Rules

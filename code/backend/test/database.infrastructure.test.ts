@@ -26,19 +26,6 @@ class TestStore extends BaseStore<TestObject> {
         return this.db;
     }
 
-    public async save(object: TestObject): Promise<TestObject> {
-        return object;
-    }
-
-    public async findById(): Promise<TestObject | null> {
-        return null;
-    }
-
-    public async findAll(): Promise<TestObject[]> {
-        return [];
-    }
-
-    public async delete(): Promise<void> {}
 }
 
 /** Module proving that a factory can pass infrastructure into a store. */

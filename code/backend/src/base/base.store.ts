@@ -1,13 +1,13 @@
-import { BaseObject } from './base.object.ts';
+import type { BaseObject } from './base.object.ts';
 import type { IBaseStore } from './interfaces.ts';
 import type { Kysely } from 'kysely';
 import type { Database } from '../database.ts';
 
 /**
- * BaseStore provides a generic interface for data persistence and retrieval.
+ * BaseStore retains the application-owned typed database client.
  *
  * RESPONSIBILITIES:
- * - Execute typed persistence queries (CRUD operations).
+ * - Support Store-specific, fully scoped persistence queries.
  * - Map database rows to Domain Objects.
  *
  * IMPORT RULES:
@@ -30,16 +30,4 @@ export abstract class BaseStore<T extends BaseObject> implements IBaseStore<T> {
     constructor(database: Kysely<Database>) {
         this.db = database;
     }
-
-    /** Creates or fully updates one mapped domain object. */
-    abstract save(object: T): Promise<T>;
-
-    /** Finds one mapped domain object by its stable identifier. */
-    abstract findById(id: string): Promise<T | null>;
-
-    /** Returns all mapped domain objects visible to this Store. */
-    abstract findAll(): Promise<T[]>;
-
-    /** Deletes or soft-deletes one persisted object by identifier. */
-    abstract delete(id: string): Promise<void>;
 }

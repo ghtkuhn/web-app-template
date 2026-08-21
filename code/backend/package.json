@@ -5,11 +5,12 @@
     "license": "ISC",
     "author": "",
     "engines": {
-        "node": ">=22.23.1 <23"
+        "node": "24.19.0",
+        "npm": ">=11 <12"
     },
     "dependencies": {
         "better-auth": "^1.6.26",
-        "better-sqlite3": "^12.11.1",
+        "better-sqlite3": "13.0.3",
         "kysely": "^0.27.0",
         "pg": "^8.23.0",
         "uuid": "^9.0.0",
@@ -20,7 +21,7 @@
         "@babel/parser": "^8.0.4",
         "@redocly/cli": "^2.40.0",
         "@types/better-sqlite3": "^7.6.13",
-        "@types/node": "^22.20.1",
+        "@types/node": "^24.13.3",
         "@types/pg": "^8.21.0",
         "@types/uuid": "^9.0.0",
         "@types/ws": "^8.18.1",
@@ -31,6 +32,8 @@
     "scripts": {
         "cli": "node src/cli.ts",
         "check:modules": "node script/module-tools.ts check",
+        "generate:migrations": "node script/migration-check.ts generate",
+        "check:migrations": "node script/migration-check.ts check",
         "lint": "npm run lint:architecture && npm run lint:openapi",
         "lint:architecture": "node script/linter.ts",
         "lint:openapi": "redocly lint openapi/openapi.yaml",
@@ -43,6 +46,7 @@
         "scaffold:file": "node script/scaffold-file.ts",
         "scaffold:module": "node script/scaffold-module.ts",
         "scaffold:operation": "node script/scaffold-operation.ts",
+        "store:migration-status": "node script/store-migration-status.ts",
         "scaffold:test": "node script/scaffold-test.ts",
         "typecheck": "tsc --project tsconfig.json",
         "verify:module": "node script/module-tools.ts verify",

@@ -47,6 +47,30 @@ export class ServiceOperationRuleSet {
     /** Checks Operation naming, inheritance, API shape, and isolation. */
     private operationIssues(analysis: SourceAnalysis): LintIssueDraft[] {
         const issues: LintIssueDraft[] = [];
+        if (analysis.methodCalls.includes('findAll')) {
+            issues.push(this.issue(
+                analysis,
+                'OPERATION_GLOBAL_STORE_READ',
+                'Operations must request a Store method with explicit tenant, actor, ordering, limit, and offset scope instead of findAll().',
+            ));
+        }
+        if (
+            analysis.methodCalls.includes('filter') ||
+            analysis.methodCalls.includes('slice')
+        ) {
+            issues.push(this.issue(
+                analysis,
+                'OPERATION_IN_MEMORY_QUERY',
+                'Operations must not filter or page persistence results in memory; move the scoped query, count, ordering, limit, and offset into the Store.',
+            ));
+        }
+        if (analysis.methodCalls.includes('upsert')) {
+            issues.push(this.issue(
+                analysis,
+                'OPERATION_GENERIC_UPSERT',
+                'Operations must use a purpose-specific Store mutation that preserves immutable scope fields.',
+            ));
+        }
         const basename = path.basename(analysis.filePath, '.ts');
         const operationName = basename.endsWith('.operation')
             ? basename.slice(0, -'.operation'.length)

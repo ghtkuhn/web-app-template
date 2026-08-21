@@ -1,0 +1,67 @@
+import { registerSW } from 'virtual:pwa-register';
+import type { RegisterSWOptions } from 'vite-plugin-pwa/types';
+
+interface InstallPromptEvent extends Event {
+    readonly userChoice: Promise<{ readonly outcome: 'accepted' | 'dismissed' }>;
+    prompt(): Promise<void>;
+}
+
+type ServiceWorkerUpdater = (reloadPage?: boolean) => Promise<void>;
+type ServiceWorkerRegistrar = (
+    options: RegisterSWOptions,
+) => ServiceWorkerUpdater;
+
+/** Exposes install and prompt-based update lifecycle without caching app data. */
+export class PwaLifecycle extends EventTarget {
+    private installPrompt: InstallPromptEvent | null = null;
+    private updater: ServiceWorkerUpdater | null = null;
+    private updateAvailable = false;
+
+    public start(
+        target: Window,
+        browserNavigator: Navigator,
+        registrar: ServiceWorkerRegistrar = registerSW,
+    ): void {
+        target.addEventListener('beforeinstallprompt', (event) => {
+            if ('prompt' in event && 'userChoice' in event) {
+                event.preventDefault();
+                this.installPrompt = event as InstallPromptEvent;
+                this.dispatchEvent(new Event('installavailable'));
+            }
+        });
+        if (!('serviceWorker' in browserNavigator)) {
+            return;
+        }
+        this.updater = registrar({
+            immediate: true,
+            onNeedRefresh: () => {
+                this.updateAvailable = true;
+                this.dispatchEvent(new Event('updateavailable'));
+            },
+            onOfflineReady: () => this.dispatchEvent(new Event('offlineready')),
+            onRegisterError: () => this.dispatchEvent(new Event('pwaerror')),
+        });
+    }
+
+    public async promptInstall(): Promise<boolean> {
+        if (!this.installPrompt) {
+            return false;
+        }
+        const prompt = this.installPrompt;
+        this.installPrompt = null;
+        await prompt.prompt();
+        return (await prompt.userChoice).outcome === 'accepted';
+    }
+
+    /** Activates an update only after the application calls this consent method. */
+    public async confirmUpdate(): Promise<boolean> {
+        if (!this.updateAvailable || !this.updater) {
+            return false;
+        }
+        this.updateAvailable = false;
+        await this.updater(true);
+        return true;
+    }
+}
+
+export const pwaLifecycle = new PwaLifecycle();

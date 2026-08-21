@@ -34,7 +34,7 @@ export class BackendTestRunner {
         const files = this.validatedFiles();
         const result = this.execute(
             process.execPath,
-            ['--test', ...files],
+            ['--test', '--test-concurrency=1', ...files],
             this.backendRoot,
         );
         if (result.error) {
