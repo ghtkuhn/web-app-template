@@ -9,8 +9,9 @@ const projectRoot = path.resolve(
     '../../..',
 );
 
-const format = process.argv.slice(2).includes('--format') &&
-    process.argv.slice(2).includes('json')
+const args = process.argv.slice(2);
+const format = args.includes('--format') &&
+    args[args.indexOf('--format') + 1] === 'json'
     ? 'json'
     : 'text';
 

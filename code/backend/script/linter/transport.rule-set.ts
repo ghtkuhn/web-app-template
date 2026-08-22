@@ -21,7 +21,7 @@ export class TransportRuleSet {
                     this.issue(
                         analysis,
                         'HANDLER_DTO_CAST_BYPASS',
-                        'A type assertion does not validate request.json() data. Fix: construct a concrete request DTO or call a typed validator that returns that DTO before invoking the Controller.',
+                        'A type assertion is applied to data returned by request.json().',
                     ),
                 );
             }
@@ -35,14 +35,14 @@ export class TransportRuleSet {
                     this.issue(
                         analysis,
                         'HANDLER_UNVALIDATED_INPUT',
-                        `request.json() data (${unvalidated.join(', ')}) must be converted to a declared request DTO or validated before reaching a Controller or Service. Fix: construct the request DTO or use a typed validator; do not cast the JSON value.`,
+                        `request.json() data (${unvalidated.join(', ')}) reaches a Controller or Service without construction or typed validation.`,
                     ),
                 );
                 issues.push(
                     this.issue(
                         analysis,
                         'HANDLER_DTO_INPUT',
-                        'HTTP and Node business payloads must cross the Handler boundary as request DTOs. Fix: pass the concrete request DTO returned by construction or validation.',
+                        'An HTTP or Node business payload crosses the Handler boundary without a concrete request DTO.',
                     ),
                 );
             }
@@ -108,14 +108,14 @@ export class TransportRuleSet {
     // fallow-ignore-next-line code-duplication -- Rule sets intentionally use identical stable finding construction.
     private issue(
         analysis: SourceAnalysis,
-        ruleId: string,
-        message: string,
+        ruleId: LintIssueDraft['ruleId'],
+        observed: string,
     ): LintIssueDraft {
         return {
             ruleId,
             severity: 'error',
             file: this.paths.relative(analysis.filePath),
-            message,
+            observed,
         };
     }
 }

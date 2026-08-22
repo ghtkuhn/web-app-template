@@ -13,7 +13,6 @@
         "**/test/*scaffold*.test.ts",
         "**/test/module.tools.test.ts",
         "**/test/test.catalog.test.ts",
-        "**/test/safe-project.remover.test.ts",
         "**/test/deployment.test.ts",
         "**/generated/**",
         "code/backend/src/module/*/service/*.service.ts"

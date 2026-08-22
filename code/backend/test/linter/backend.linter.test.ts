@@ -87,7 +87,7 @@ test('nested', () => {});`,
 
         const issues = new BackendLinter({ projectRoot: fixture.root }).run()
             .issues;
-        const ruleIds = issues.map((issue) => issue.ruleId);
+        const ruleIds: readonly string[] = issues.map((issue) => issue.ruleId);
         assert.ok(ruleIds.includes('MODULE_TEST_PRODUCTION_IMPORT'));
         assert.ok(ruleIds.includes('MODULE_TEST_CROSS_IMPORT'));
         assert.ok(ruleIds.includes('MODULE_TEST_REEXPORT'));
@@ -141,12 +141,9 @@ test('backend modules must use the singular module directory', () => {
             emptyDirectoryIssues[0].ruleId,
             'MODULE_DIRECTORY_NAME',
         );
-        assert.match(emptyDirectoryIssues[0].reason, /src\/modules/);
-        assert.ok(emptyDirectoryIssues[0].fix.length > 0);
-        assert.deepEqual(emptyDirectoryIssues[0].location, {
-            start: { line: 1, column: 1 },
-            end: { line: 1, column: 1 },
-        });
+        assert.match(emptyDirectoryIssues[0].observed, /src\/modules/);
+        assert.ok(emptyDirectoryIssues[0].fixSteps.length > 0);
+        assert.equal(emptyDirectoryIssues[0].location, null);
 
         fixture.write(
             'code/backend/src/modules/example/index.ts',
@@ -273,7 +270,7 @@ test('layer direction, declaration placement, and controller mapping are enforce
         const issues = new BackendLinter({ projectRoot: fixture.root })
             .run()
             .issues;
-        const ruleIds = issues.map((issue) => issue.ruleId);
+        const ruleIds: readonly string[] = issues.map((issue) => issue.ruleId);
         assert.ok(ruleIds.includes('LAYER_IMPORT_DIRECTION'));
         assert.ok(ruleIds.includes('DECLARATION_INTERFACE_LOCATION'));
         assert.ok(ruleIds.includes('CONTROLLER_MAPPING'));
@@ -331,7 +328,7 @@ test('regular module files reject misplaced declarations and structure', () => {
              export class Second {}`,
         );
 
-        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+        const ruleIds: readonly string[] = new BackendLinter({ projectRoot: fixture.root })
             .run()
             .issues.map((issue) => issue.ruleId);
         assert.deepEqual(ruleIds, [
@@ -339,8 +336,8 @@ test('regular module files reject misplaced declarations and structure', () => {
             'DECLARATION_CONSTANT_LOCATION',
             'DECLARATION_INTERFACE_LOCATION',
             'DECLARATION_TYPE_LOCATION',
-            'MODULE_CLASS_COUNT',
             'MODULE_FREE_FUNCTION',
+            'MODULE_CLASS_COUNT',
         ]);
     } finally {
         fixture.dispose();
@@ -359,7 +356,7 @@ test('unknown module directories report allowed directories and root files', () 
                     candidate.ruleId === 'MODULE_DIRECTORY_UNKNOWN',
             );
         assert.equal(
-            issue?.reason,
+            issue?.observed ?? '',
             "Unsupported module-root directory 'constants'. Allowed directories: api, controller, dto, object, service, store, test. Module contracts and metadata must use these root files: constants.ts, index.ts, interfaces.ts, module.manifest.json, types.ts.",
         );
     } finally {
@@ -387,7 +384,7 @@ test('composition and domain code respect dependency direction', () => {
              export class Internal extends BaseService {}`,
         );
 
-        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+        const ruleIds: readonly string[] = new BackendLinter({ projectRoot: fixture.root })
             .run()
             .issues.map((issue) => issue.ruleId);
         assert.ok(ruleIds.includes('COMPOSITION_PUBLIC_ENTRY'));
@@ -423,7 +420,7 @@ test('the generated catalog only aggregates module-owned definitions', () => {
              };`,
         );
 
-        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+        const ruleIds: readonly string[] = new BackendLinter({ projectRoot: fixture.root })
             .run()
             .issues.map((issue) => issue.ruleId);
         assert.ok(ruleIds.includes('CATALOG_AGGREGATION_ONLY'));
@@ -457,13 +454,16 @@ test('database drivers and connections are owned by base.database', () => {
             issues
                 .filter((issue) => issue.ruleId.startsWith('DATABASE_'))
                 .map((issue) => issue.ruleId),
-            ['DATABASE_CONNECTION_CREATION', 'DATABASE_DRIVER_OWNERSHIP'],
+            ['DATABASE_DRIVER_OWNERSHIP', 'DATABASE_CONNECTION_CREATION'],
         );
         const ownership = issues.find(
             (issue) => issue.ruleId === 'DATABASE_DRIVER_OWNERSHIP',
         );
-        assert.equal(ownership?.location.start.line, 2);
-        assert.match(ownership?.fix ?? '', /base\.database\.ts/u);
+        assert.equal(ownership?.location?.start.line, 1);
+        assert.match(
+            ownership?.fixSteps.join(' ') ?? '',
+            /base\.database\.ts/u,
+        );
         assert.ok(
             issues.some(
                 (issue) => issue.ruleId === 'LAYER_IMPORT_DIRECTION',
@@ -509,8 +509,11 @@ test('migration dialect catalogs require strict structure and parity', () => {
             issues.map((issue) => issue.ruleId),
             ['MIGRATION_DIALECT_PARITY', 'MIGRATION_DIALECT_STRUCTURE'],
         );
-        assert.equal(issues[0].location.start.line, 1);
-        assert.match(issues[0].fix, /same logical migration basename/u);
+        assert.equal(issues[0].location, null);
+        assert.match(
+            issues[0].fixSteps.join(' '),
+            /matching migration/u,
+        );
     } finally {
         fixture.dispose();
     }
@@ -531,7 +534,7 @@ test('PostgreSQL drivers and pools remain base infrastructure concerns', () => {
             .issues.filter((issue) => issue.ruleId.startsWith('DATABASE_'));
         assert.deepEqual(
             issues.map((issue) => issue.ruleId),
-            ['DATABASE_CONNECTION_CREATION', 'DATABASE_DRIVER_OWNERSHIP'],
+            ['DATABASE_DRIVER_OWNERSHIP', 'DATABASE_CONNECTION_CREATION'],
         );
     } finally {
         fixture.dispose();
@@ -622,18 +625,18 @@ test('auxiliary classes require their matching base and exactly one class', () =
              export class Wrong extends BaseStore {}`,
         );
 
-        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+        const ruleIds: readonly string[] = new BackendLinter({ projectRoot: fixture.root })
             .run()
             .issues.map((issue) => issue.ruleId);
         assert.deepEqual(ruleIds, [
             'AUX_CLASS_COUNT',
+            'LAYER_FILE_NAME',
             'DECLARATION_CONSTANT_LOCATION',
             'LAYER_FILE_NAME',
             'AUX_CLASS_COUNT',
             'LAYER_FILE_NAME',
-            'LAYER_BASE_CLASS',
-            'LAYER_FILE_NAME',
             'MODULE_FREE_FUNCTION',
+            'LAYER_BASE_CLASS',
         ]);
     } finally {
         fixture.dispose();
@@ -660,7 +663,7 @@ test('auxiliary paths require a supported layer, one level, and an owner', () =>
             'Auxiliary folders contain TypeScript sources only.',
         );
 
-        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+        const ruleIds: readonly string[] = new BackendLinter({ projectRoot: fixture.root })
             .run()
             .issues.map((issue) => issue.ruleId);
         assert.deepEqual(ruleIds, [
@@ -707,15 +710,15 @@ test('auxiliary imports are private, one-way, and never re-exported', () => {
              export class ExampleObject extends BaseObject {}`,
         );
 
-        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+        const ruleIds: readonly string[] = new BackendLinter({ projectRoot: fixture.root })
             .run()
             .issues.map((issue) => issue.ruleId);
         assert.deepEqual(ruleIds, [
             'AUX_REEXPORT',
+            'LAYER_FILE_NAME',
             'AUX_IMPORT_DIRECTION',
             'LAYER_FILE_NAME',
             'AUX_IMPORT_OWNER',
-            'LAYER_FILE_NAME',
             'AUX_IMPORT_OWNER',
             'AUX_IMPORT_OWNER',
         ]);
@@ -776,7 +779,7 @@ test('module roots, entries, registration, and local imports are strict', () => 
         );
         fixture.write('code/backend/src/module.catalog.ts', 'export {};');
 
-        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+        const ruleIds: readonly string[] = new BackendLinter({ projectRoot: fixture.root })
             .run()
             .issues.map((issue) => issue.ruleId);
         for (const ruleId of [
@@ -813,12 +816,12 @@ test('module entry diagnostic explains the complete required contract', () => {
                 (candidate) =>
                     candidate.ruleId === 'MODULE_ENTRY_CONTRACT',
             );
-        assert.equal(
-            issue?.reason,
-            'The example module entry is incomplete.',
+        assert.match(
+            issue?.observed ?? '',
+            /Module 'example' is missing these public-entry requirements:/u,
         );
         assert.match(
-            issue?.fix ?? '',
+            issue?.observed ?? '',
             /Export ExampleModule from index\.ts/,
         );
     } finally {
@@ -847,12 +850,12 @@ test('module entry diagnostic reports only incorrect contract parts', () => {
                 (candidate) =>
                     candidate.ruleId === 'MODULE_ENTRY_CONTRACT',
             );
-        assert.equal(
-            issue?.reason,
-            'The example module entry is incomplete.',
+        assert.match(
+            issue?.observed ?? '',
+            /Module 'example' is missing these public-entry requirements:/u,
         );
         assert.match(
-            issue?.fix ?? '',
+            issue?.observed ?? '',
             /public static readonly definition/,
         );
     } finally {
@@ -892,7 +895,7 @@ test('controllers, handlers, DTO boundaries, and architecture casts are strict',
             }`,
         );
 
-        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+        const ruleIds: readonly string[] = new BackendLinter({ projectRoot: fixture.root })
             .run()
             .issues.map((issue) => issue.ruleId);
         for (const ruleId of [
@@ -944,7 +947,7 @@ test('stores and services enforce typed mapping and validation', () => {
             }`,
         );
 
-        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+        const ruleIds: readonly string[] = new BackendLinter({ projectRoot: fixture.root })
             .run()
             .issues.map((issue) => issue.ruleId);
         for (const ruleId of [
@@ -977,7 +980,7 @@ test('domain configuration, secrets, serialization, and dependencies are strict'
             }`,
         );
 
-        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+        const ruleIds: readonly string[] = new BackendLinter({ projectRoot: fixture.root })
             .run()
             .issues.map((issue) => issue.ruleId);
         for (const ruleId of [
@@ -1010,7 +1013,7 @@ test('constants accept recursively passive data and static expressions', () => {
              } as const;`,
         );
 
-        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+        const ruleIds: readonly string[] = new BackendLinter({ projectRoot: fixture.root })
             .run()
             .issues.map((issue) => issue.ruleId);
         assert.ok(!ruleIds.includes('CONSTANT_EXECUTABLE_VALUE'));
@@ -1044,7 +1047,7 @@ test('constants reject executable values at every nesting depth', () => {
                 'code/backend/src/module/example/constants.ts',
                 `export const VALUE = ${initializer};`,
             );
-            const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+            const ruleIds: readonly string[] = new BackendLinter({ projectRoot: fixture.root })
                 .run()
                 .issues.map((issue) => issue.ruleId);
             assert.ok(
@@ -1073,7 +1076,7 @@ test('HTTP routes require OpenAPI and integration-test coverage', () => {
             }`,
         );
 
-        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+        const ruleIds: readonly string[] = new BackendLinter({ projectRoot: fixture.root })
             .run()
             .issues.map((issue) => issue.ruleId);
         assert.ok(ruleIds.includes('HTTP_OPENAPI_COVERAGE'));
@@ -1128,7 +1131,7 @@ test('module contracts reject post-wiring, concrete ports, any, and bad node uni
             export type { ExampleModulePort } from './interfaces.ts';`,
         );
 
-        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+        const ruleIds: readonly string[] = new BackendLinter({ projectRoot: fixture.root })
             .run()
             .issues.map((issue) => issue.ruleId);
         for (const expected of [
@@ -1168,7 +1171,7 @@ test('handlers reject unvalidated JSON and executable DTO schemas', () => {
         const issues = new BackendLinter({ projectRoot: fixture.root })
             .run()
             .issues;
-        const ruleIds = issues.map((issue) => issue.ruleId);
+        const ruleIds: readonly string[] = issues.map((issue) => issue.ruleId);
         assert.ok(ruleIds.includes('HANDLER_UNVALIDATED_INPUT'));
         assert.ok(ruleIds.includes('HANDLER_DTO_INPUT'));
         assert.ok(ruleIds.includes('DTO_EXECUTABLE_LOGIC'));
@@ -1202,7 +1205,7 @@ test('store semantics require metadata mapping, active filters, and soft delete'
             `const store = new ExampleStore(database);
             void store.findById('one');`,
         );
-        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+        const ruleIds: readonly string[] = new BackendLinter({ projectRoot: fixture.root })
             .run()
             .issues.map((issue) => issue.ruleId);
         assert.ok(ruleIds.includes('STORE_OBJECT_METADATA_MAPPING'));
@@ -1230,7 +1233,7 @@ test('workspace ownership rejects nested locks, local TypeScript, and verify sho
             'tsconfig.base.json',
             '{"compilerOptions":{"moduleResolution":"bundler","allowImportingTsExtensions":false,"noEmit":false}}',
         );
-        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+        const ruleIds: readonly string[] = new BackendLinter({ projectRoot: fixture.root })
             .run()
             .issues.map((issue) => issue.ruleId);
         assert.ok(ruleIds.includes('WORKSPACE_LOCKFILE_OWNERSHIP'));
@@ -1346,7 +1349,7 @@ paths:
         const issues = new BackendLinter({ projectRoot: fixture.root })
             .run()
             .issues;
-        const ruleIds = issues.map((issue) => issue.ruleId);
+        const ruleIds: readonly string[] = issues.map((issue) => issue.ruleId);
         for (const expected of [
             'HANDLER_DTO_CAST_BYPASS',
             'HANDLER_CONCRETE_DTO_CONTRACT',
@@ -1359,10 +1362,13 @@ paths:
         const castIssue = issues.find(
             (issue) => issue.ruleId === 'HANDLER_DTO_CAST_BYPASS',
         );
-        assert.equal(castIssue?.location.start.line, 7);
-        assert.ok((castIssue?.location.start.column ?? 0) > 1);
-        assert.match(castIssue?.reason ?? '', /type assertion/i);
-        assert.match(castIssue?.fix ?? '', /construct a concrete request DTO/i);
+        assert.equal(castIssue?.location?.start.line, 7);
+        assert.ok((castIssue?.location?.start.column ?? 0) > 1);
+        assert.match(castIssue?.observed ?? '', /type assertion/i);
+        assert.match(
+            castIssue?.fixSteps.join(' ') ?? '',
+            /construct a request DTO/i,
+        );
         const assertionIssue = issues.find(
             (issue) => issue.ruleId === 'HTTP_ASSERTION_EXACT',
         );
@@ -1370,7 +1376,7 @@ paths:
             assertionIssue?.file,
             'code/backend/test/example.http.test.ts',
         );
-        assert.equal(assertionIssue?.location.start.line, 4);
+        assert.equal(assertionIssue?.location?.start.line, 4);
     } finally {
         fixture.dispose();
     }
@@ -1386,7 +1392,7 @@ test('test files reject type escapes and non-erasable TypeScript', () => {
             }
             const value = {} as unknown as Example;`,
         );
-        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+        const ruleIds: readonly string[] = new BackendLinter({ projectRoot: fixture.root })
             .run()
             .issues.map((issue) => issue.ruleId);
         assert.ok(ruleIds.includes('TEST_TYPE_ESCAPE'));
@@ -1405,7 +1411,7 @@ test('composition remains generic and cannot post-wire modules', () => {
             const module = new ExampleModule();
             module.setInfrastructure(infrastructure);`,
         );
-        const ruleIds = new BackendLinter({ projectRoot: fixture.root })
+        const ruleIds: readonly string[] = new BackendLinter({ projectRoot: fixture.root })
             .run()
             .issues.map((issue) => issue.ruleId);
         assert.ok(ruleIds.includes('COMPOSITION_GENERICITY'));

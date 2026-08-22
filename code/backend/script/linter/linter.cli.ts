@@ -5,9 +5,8 @@ import type {
     LintWriter,
 } from './interfaces.ts';
 import { BackendLinter } from './backend.linter.ts';
-
-const ARCHITECTURE_GUIDANCE =
-    'You must Read code/backend/ARCHITECTURE.md to understand the required backend structure.\n';
+import { DiagnosticRenderer } from '../../../../script/lint-diagnostics/diagnostic.renderer.ts';
+import { RuleCatalog } from './rule.catalog.ts';
 
 /** Formats linter results for command-line execution and maps exit codes. */
 export class LinterCli {
@@ -15,6 +14,8 @@ export class LinterCli {
     private readonly stdout: LintWriter;
     private readonly stderr: LintWriter;
     private readonly format: 'text' | 'json';
+    private readonly renderer: DiagnosticRenderer;
+    private readonly catalog = new RuleCatalog();
 
     /** Creates a CLI adapter with replaceable streams for tests. */
     constructor(
@@ -27,6 +28,7 @@ export class LinterCli {
         this.stdout = stdout;
         this.stderr = stderr;
         this.format = format;
+        this.renderer = new DiagnosticRenderer(this.projectRoot);
     }
 
     /** Runs the linter, writes deterministic diagnostics, and returns an exit code. */
@@ -50,8 +52,7 @@ export class LinterCli {
                 });
                 return 2;
             }
-            this.stderr.write(ARCHITECTURE_GUIDANCE);
-            this.stderr.write(`FATAL [LINTER_FAILURE] ${message}\n`);
+            this.stderr.write(this.renderer.render(this.failureIssue(message)));
             return 2;
         }
     }
@@ -69,23 +70,15 @@ export class LinterCli {
             return;
         }
 
-        this.stderr.write(ARCHITECTURE_GUIDANCE);
         for (const issue of result.issues) {
-            const prefix = issue.severity === 'fatal' ? 'FATAL' : 'ERROR';
-            this.stderr.write(
-                `${prefix} [${issue.ruleId}] ${issue.file}:` +
-                    `${issue.location.start.line}:` +
-                    `${issue.location.start.column}\n` +
-                    `Reason: ${issue.reason}\n` +
-                    `Fix: ${issue.fix}\n`,
-            );
+            this.stderr.write(this.renderer.render(issue));
         }
     }
 
     /** Writes the versioned machine contract as one JSON document. */
     private writeJson(result: LintResult): void {
         const payload: LintJsonResult = {
-            schemaVersion: 1,
+            schemaVersion: 2,
             filesChecked: result.filesChecked,
             issues: result.issues,
         };
@@ -94,18 +87,12 @@ export class LinterCli {
 
     /** Creates a structured unexpected-failure diagnostic. */
     private failureIssue(reason: string): LintIssue {
-        return {
+        return this.catalog.create({
             ruleId: 'LINTER_FAILURE',
             severity: 'fatal',
             file: 'code/backend',
-            reason,
-            fix:
-                'Repair the linter execution failure before changing ' +
-                'backend source files.',
-            location: {
-                start: { line: 1, column: 1 },
-                end: { line: 1, column: 1 },
-            },
-        };
+            observed: reason,
+            location: null,
+        });
     }
 }

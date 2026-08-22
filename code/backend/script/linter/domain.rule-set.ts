@@ -1,6 +1,11 @@
 import path from 'node:path';
 import fs from 'node:fs';
-import type { LintIssueDraft, SourceAnalysis } from './interfaces.ts';
+import type {
+    DiagnosticLocation,
+    LintIssueDraft,
+    SourceAnalysis,
+    SourceSpan,
+} from './interfaces.ts';
 import { PathResolver } from './path.resolver.ts';
 
 /** Enforces declaration, inheritance, layering, and module-boundary rules. */
@@ -296,6 +301,7 @@ export class DomainRuleSet {
                         analysis,
                         'LAYER_IMPORT_DIRECTION',
                         `${sourceLayer}/ may not depend on ${dependency.source}.`,
+                        dependency.location,
                     ),
                 );
             }
@@ -324,6 +330,7 @@ export class DomainRuleSet {
                             analysis,
                             'AUX_REEXPORT',
                             `Auxiliary implementation ${dependency.source} may not be re-exported.`,
+                            dependency.location,
                         ),
                     );
                 } else if (
@@ -337,6 +344,7 @@ export class DomainRuleSet {
                             analysis,
                             'AUX_IMPORT_OWNER',
                             `Only the matching ${targetAuxiliary.layer} owner may import ${dependency.source}.`,
+                            dependency.location,
                         ),
                     );
                 }
@@ -354,6 +362,7 @@ export class DomainRuleSet {
                         analysis,
                         'AUX_IMPORT_DIRECTION',
                         'Auxiliary classes may not import files from their own layer.',
+                        dependency.location,
                     ),
                 );
             }
@@ -381,6 +390,7 @@ export class DomainRuleSet {
                         analysis,
                         'DOMAIN_COMPOSITION_IMPORT',
                         `Domain modules may not depend on composition file ${dependency.source}.`,
+                        dependency.location,
                     ),
                 );
                 continue;
@@ -397,6 +407,12 @@ export class DomainRuleSet {
                         analysis,
                         'CROSS_MODULE_PUBLIC_ENTRY',
                         `Module '${currentModule}' must import module '${targetModule}' through its index.ts.`,
+                        dependency.location,
+                        [{
+                            file: this.paths.relative(target),
+                            location: null,
+                            label: 'Imported foreign internal file',
+                        }],
                     ),
                 );
             }
@@ -426,25 +442,29 @@ export class DomainRuleSet {
         issues: LintIssueDraft[],
         analysis: SourceAnalysis,
         count: number,
-        ruleId: string,
-        message: string,
+        ruleId: LintIssueDraft['ruleId'],
+        observed: string,
     ): void {
         if (count > 0) {
-            issues.push(this.issue(analysis, ruleId, message));
+            issues.push(this.issue(analysis, ruleId, observed));
         }
     }
 
     /** Creates one normalized architecture issue. */
     private issue(
         analysis: SourceAnalysis,
-        ruleId: string,
-        message: string,
+        ruleId: LintIssueDraft['ruleId'],
+        observed: string,
+        location?: SourceSpan,
+        relatedLocations?: readonly DiagnosticLocation[],
     ): LintIssueDraft {
         return {
             ruleId,
             severity: 'error',
             file: this.paths.relative(analysis.filePath),
-            message,
+            observed,
+            location,
+            relatedLocations,
         };
     }
 }

@@ -61,13 +61,29 @@ test('presentation imports, network access, styles, and SFC syntax are strict', 
              <template><Other /></template>
              <style>@media (min-width: 1px) { div {} }</style>`,
         );
-        const ids = fixture.issues().map((issue) => issue.ruleId);
+        const issues = fixture.issues();
+        const ids = issues.map((issue) => issue.ruleId);
         expect(ids).toContain('PRESENTATION_CROSS_IMPORT');
         expect(ids).toContain('PRESENTATION_NETWORK_ACCESS');
         expect(ids).toContain('PRESENTATION_STYLE_SCOPE');
         expect(ids).toContain('PRESENTATION_MEDIA_QUERY');
         expect(ids).toContain('VUE_SCRIPT_SETUP');
         expect(ids).toContain('PRESENTATION_VIEW_PARITY');
+        const crossImport = issues.find(
+            (issue) => issue.ruleId === 'PRESENTATION_CROSS_IMPORT',
+        );
+        expect(crossImport?.location?.start.line).toBe(2);
+        expect(crossImport?.relatedLocations).toHaveLength(1);
+        expect(
+            issues.find(
+                (issue) => issue.ruleId === 'PRESENTATION_NETWORK_ACCESS',
+            )?.location?.start.line,
+        ).toBe(3);
+        expect(
+            issues.find(
+                (issue) => issue.ruleId === 'PRESENTATION_MEDIA_QUERY',
+            )?.location?.start.line,
+        ).toBe(6);
     } finally {
         fixture.dispose();
     }
@@ -326,8 +342,99 @@ test('parser failures and CLI exit codes are stable', () => {
             ).run(),
         ).toBe(2);
         expect(stderr.value).toMatch(/FRONTEND_PARSE_ERROR/);
+        expect(stderr.value).toMatch(/Where: .*main\.ts:1:/);
+        expect(stderr.value).toMatch(/Found: /);
+        expect(stderr.value).toMatch(/Why: /);
+        expect(stderr.value).toMatch(/Meaning: /);
+        expect(stderr.value).toMatch(/Architecture: /);
+        expect(stderr.value).toMatch(/How to fix:/);
+        expect(stderr.value).toMatch(/Verify:/);
+        expect(stderr.value).not.toMatch(/ARCHITECTURE\.md/);
     } finally {
         valid.dispose();
         invalid.dispose();
+    }
+});
+
+test('frontend CLI emits the shared schema-version-2 JSON contract', () => {
+    const fixture = new Fixture();
+    const stdout = new BufferWriter();
+    const stderr = new BufferWriter();
+    try {
+        fixture.write('main.ts', 'export const = ;');
+        expect(
+            new LinterCli(
+                fixture.root,
+                stdout,
+                stderr,
+                'json',
+            ).run(),
+        ).toBe(2);
+        const payload = JSON.parse(stdout.value) as {
+            schemaVersion: number;
+            issues: Array<{
+                title: string;
+                observed: string;
+                why: string;
+                meaning: string;
+                context: string;
+                fixSteps: string[];
+                verify: string[];
+            }>;
+        };
+        expect(stderr.value).toBe('');
+        expect(payload.schemaVersion).toBe(2);
+        expect(payload.issues[0].title).not.toBe('');
+        expect(payload.issues[0].observed).not.toBe('');
+        expect(payload.issues[0].why).not.toBe('');
+        expect(payload.issues[0].meaning).not.toBe('');
+        expect(payload.issues[0].context).not.toBe('');
+        expect(payload.issues[0].fixSteps.length).toBeGreaterThan(0);
+        expect(payload.issues[0].verify.length).toBeGreaterThan(0);
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('TypeScript, Vue script-setup, and standalone CSS keep exact spans', () => {
+    const fixture = new Fixture();
+    try {
+        fixture.write(
+            'core/models/account.model.ts',
+            `export type AccountId = string;
+             import { HealthService } from '../services/health.service.ts';`,
+        );
+        fixture.write(
+            'presentation/desktop/components/HealthCard.vue',
+            `<script setup lang="ts">
+             import { ApiClient } from '../../../core/api/api.client.ts';
+             </script>
+             <template><div /></template>
+             <style scoped>div { color: var(--color); }</style>`,
+        );
+        fixture.write(
+            'shared/styles/main.css',
+            `@import "@picocss/pico";
+             @import "./tabler/tabler-icons.css";
+             h1 { font-size: 12px; }`,
+        );
+        const issues = fixture.issues();
+        expect(
+            issues.find(
+                (issue) => issue.ruleId === 'CORE_LAYER_DIRECTION',
+            )?.location?.start.line,
+        ).toBe(2);
+        expect(
+            issues.find(
+                (issue) => issue.ruleId === 'PRESENTATION_NETWORK_ACCESS',
+            )?.location?.start.line,
+        ).toBe(2);
+        expect(
+            issues.find(
+                (issue) => issue.ruleId === 'FRONTEND_FONT_SIZE_UNIT',
+            )?.location?.start.line,
+        ).toBe(3);
+    } finally {
+        fixture.dispose();
     }
 });

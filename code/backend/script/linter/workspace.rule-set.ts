@@ -94,12 +94,12 @@ export class WorkspaceRuleSet {
     }
 
     /** Creates one normalized workspace finding. */
-    private issue(file: string, ruleId: string, message: string): LintIssueDraft {
+    private issue(file: string, ruleId: LintIssueDraft['ruleId'], observed: string): LintIssueDraft {
         return {
             ruleId,
             severity: 'error',
             file: this.paths.relative(file),
-            message,
+            observed,
         };
     }
 }

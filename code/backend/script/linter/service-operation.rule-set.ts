@@ -1,6 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { LintIssueDraft, SourceAnalysis } from './interfaces.ts';
+import type {
+    LintIssueDraft,
+    SourceAnalysis,
+    SourceSpan,
+} from './interfaces.ts';
 import { PathResolver } from './path.resolver.ts';
 import { ServiceRouterManager } from '../module-tools/service-router.manager.ts';
 import { SourceAnalyzer } from './source.analyzer.ts';
@@ -37,11 +41,14 @@ export class ServiceOperationRuleSet {
         }
         const moduleName = this.paths.moduleName(analysis.filePath) ?? '<module>';
         const owner = this.paths.auxiliaryPath(analysis.filePath)?.owner ?? '<service>';
-        return [this.issue(
-            analysis,
-            'SERVICE_AUX_FORBIDDEN',
-            `Service Aux classes are obsolete. Fix: Run npm run scaffold:operation -- ${moduleName} ${owner} <operation> --input <type|void> --output <type>, implement execute(), then run npm run module:sync -- ${moduleName}.`,
-        )];
+        return [{
+            ...this.issue(
+                analysis,
+                'SERVICE_AUX_FORBIDDEN',
+                `The Service auxiliary owned by '${owner}' in module '${moduleName}' uses the obsolete Service Aux pattern.`,
+            ),
+            data: { module: moduleName, owner },
+        }];
     }
 
     /** Checks Operation naming, inheritance, API shape, and isolation. */
@@ -121,6 +128,7 @@ export class ServiceOperationRuleSet {
                     analysis,
                     'OPERATION_PEER_IMPORT',
                     `Operation classes may not import peer Operation '${dependency.source}'.`,
+                    dependency.location,
                 ));
             }
         }
@@ -271,7 +279,7 @@ export class ServiceOperationRuleSet {
             issues.push(this.issue(
                 analysis,
                 'SERVICE_ROUTER_DRIFT',
-                `Generated Service router '${path.basename(analysis.filePath)}' is stale. Fix: Run npm run module:sync -- ${moduleName}.`,
+                `Generated Service router '${path.basename(analysis.filePath)}' is stale for module '${moduleName}'.`,
             ));
         }
         return issues;
@@ -334,14 +342,16 @@ export class ServiceOperationRuleSet {
     /** Creates one normalized rule finding. */
     private issue(
         analysis: SourceAnalysis,
-        ruleId: string,
-        message: string,
+        ruleId: LintIssueDraft['ruleId'],
+        observed: string,
+        location?: SourceSpan,
     ): LintIssueDraft {
         return {
             ruleId,
             severity: 'error',
             file: this.paths.relative(analysis.filePath),
-            message,
+            observed,
+            location,
         };
     }
 }

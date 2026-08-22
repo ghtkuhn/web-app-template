@@ -272,6 +272,172 @@ test('agent instruction planning rejects missing and unsafe basis files', () => 
     );
 });
 
+test('repository ships canonical Boolean project configuration', () => {
+    const projectRoot = path.resolve(
+        path.dirname(new URL(import.meta.url).pathname),
+        '../../../..',
+    );
+    const configuration = JSON.parse(fs.readFileSync(
+        path.join(projectRoot, 'project.json'),
+        'utf8',
+    )) as { 'template-config': { 'use-kanban': unknown } };
+    const ignoreRules = fs.readFileSync(
+        path.join(projectRoot, '.gitignore'),
+        'utf8',
+    ).split(/\r?\n/u);
+
+    expect(configuration['template-config']['use-kanban']).toBe(true);
+    expect(ignoreRules).not.toContain('project.json');
+});
+
+test('project configuration preserves local state and adds only new defaults', () => {
+    const base = temporaryRoot('template-base-');
+    const local = temporaryRoot('template-local-');
+    const incoming = temporaryRoot('template-incoming-');
+    writeCanonicalInstructions([base, local, incoming]);
+    write(base, 'project.json', JSON.stringify({
+        'template-config': {
+            'use-kanban': true,
+            options: {
+                existing: 'base',
+                deletedLocally: 'base',
+            },
+            removedByTemplate: 'base',
+        },
+    }));
+    write(local, 'project.json', JSON.stringify({
+        'template-config': {
+            'use-kanban': 'true',
+            options: {
+                existing: 'local',
+            },
+            removedByTemplate: 'local',
+            localOnly: ['keep', 'all'],
+        },
+    }));
+    fs.chmodSync(path.join(local, 'project.json'), 0o640);
+    write(incoming, 'project.json', JSON.stringify({
+        'template-config': {
+            'use-kanban': false,
+            options: {
+                existing: 'incoming',
+                deletedLocally: 'incoming',
+                added: 'new-default',
+            },
+            futureSetting: true,
+        },
+    }));
+
+    const plan = new UpdatePlanner().plan(base, local, incoming);
+    const action = plan.actions.find(
+        (candidate) => candidate.relativePath === 'project.json',
+    );
+    expect(action?.kind).toBe('write');
+    expect(action?.kind === 'write' && action.mode).toBe(0o640);
+    const sourcePath = action?.kind === 'write' ? action.sourcePath : '';
+    const source = fs.readFileSync(sourcePath, 'utf8');
+    const merged = JSON.parse(source) as Record<string, unknown>;
+
+    expect(merged).toEqual({
+        'template-config': {
+            futureSetting: true,
+            localOnly: ['keep', 'all'],
+            options: {
+                added: 'new-default',
+                existing: 'local',
+            },
+            removedByTemplate: 'local',
+            'use-kanban': 'true',
+        },
+    });
+    expect(source).toContain('\n    "template-config"');
+    expect(source.endsWith('\n')).toBe(true);
+    expect(plan.conflicts).toEqual([]);
+});
+
+test('project configuration merges legacy apps without a template base', () => {
+    const base = temporaryRoot('template-legacy-base-');
+    const local = temporaryRoot('template-legacy-local-');
+    const incoming = temporaryRoot('template-legacy-incoming-');
+    writeCanonicalInstructions([base, local, incoming]);
+    write(local, 'project.json', JSON.stringify({
+        'template-config': {
+            'use-kanban': 'true',
+            localSetting: 'keep',
+        },
+    }));
+    write(incoming, 'project.json', JSON.stringify({
+        'template-config': {
+            'use-kanban': true,
+            futureSetting: 'add',
+        },
+        futureRoot: true,
+    }));
+
+    const plan = new UpdatePlanner().plan(base, local, incoming);
+    const action = plan.actions.find(
+        (candidate) => candidate.relativePath === 'project.json',
+    );
+    const merged = JSON.parse(fs.readFileSync(
+        action?.kind === 'write' ? action.sourcePath : '',
+        'utf8',
+    )) as Record<string, unknown>;
+
+    expect(merged).toEqual({
+        futureRoot: true,
+        'template-config': {
+            futureSetting: 'add',
+            localSetting: 'keep',
+            'use-kanban': 'true',
+        },
+    });
+});
+
+test('project configuration installs the incoming file when local is missing', () => {
+    const base = temporaryRoot('template-base-');
+    const local = temporaryRoot('template-local-');
+    const incoming = temporaryRoot('template-incoming-');
+    writeCanonicalInstructions([base, local, incoming]);
+    write(incoming, 'project.json', JSON.stringify({
+        'template-config': { 'use-kanban': true },
+    }));
+
+    const plan = new UpdatePlanner().plan(base, local, incoming);
+
+    expect(plan.actions).toContainEqual({
+        kind: 'write',
+        relativePath: 'project.json',
+        sourcePath: path.join(incoming, 'project.json'),
+        mode: fs.statSync(path.join(incoming, 'project.json')).mode & 0o777,
+    });
+});
+
+test('project configuration rejects invalid objects and symlinks read-only', () => {
+    const base = temporaryRoot('template-base-');
+    const local = temporaryRoot('template-local-');
+    const incoming = temporaryRoot('template-incoming-');
+    writeCanonicalInstructions([base, local, incoming]);
+    write(incoming, 'project.json', '{"future":true}');
+    write(local, 'project.json', '{invalid');
+
+    expect(() => new UpdatePlanner().plan(base, local, incoming)).toThrow(
+        /Local project\.json must contain valid JSON/,
+    );
+    expect(fs.readFileSync(path.join(local, 'project.json'), 'utf8'))
+        .toBe('{invalid');
+
+    write(local, 'project.json', '[]');
+    expect(() => new UpdatePlanner().plan(base, local, incoming)).toThrow(
+        /Local project\.json must contain a JSON object/,
+    );
+
+    fs.unlinkSync(path.join(local, 'project.json'));
+    fs.symlinkSync('missing-project.json', path.join(local, 'project.json'));
+    expect(() => new UpdatePlanner().plan(base, local, incoming)).toThrow(
+        /Local project\.json must be a regular non-symlink file/,
+    );
+});
+
 test('planner excludes local secrets, runtime data, and agent state', () => {
     const base = temporaryRoot('template-base-');
     const local = temporaryRoot('template-local-');

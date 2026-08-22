@@ -1,49 +1,35 @@
-/** Severity determines whether a finding is an architecture or linter failure. */
-export type LintSeverity = 'error' | 'fatal';
+import type {
+    DiagnosticLocation,
+    LintIssue as SharedLintIssue,
+    LintIssueDraft as SharedLintIssueDraft,
+    LintJsonResult as SharedLintJsonResult,
+    LintResult as SharedLintResult,
+    LintSeverity,
+    LintWriter,
+    SourcePosition,
+    SourceSpan,
+} from '../../../../script/lint-diagnostics/interfaces.ts';
+import type { BackendRuleId } from './rule.catalog.ts';
 
-/** One-based source coordinate exposed to humans and tools. */
-export interface SourcePosition {
-    readonly line: number;
-    readonly column: number;
-}
-
-/** One-based, end-exclusive source range. */
-export interface SourceSpan {
-    readonly start: SourcePosition;
-    readonly end: SourcePosition;
-}
+export type {
+    DiagnosticLocation,
+    LintSeverity,
+    LintWriter,
+    SourcePosition,
+    SourceSpan,
+};
 
 /** Stable structured architecture finding returned by the linter core. */
-export interface LintIssue {
-    readonly ruleId: string;
-    readonly severity: LintSeverity;
-    readonly file: string;
-    readonly reason: string;
-    readonly fix: string;
-    readonly location: SourceSpan;
-}
+export type LintIssue = SharedLintIssue<BackendRuleId>;
 
-/** Internal rule finding normalized by the diagnostic factory. */
-export interface LintIssueDraft {
-    readonly ruleId: string;
-    readonly severity: LintSeverity;
-    readonly file: string;
-    readonly message: string;
-    readonly location?: SourceSpan;
-}
+/** Dynamic source evidence normalized by the diagnostic factory. */
+export type LintIssueDraft = SharedLintIssueDraft<BackendRuleId>;
 
 /** Complete deterministic result returned by one linter run. */
-export interface LintResult {
-    issues: LintIssue[];
-    filesChecked: number;
-}
+export type LintResult = SharedLintResult<BackendRuleId>;
 
 /** Versioned JSON payload emitted by the architecture CLI. */
-export interface LintJsonResult {
-    readonly schemaVersion: 1;
-    readonly filesChecked: number;
-    readonly issues: readonly LintIssue[];
-}
+export type LintJsonResult = SharedLintJsonResult<BackendRuleId>;
 
 /** Import or re-export dependency discovered in a source file. */
 export interface SourceDependency {
@@ -63,6 +49,7 @@ export interface ClassAnalysis {
     propertyNames: string[];
     staticExecutablePropertyCount: number;
     baseTypeNames: Array<string | null>;
+    location: SourceSpan;
 }
 
 /** One analyzed class method with architecture-relevant persistence calls. */
@@ -134,9 +121,11 @@ export interface SourceAnalysis {
     ownedModuleDefinitionHasSpread: boolean;
     ownedModuleDefinitionProperties: string[];
     methodCalls: string[];
+    methodCallEvidence: Array<{ name: string; location: SourceSpan }>;
     constructorCalls: Array<{
         className: string | null;
         firstArgumentName: string | null;
+        location: SourceSpan;
     }>;
     parameterNames: string[];
     returnTypeNames: string[];
@@ -175,11 +164,6 @@ export interface SourceAnalysis {
         methodCalls: SourceSpan[];
         httpAssertions: SourceSpan[];
     };
-}
-
-/** Minimal output stream used by the CLI adapter and its tests. */
-export interface LintWriter {
-    write(chunk: string): unknown;
 }
 
 /** Configuration accepted by the reusable linter core. */

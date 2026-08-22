@@ -21,8 +21,14 @@ CODEX-INBOX.md
 .template/logs/
 .template/status.json
 
-# Local project details and credentials
-project.json
+# Application-local agent workflow content
+/data/ai/MEMORY.md
+/data/ai/kanban/todo/*.md
+/data/ai/kanban/done/*.md
+!/data/ai/kanban/todo/.gitkeep
+!/data/ai/kanban/done/.gitkeep
+
+# Local credentials
 /.credentials.env
 
 # Local database files

@@ -116,7 +116,7 @@ test('operation rules reject handwritten Service behavior and legacy Service Aux
         assert.match(
             issues.find(
                 (issue) => issue.ruleId === 'SERVICE_AUX_FORBIDDEN',
-            )?.fix ?? '',
+            )?.fixSteps.join(' ') ?? '',
             /scaffold:operation -- example example/,
         );
     } finally {

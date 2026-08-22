@@ -75,7 +75,7 @@ export class MigrationRuleSet {
                 ruleId: 'MIGRATION_DIALECT_PARITY',
                 severity: 'error' as const,
                 file: this.paths.relative(path.join(root, dialect, name)),
-                message:
+                observed:
                     `Migration '${name}' is missing from the ${dialect} catalog.`,
             }));
         });
@@ -99,7 +99,7 @@ export class MigrationRuleSet {
             ruleId: 'MIGRATION_DIALECT_STRUCTURE',
             severity: 'error',
             file: this.paths.relative(filePath),
-            message:
+            observed:
                 'Migrations must be direct <number>-<kebab-case>.migration.ts files under src/migration/sqlite or src/migration/postgres.',
         };
     }

@@ -158,6 +158,7 @@ export class SourceAnalyzer {
             ownedModuleDefinitionHasSpread: false,
             ownedModuleDefinitionProperties: [],
             methodCalls: [],
+            methodCallEvidence: [],
             constructorCalls: [],
             parameterNames: [],
             returnTypeNames: [],
@@ -490,6 +491,7 @@ export class SourceAnalyzer {
                 firstArgumentName: this.expressionName(
                     astNode.arguments?.[0] ?? null,
                 ),
+                location: this.span(astNode),
             });
             this.collectObjectMapping(astNode, analysis);
         }
@@ -554,6 +556,12 @@ export class SourceAnalyzer {
                     : 0;
             if (methodName === 'validate') {
                 analysis.validationCallOffsets.push(offset);
+            }
+            if (methodName) {
+                analysis.methodCallEvidence.push({
+                    name: methodName,
+                    location: this.span(astNode.callee ?? astNode),
+                });
             }
             if (
                 methodName &&
@@ -735,6 +743,7 @@ export class SourceAnalyzer {
                 (
                     node.superTypeParameters ?? node.superTypeArguments
                 )?.params?.map((parameter) => this.typeName(parameter)) ?? [],
+            location: this.span(node),
         };
     }
 

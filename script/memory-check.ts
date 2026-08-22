@@ -6,6 +6,12 @@ class MemoryCheckCli {
     public run(projectRoot: string): number {
         try {
             const bytes = new MemorySizeChecker().check(projectRoot);
+            if (bytes === null) {
+                process.stdout.write(
+                    'Memory is not initialized; size check skipped.\n',
+                );
+                return 0;
+            }
             process.stdout.write(
                 `Memory size valid (${bytes}/25600 bytes).\n`,
             );

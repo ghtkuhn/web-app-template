@@ -182,13 +182,13 @@ export class BackendLinter {
                 ruleId: 'SOURCE_PARSE_ERROR',
                 severity: 'fatal',
                 file: this.paths.relative(filePath),
-                message:
+                observed:
                     error instanceof Error
                         ? error.message
                         : 'Unknown parser failure',
                 location: {
                     start: { line, column },
-                    end: { line, column },
+                    end: { line, column: column + 1 },
                 },
             });
             return null;
@@ -207,7 +207,7 @@ export class BackendLinter {
                 ruleId: 'MODULE_DIRECTORY_NAME',
                 severity: 'error',
                 file: this.paths.relative(pluralModuleRoot),
-                message:
+                observed:
                     'Backend modules must be placed in ' +
                     'code/backend/src/module/<name>/; ' +
                     'code/backend/src/modules/ is forbidden.',
@@ -223,7 +223,7 @@ export class BackendLinter {
                 ruleId: 'MODULE_ROOT_FILE',
                 severity: 'error' as const,
                 file: this.paths.relative(filePath),
-                message: 'Files may not be placed directly in src/module/.',
+                observed: 'Files may not be placed directly in src/module/.',
             }));
     }
 
@@ -241,7 +241,7 @@ export class BackendLinter {
                 ruleId: 'AUX_FILE_TYPE',
                 severity: 'error' as const,
                 file: this.paths.relative(filePath),
-                message: 'Auxiliary folders may contain TypeScript files only.',
+                observed: 'Auxiliary folders may contain TypeScript files only.',
             }));
     }
 
@@ -250,10 +250,12 @@ export class BackendLinter {
         return [...issues].sort((left, right) => {
             return (
                 left.file.localeCompare(right.file) ||
-                left.location.start.line - right.location.start.line ||
-                left.location.start.column - right.location.start.column ||
+                (left.location?.start.line ?? 0) -
+                    (right.location?.start.line ?? 0) ||
+                (left.location?.start.column ?? 0) -
+                    (right.location?.start.column ?? 0) ||
                 left.ruleId.localeCompare(right.ruleId) ||
-                left.reason.localeCompare(right.reason)
+                left.observed.localeCompare(right.observed)
             );
         });
     }

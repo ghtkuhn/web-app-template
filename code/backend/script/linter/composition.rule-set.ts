@@ -24,16 +24,16 @@ export class CompositionRuleSet {
     private genericityIssues(analysis: SourceAnalysis): LintIssueDraft[] {
         const domainImport =
             !analysis.filePath.endsWith('module.catalog.ts') &&
-            analysis.dependencies.some((dependency) => {
+            analysis.dependencies.find((dependency) => {
                 const target = this.paths.resolveDependency(
                     analysis.filePath,
                     dependency.source,
                 );
                 return target !== null && this.paths.moduleName(target) !== null;
             });
-        const rewiring = analysis.methodCalls.some((method) =>
+        const rewiring = analysis.methodCallEvidence.find((entry) =>
             /^(?:setInfrastructure|setHandlers|attachHandler|wireHandlers|registerHandler)$/u.test(
-                method,
+                entry.name,
             ),
         );
         if (!domainImport && !rewiring) {
@@ -45,8 +45,9 @@ export class CompositionRuleSet {
                 ruleId: 'COMPOSITION_GENERICITY',
                 severity: 'error',
                 file: this.paths.relative(analysis.filePath),
-                message:
+                observed:
                     'Composition must remain domain-agnostic; individual module entry points are owned by module.catalog.ts.',
+                location: domainImport.location,
             });
         }
         if (rewiring) {
@@ -54,8 +55,9 @@ export class CompositionRuleSet {
                 ruleId: 'MODULE_POST_CONSTRUCTION_WIRING',
                 severity: 'error',
                 file: this.paths.relative(analysis.filePath),
-                message:
+                observed:
                     'Composition must not mutate or duck-type module instances after ModuleRegistry construction.',
+                location: rewiring.location,
             });
         }
         return issues;
@@ -78,7 +80,8 @@ export class CompositionRuleSet {
                     ruleId: 'COMPOSITION_PUBLIC_ENTRY',
                     severity: 'error',
                     file: this.paths.relative(analysis.filePath),
-                    message: `Composition code must import modules through index.ts, not ${dependency.source}.`,
+                    observed: `Composition code must import modules through index.ts, not ${dependency.source}.`,
+                    location: dependency.location,
                 });
             }
         }
@@ -99,7 +102,7 @@ export class CompositionRuleSet {
             ruleId: 'CATALOG_AGGREGATION_ONLY',
             severity: 'error',
             file: this.paths.relative(analysis.filePath),
-            message: 'The generated module catalog may aggregate module-owned definitions only.',
+            observed: 'The generated module catalog may aggregate module-owned definitions only.',
         }];
     }
 }

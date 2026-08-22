@@ -49,10 +49,8 @@ test('oversized Memory files fail with an actionable limit', () => {
     );
 });
 
-test('missing Memory files fail with a creation instruction', () => {
+test('missing local Memory files pass before workflow initialization', () => {
     const root = temporaryRoot();
 
-    expect(() => new MemorySizeChecker().check(root)).toThrow(
-        /missing; create it/,
-    );
+    expect(new MemorySizeChecker().check(root)).toBeNull();
 });

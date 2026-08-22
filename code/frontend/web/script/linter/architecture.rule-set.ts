@@ -1,8 +1,10 @@
 import path from 'node:path';
 import type {
-    LintIssue,
+    DiagnosticLocation,
+    LintIssueDraft,
     SourceAnalysis,
     SourceDependency,
+    SourceSpan,
 } from './interfaces.ts';
 import {
     PathResolver,
@@ -31,7 +33,7 @@ export class ArchitectureRuleSet {
         this.paths = paths;
     }
 
-    public evaluate(analysis: SourceAnalysis): LintIssue[] {
+    public evaluate(analysis: SourceAnalysis): LintIssueDraft[] {
         return [
             ...this.placementIssues(analysis),
             ...this.dependencyIssues(analysis),
@@ -44,8 +46,8 @@ export class ArchitectureRuleSet {
     }
 
     /** Keeps Pico as one global semantic foundation instead of per-view imports. */
-    private picoOwnershipIssues(analysis: SourceAnalysis): LintIssue[] {
-        const issues: LintIssue[] = [];
+    private picoOwnershipIssues(analysis: SourceAnalysis): LintIssueDraft[] {
+        const issues: LintIssueDraft[] = [];
         const relative = this.paths.relative(analysis.filePath);
         const isGlobalStyle = relative.endsWith(
             'code/frontend/web/src/shared/styles/main.css',
@@ -60,10 +62,14 @@ export class ArchitectureRuleSet {
             ));
         }
         if (importsPico && !isGlobalStyle) {
+            const evidence = analysis.styles
+                .flatMap((style) => style.importEvidence)
+                .find((entry) => entry.source === '@picocss/pico');
             issues.push(this.issue(
                 analysis,
                 'PICO_OWNERSHIP',
                 'Pico CSS may only be imported by shared/styles/main.css.',
+                evidence?.location,
             ));
         }
         if (
@@ -74,14 +80,15 @@ export class ArchitectureRuleSet {
                 analysis,
                 'PICO_CDN_FORBIDDEN',
                 'Pico CSS must be installed through npm, not loaded from a CDN.',
+                this.remoteStyleLocation(analysis, this.isPicoRemoteSource),
             ));
         }
         return issues;
     }
 
     /** Keeps the bundled Tabler font available through one shared style entry. */
-    private tablerIconOwnershipIssues(analysis: SourceAnalysis): LintIssue[] {
-        const issues: LintIssue[] = [];
+    private tablerIconOwnershipIssues(analysis: SourceAnalysis): LintIssueDraft[] {
+        const issues: LintIssueDraft[] = [];
         const relative = this.paths.relative(analysis.filePath);
         const isGlobalStyle = relative.endsWith(
             'code/frontend/web/src/shared/styles/main.css',
@@ -101,10 +108,14 @@ export class ArchitectureRuleSet {
             ));
         }
         if (importsTabler && !isGlobalStyle && !isTablerStyle) {
+            const evidence = analysis.styles
+                .flatMap((style) => style.importEvidence)
+                .find((entry) => entry.source.endsWith('tabler-icons.css'));
             issues.push(this.issue(
                 analysis,
                 'TABLER_ICON_OWNERSHIP',
                 'The Tabler icon stylesheet may only be imported by shared/styles/main.css.',
+                evidence?.location,
             ));
         }
         if (
@@ -115,6 +126,7 @@ export class ArchitectureRuleSet {
                 analysis,
                 'TABLER_ICON_CDN_FORBIDDEN',
                 'Tabler Icons must use the bundled local font, not a CDN.',
+                this.remoteStyleLocation(analysis, this.isTablerRemoteSource),
             ));
         }
         return issues;
@@ -141,7 +153,7 @@ export class ArchitectureRuleSet {
         );
     }
 
-    private placementIssues(analysis: SourceAnalysis): LintIssue[] {
+    private placementIssues(analysis: SourceAnalysis): LintIssueDraft[] {
         const segments = this.paths.segments(analysis.filePath);
         const layer = this.paths.layer(analysis.filePath);
         if (layer === 'root' && segments.join('/') !== 'main.ts') {
@@ -167,7 +179,7 @@ export class ArchitectureRuleSet {
         analysis: SourceAnalysis,
         segments: readonly string[],
         layer: FrontendLayer,
-    ): LintIssue[] {
+    ): LintIssueDraft[] {
         if (
             layer === 'core' &&
             (segments.length < 3 || !CORE_AREAS.includes(segments[1]))
@@ -187,7 +199,7 @@ export class ArchitectureRuleSet {
         analysis: SourceAnalysis,
         segments: readonly string[],
         layer: FrontendLayer,
-    ): LintIssue[] {
+    ): LintIssueDraft[] {
         if (layer !== 'presentation') {
             return [];
         }
@@ -206,8 +218,8 @@ export class ArchitectureRuleSet {
               ];
     }
 
-    private dependencyIssues(analysis: SourceAnalysis): LintIssue[] {
-        const issues: LintIssue[] = [];
+    private dependencyIssues(analysis: SourceAnalysis): LintIssueDraft[] {
+        const issues: LintIssueDraft[] = [];
         for (const dependency of analysis.dependencies) {
             issues.push(...this.dependencyIssue(analysis, dependency));
         }
@@ -217,7 +229,7 @@ export class ArchitectureRuleSet {
     private dependencyIssue(
         analysis: SourceAnalysis,
         dependency: SourceDependency,
-    ): LintIssue[] {
+    ): LintIssueDraft[] {
         const target = this.paths.resolveDependency(
             analysis.filePath,
             dependency.source,
@@ -231,6 +243,8 @@ export class ArchitectureRuleSet {
         const targetPresentation = this.paths.presentation(target);
         const presentationIssue = this.presentationDependencyIssue(
             analysis,
+            dependency,
+            target,
             sourcePresentation,
             targetPresentation,
         );
@@ -248,6 +262,7 @@ export class ArchitectureRuleSet {
         }
         const coreIssue = this.coreDependencyIssue(
             analysis,
+            dependency,
             target,
             sourceLayer,
             targetLayer,
@@ -257,9 +272,11 @@ export class ArchitectureRuleSet {
 
     private presentationDependencyIssue(
         analysis: SourceAnalysis,
+        dependency: SourceDependency,
+        target: string,
         sourcePresentation: PresentationName | null,
         targetPresentation: PresentationName | null,
-    ): LintIssue | null {
+    ): LintIssueDraft | null {
         if (
             sourcePresentation &&
             targetPresentation &&
@@ -269,6 +286,12 @@ export class ArchitectureRuleSet {
                 analysis,
                 'PRESENTATION_CROSS_IMPORT',
                 `${sourcePresentation} may not depend on ${targetPresentation}.`,
+                dependency.location,
+                [{
+                    file: this.paths.relative(target),
+                    location: null,
+                    label: 'Imported file in another device presentation',
+                }],
             );
         }
         return null;
@@ -279,12 +302,13 @@ export class ArchitectureRuleSet {
         dependency: SourceDependency,
         sourceLayer: FrontendLayer,
         targetLayer: FrontendLayer,
-    ): LintIssue | null {
+    ): LintIssueDraft | null {
         if (!this.layerAllows(sourceLayer, targetLayer)) {
             return this.issue(
                 analysis,
                 'FRONTEND_LAYER_DIRECTION',
                 `${sourceLayer} may not depend on ${dependency.source}.`,
+                dependency.location,
             );
         }
         return null;
@@ -292,10 +316,11 @@ export class ArchitectureRuleSet {
 
     private coreDependencyIssue(
         analysis: SourceAnalysis,
+        dependency: SourceDependency,
         target: string,
         sourceLayer: FrontendLayer,
         targetLayer: FrontendLayer,
-    ): LintIssue | null {
+    ): LintIssueDraft | null {
         if (
             sourceLayer === 'core' &&
             targetLayer === 'core' &&
@@ -305,6 +330,7 @@ export class ArchitectureRuleSet {
                 analysis,
                 'CORE_LAYER_DIRECTION',
                 `core/${this.paths.segments(analysis.filePath)[1]} may not depend on core/${this.paths.segments(target)[1]}.`,
+                dependency.location,
             );
         }
         return null;
@@ -351,7 +377,7 @@ export class ArchitectureRuleSet {
         return allowed[source].includes(target);
     }
 
-    private ownershipIssues(analysis: SourceAnalysis): LintIssue[] {
+    private ownershipIssues(analysis: SourceAnalysis): LintIssueDraft[] {
         return [
             ...this.routerOwnershipIssues(analysis),
             ...this.presentationOwnershipIssues(analysis),
@@ -361,7 +387,7 @@ export class ArchitectureRuleSet {
         ];
     }
 
-    private routerOwnershipIssues(analysis: SourceAnalysis): LintIssue[] {
+    private routerOwnershipIssues(analysis: SourceAnalysis): LintIssueDraft[] {
         const relative = this.paths.relative(analysis.filePath);
         const isRouter = relative.endsWith(
             'code/frontend/web/src/app/router.ts',
@@ -372,10 +398,14 @@ export class ArchitectureRuleSet {
                 ['createRouter', 'createWebHistory'].includes(call),
             )
         ) {
+            const evidence = analysis.callEvidence.find((entry) =>
+                ['createRouter', 'createWebHistory'].includes(entry.name),
+            );
             return [this.issue(
                 analysis,
                 'ROUTER_OWNERSHIP',
                 'Router creation belongs in app/router.ts.',
+                evidence?.location,
             )];
         }
         return [];
@@ -383,7 +413,7 @@ export class ArchitectureRuleSet {
 
     private presentationOwnershipIssues(
         analysis: SourceAnalysis,
-    ): LintIssue[] {
+    ): LintIssueDraft[] {
         const relative = this.paths.relative(analysis.filePath);
         const isPresentationOwner = relative.endsWith(
             'code/frontend/web/src/app/presentation.ts',
@@ -395,10 +425,18 @@ export class ArchitectureRuleSet {
                     ['innerWidth', 'userAgentData'].includes(member),
                 ))
         ) {
+            const evidence =
+                analysis.callEvidence.find((entry) =>
+                    entry.name.endsWith('matchMedia'),
+                ) ??
+                analysis.memberEvidence.find((entry) =>
+                    ['innerWidth', 'userAgentData'].includes(entry.name),
+                );
             return [this.issue(
                 analysis,
                 'PRESENTATION_BREAKPOINT_OWNERSHIP',
                 'Viewport and device detection belongs in app/presentation.ts.',
+                evidence?.location,
             )];
         }
         return [];
@@ -406,7 +444,7 @@ export class ArchitectureRuleSet {
 
     private environmentOwnershipIssues(
         analysis: SourceAnalysis,
-    ): LintIssue[] {
+    ): LintIssueDraft[] {
         const relative = this.paths.relative(analysis.filePath);
         const isEnvironmentOwner = relative.includes(
             'code/frontend/web/src/core/config/',
@@ -416,12 +454,13 @@ export class ArchitectureRuleSet {
                 analysis,
                 'FRONTEND_ENV_OWNERSHIP',
                 'Vite environment access belongs in core/config.',
+                this.textLocation(analysis.source, 'import.meta.env'),
             )];
         }
         return [];
     }
 
-    private networkOwnershipIssues(analysis: SourceAnalysis): LintIssue[] {
+    private networkOwnershipIssues(analysis: SourceAnalysis): LintIssueDraft[] {
         const layer = this.paths.layer(analysis.filePath);
         if (layer === 'presentation') {
             const importsApi = analysis.dependencies.some((dependency) => {
@@ -439,10 +478,27 @@ export class ArchitectureRuleSet {
                     (call) => call === 'fetch' || call.endsWith('.fetch'),
                 )
             ) {
+                const dependencyEvidence = analysis.dependencies.find(
+                    (dependency) => {
+                        const target = this.paths.resolveDependency(
+                            analysis.filePath,
+                            dependency.source,
+                        );
+                        return target?.includes(
+                            `${path.sep}core${path.sep}api${path.sep}`,
+                        );
+                    },
+                );
+                const callEvidence = analysis.callEvidence.find(
+                    (entry) =>
+                        entry.name === 'fetch' ||
+                        entry.name.endsWith('.fetch'),
+                );
                 return [this.issue(
                     analysis,
                     'PRESENTATION_NETWORK_ACCESS',
                     'Presentation code must use application composables instead of network access.',
+                    dependencyEvidence?.location ?? callEvidence?.location,
                 )];
             }
         }
@@ -452,7 +508,7 @@ export class ArchitectureRuleSet {
     /** Keeps JavaScript-readable Auth credentials behind one explicit owner. */
     private authStorageOwnershipIssues(
         analysis: SourceAnalysis,
-    ): LintIssue[] {
+    ): LintIssueDraft[] {
         const relative = this.paths.relative(analysis.filePath);
         const isTokenStore = relative.endsWith(
             'code/frontend/web/src/core/api/auth-token.store.ts',
@@ -462,12 +518,13 @@ export class ArchitectureRuleSet {
                 analysis,
                 'AUTH_TOKEN_STORAGE_OWNERSHIP',
                 'sessionStorage access belongs exclusively in core/api/auth-token.store.ts.',
+                this.textLocation(analysis.source, 'sessionStorage'),
             )];
         }
         return [];
     }
 
-    private vueIssues(analysis: SourceAnalysis): LintIssue[] {
+    private vueIssues(analysis: SourceAnalysis): LintIssueDraft[] {
         return [
             ...this.vueStructureIssues(analysis),
             ...this.vueNamingIssues(analysis),
@@ -475,8 +532,8 @@ export class ArchitectureRuleSet {
         ];
     }
 
-    private vueStructureIssues(analysis: SourceAnalysis): LintIssue[] {
-        const issues: LintIssue[] = [];
+    private vueStructureIssues(analysis: SourceAnalysis): LintIssueDraft[] {
+        const issues: LintIssueDraft[] = [];
         if (analysis.isVue && this.paths.layer(analysis.filePath) === 'shared') {
             issues.push(this.issue(
                 analysis,
@@ -496,14 +553,15 @@ export class ArchitectureRuleSet {
                     analysis,
                     'VUE_SCRIPT_SETUP',
                     'Vue scripts must use <script setup lang="ts">.',
+                    analysis.scriptLocation ?? analysis.scriptSetupLocation ?? undefined,
                 ),
             );
         }
         return issues;
     }
 
-    private vueNamingIssues(analysis: SourceAnalysis): LintIssue[] {
-        const issues: LintIssue[] = [];
+    private vueNamingIssues(analysis: SourceAnalysis): LintIssueDraft[] {
+        const issues: LintIssueDraft[] = [];
         if (analysis.isVue && !/^[A-Z][A-Za-z0-9]*\.vue$/.test(
             path.basename(analysis.filePath),
         )) {
@@ -535,18 +593,20 @@ export class ArchitectureRuleSet {
         return issues;
     }
 
-    private vueStyleIssues(analysis: SourceAnalysis): LintIssue[] {
-        const issues: LintIssue[] = [];
+    private vueStyleIssues(analysis: SourceAnalysis): LintIssueDraft[] {
+        const issues: LintIssueDraft[] = [];
         const layer = this.paths.layer(analysis.filePath);
         if (
             layer === 'presentation' &&
             analysis.styles.some((style) => !style.scoped)
         ) {
+            const style = analysis.styles.find((entry) => !entry.scoped);
             issues.push(
                 this.issue(
                     analysis,
                     'PRESENTATION_STYLE_SCOPE',
                     'Presentation SFC styles must be scoped.',
+                    style?.location,
                 ),
             );
         }
@@ -560,30 +620,37 @@ export class ArchitectureRuleSet {
                 ),
             )
         ) {
+            const media = analysis.styles
+                .flatMap((style) => style.atRules)
+                .find(
+                    (atRule) =>
+                        atRule.name.toLowerCase() === 'media' &&
+                        /(?:min|max)-width/iu.test(atRule.parameters),
+                );
             issues.push(
                 this.issue(
                     analysis,
                     'PRESENTATION_MEDIA_QUERY',
                     'Width breakpoints belong to the central presentation selector.',
+                    media?.location,
                 ),
             );
         }
-        if (
-            layer === 'presentation' &&
-            this.hasRawTokenValue(analysis)
-        ) {
+        const rawToken = this.rawTokenLocation(analysis);
+        if (layer === 'presentation' && rawToken) {
             issues.push(
                 this.issue(
                     analysis,
                     'DESIGN_TOKEN_USAGE',
                     'Presentation colors, font sizes, radii, and z-index values must use shared tokens.',
+                    rawToken,
                 ),
             );
         }
         return issues;
     }
 
-    private hasRawTokenValue(analysis: SourceAnalysis): boolean {
+    private rawTokenLocation(analysis: SourceAnalysis): SourceSpan | null {
         const resetValues = new Set([
             'inherit',
             'initial',
@@ -599,23 +666,25 @@ export class ArchitectureRuleSet {
             'font-size',
             'z-index',
         ]);
-        return analysis.styles.some((style) =>
-            style.declarations.some(
-                (declaration) => {
-                    const property = declaration.property.toLowerCase();
-                    const value = declaration.value.trim().toLowerCase();
-                    const allowedFontReset =
-                        property === 'font-size' &&
-                        (value === '0' || resetValues.has(value));
-                    return tokenProperties.has(property) &&
-                        !declaration.value.trim().startsWith('var(') &&
-                        !allowedFontReset;
-                },
-            ),
-        );
+        for (const style of analysis.styles) {
+            for (const declaration of style.declarations) {
+                const property = declaration.property.toLowerCase();
+                const value = declaration.value.trim().toLowerCase();
+                const allowedFontReset = property === 'font-size' &&
+                    (value === '0' || resetValues.has(value));
+                if (
+                    tokenProperties.has(property) &&
+                    !declaration.value.trim().startsWith('var(') &&
+                    !allowedFontReset
+                ) {
+                    return declaration.location;
+                }
+            }
+        }
+        return null;
     }
 
-    private routeCoverageIssues(analysis: SourceAnalysis): LintIssue[] {
+    private routeCoverageIssues(analysis: SourceAnalysis): LintIssueDraft[] {
         const segments = this.paths.segments(analysis.filePath);
         if (
             segments[0] !== 'app' ||
@@ -650,16 +719,63 @@ export class ArchitectureRuleSet {
               ];
     }
 
+    private remoteStyleLocation(
+        analysis: SourceAnalysis,
+        predicate: (source: string) => boolean,
+    ): SourceSpan | undefined {
+        const imported = analysis.styles
+            .flatMap((style) => style.importEvidence)
+            .find((entry) => predicate(entry.source));
+        if (imported) {
+            return imported.location;
+        }
+        const match = analysis.source.match(/https?:\/\/[^"'\s>]+/iu);
+        return match?.index === undefined
+            ? undefined
+            : this.offsetLocation(
+                  analysis.source,
+                  match.index,
+                  match.index + match[0].length,
+              );
+    }
+
+    private textLocation(source: string, text: string): SourceSpan | undefined {
+        const start = source.indexOf(text);
+        return start < 0
+            ? undefined
+            : this.offsetLocation(source, start, start + text.length);
+    }
+
+    private offsetLocation(
+        source: string,
+        start: number,
+        end: number,
+    ): SourceSpan {
+        const position = (offset: number): { line: number; column: number } => {
+            const before = source.slice(0, offset);
+            const previousNewline = before.lastIndexOf('\n');
+            return {
+                line: before.split('\n').length,
+                column: offset - previousNewline,
+            };
+        };
+        return { start: position(start), end: position(end) };
+    }
+
     private issue(
         analysis: SourceAnalysis,
-        ruleId: string,
-        message: string,
-    ): LintIssue {
+        ruleId: LintIssueDraft['ruleId'],
+        observed: string,
+        location?: SourceSpan,
+        relatedLocations?: readonly DiagnosticLocation[],
+    ): LintIssueDraft {
         return {
             ruleId,
             severity: 'error',
             file: this.paths.relative(analysis.filePath),
-            message,
+            observed,
+            location,
+            relatedLocations,
         };
     }
 }

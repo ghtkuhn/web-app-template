@@ -46,7 +46,7 @@ export class DependencyRuleSet {
                       file: this.paths.relative(
                           this.paths.packageManifest(),
                       ),
-                      message: this.manifestError,
+                      observed: this.manifestError,
                   },
               ]
             : [];
@@ -75,7 +75,8 @@ export class DependencyRuleSet {
                     ruleId: 'UNDECLARED_WORKSPACE_DEPENDENCY',
                     severity: 'error',
                     file: this.paths.relative(analysis.filePath),
-                    message: `Runtime dependency '${packageName}' must be declared in code/backend/package.json.`,
+                    observed: `Runtime dependency '${packageName}' must be declared in code/backend/package.json.`,
+                    location: dependency.location,
                 });
             }
         }

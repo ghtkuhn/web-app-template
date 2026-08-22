@@ -7,6 +7,7 @@ import type {
 } from './interfaces.ts';
 import { AgentInstructionPlanner } from './agent-instruction.planner.ts';
 import { PackageManifestMerger } from './package-manifest.merger.ts';
+import { ProjectConfigMerger } from './project-config.merger.ts';
 
 export const TEMPLATE_UPDATE_EXACT_IGNORES = new Set([
     '.git',
@@ -23,6 +24,7 @@ export const TEMPLATE_UPDATE_EXACT_IGNORES = new Set([
 export class UpdatePlanner {
     private readonly agentInstructions = new AgentInstructionPlanner();
     private readonly packageManifest = new PackageManifestMerger();
+    private readonly projectConfig = new ProjectConfigMerger();
 
     /** Compares the old template, local project, and new template. */
     public plan(
@@ -37,7 +39,8 @@ export class UpdatePlanner {
             ...incomingFiles,
         ])]
             .filter((relativePath) =>
-                !this.agentInstructions.owns(relativePath),
+                !this.agentInstructions.owns(relativePath) &&
+                relativePath !== ProjectConfigMerger.relativePath,
             )
             .sort();
         const actions: UpdateAction[] = [
@@ -67,6 +70,14 @@ export class UpdatePlanner {
         }
         if (packagePlan.conflict) {
             conflicts.push(packagePlan.conflict);
+        }
+        const projectConfigAction = this.projectConfig.plan(
+            baseRoot,
+            localRoot,
+            incomingRoot,
+        );
+        if (projectConfigAction) {
+            actions.push(projectConfigAction);
         }
         actions.sort((left, right) =>
             left.relativePath.localeCompare(right.relativePath),

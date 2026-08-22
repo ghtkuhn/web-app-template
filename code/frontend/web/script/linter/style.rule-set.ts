@@ -1,6 +1,6 @@
 import parseCssValue from 'postcss-value-parser';
 import type {
-    LintIssue,
+    LintIssueDraft,
     SourceAnalysis,
     StyleDeclaration,
 } from './interfaces.ts';
@@ -33,7 +33,7 @@ export class StyleRuleSet {
         this.paths = paths;
     }
 
-    public evaluate(analyses: readonly SourceAnalysis[]): LintIssue[] {
+    public evaluate(analyses: readonly SourceAnalysis[]): LintIssueDraft[] {
         const applicationAnalyses = analyses.filter(
             (analysis) => !this.isBundledVendorStyle(analysis),
         );
@@ -46,8 +46,8 @@ export class StyleRuleSet {
     private analysisIssues(
         analysis: SourceAnalysis,
         variables: ReadonlyMap<string, readonly VariableDefinition[]>,
-    ): LintIssue[] {
-        const issues: LintIssue[] = [];
+    ): LintIssueDraft[] {
+        const issues: LintIssueDraft[] = [];
         for (const style of analysis.styles) {
             for (const declaration of style.declarations) {
                 const property = declaration.property.toLowerCase();
@@ -63,6 +63,7 @@ export class StyleRuleSet {
                             analysis,
                             'FRONTEND_FONT_SIZE_UNIT',
                             'font-size accepts only rem values, unitless zero, CSS reset keywords, or resolvable variables using those values.',
+                            declaration.location,
                         ));
                     }
                     continue;
@@ -75,6 +76,7 @@ export class StyleRuleSet {
                             analysis,
                             'FRONTEND_FONT_SHORTHAND',
                             'Set font-size separately in rem; font shorthand is limited to CSS reset keywords.',
+                            declaration.location,
                         ));
                     }
                     continue;
@@ -91,6 +93,7 @@ export class StyleRuleSet {
                             analysis,
                             'FRONTEND_BOX_SPACING_UNIT',
                             `${property} accepts only px, percent, unitless zero, applicable semantic keywords, or resolvable variables using those values.`,
+                            declaration.location,
                         ));
                     }
                     continue;
@@ -107,6 +110,7 @@ export class StyleRuleSet {
                             analysis,
                             'FRONTEND_BOX_SPACING_UNIT',
                             `${property} must resolve exclusively to px, percent, or unitless zero.`,
+                            declaration.location,
                         ));
                     }
                 }
@@ -298,14 +302,16 @@ export class StyleRuleSet {
 
     private issue(
         analysis: SourceAnalysis,
-        ruleId: string,
-        message: string,
-    ): LintIssue {
+        ruleId: LintIssueDraft['ruleId'],
+        observed: string,
+        location: StyleDeclaration['location'],
+    ): LintIssueDraft {
         return {
             ruleId,
             severity: 'error',
             file: this.paths.relative(analysis.filePath),
-            message,
+            observed,
+            location,
         };
     }
 }

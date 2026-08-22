@@ -6,13 +6,11 @@ export const MEMORY_SIZE_LIMIT_BYTES = 25 * 1024;
 
 /** Validates the bounded project Memory used as agent startup context. */
 export class MemorySizeChecker {
-    /** Checks the canonical Memory file and returns its current byte size. */
-    public check(projectRoot: string): number {
+    /** Checks an initialized Memory file and returns its byte size, if present. */
+    public check(projectRoot: string): number | null {
         const filePath = path.join(projectRoot, 'data/ai/MEMORY.md');
         if (!fs.existsSync(filePath)) {
-            throw new Error(
-                'data/ai/MEMORY.md is missing; create it before verification.',
-            );
+            return null;
         }
         const status = fs.lstatSync(filePath);
         if (!status.isFile() || status.isSymbolicLink()) {

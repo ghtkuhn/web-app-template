@@ -50,7 +50,6 @@
     "module:status": "node code/backend/script/module-tools.ts status",
     "module:sync": "node code/backend/script/module-tools.ts sync",
     "module:dependency": "node code/backend/script/module-tools.ts dependency",
-    "rm": "node script/safe-remove.ts",
     "generate:api": "npm run generate:openapi --workspace @app/backend && npm run generate:api --workspace @app/web",
     "check:api": "npm run check:openapi --workspace @app/backend && npm run check:api --workspace @app/web",
     "check:memory": "node script/memory-check.ts",

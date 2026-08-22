@@ -1,6 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { LintIssueDraft, SourceAnalysis } from './interfaces.ts';
+import type {
+    LintIssueDraft,
+    SourceAnalysis,
+    SourceSpan,
+} from './interfaces.ts';
 import { FileScanner } from './file.scanner.ts';
 import { PathResolver } from './path.resolver.ts';
 
@@ -172,6 +176,7 @@ export class ProjectRuleSet {
                         analysis.filePath,
                         'LOCAL_IMPORT_EXTENSION',
                         `Local dependency '${dependency.source}' must include the .ts extension.`,
+                        dependency.location,
                     ),
                 );
             }
@@ -224,15 +229,15 @@ export class ProjectRuleSet {
                 fix: `Make ${pascalName}ModulePort public from the module entry. Add this exact top-level line to index.ts: export type { ${pascalName}ModulePort } from './interfaces.ts'; An import type statement is private to index.ts and does not expose the port to consumers. Keep the interface in interfaces.ts; do not move or redeclare it.`,
             },
         ];
-        const fixes = checks
+        const missingRequirements = checks
             .filter((check) => !check.valid)
             .map((check) => check.fix);
-        return fixes.length > 0
+        return missingRequirements.length > 0
             ? [
                   this.issue(
                       entryPath,
                       'MODULE_ENTRY_CONTRACT',
-                      `The ${moduleName} module entry is incomplete. Fix: ${fixes.join(' ')}`,
+                      `Module '${moduleName}' is missing these public-entry requirements: ${missingRequirements.join(' ')}`,
                   ),
               ]
             : [];
@@ -299,14 +304,16 @@ export class ProjectRuleSet {
     /** Creates one normalized issue. */
     private issue(
         filePath: string,
-        ruleId: string,
-        message: string,
+        ruleId: LintIssueDraft['ruleId'],
+        observed: string,
+        location?: SourceSpan,
     ): LintIssueDraft {
         return {
             ruleId,
             severity: 'error',
             file: this.paths.relative(filePath),
-            message,
+            observed,
+            location,
         };
     }
 }

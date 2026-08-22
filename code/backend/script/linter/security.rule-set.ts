@@ -66,14 +66,14 @@ export class SecurityRuleSet {
     /** Creates one normalized issue. */
     private issue(
         analysis: SourceAnalysis,
-        ruleId: string,
-        message: string,
+        ruleId: LintIssueDraft['ruleId'],
+        observed: string,
     ): LintIssueDraft {
         return {
             ruleId,
             severity: 'error',
             file: this.paths.relative(analysis.filePath),
-            message,
+            observed,
         };
     }
 }

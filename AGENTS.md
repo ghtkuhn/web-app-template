@@ -1,18 +1,14 @@
 # General rules
 
-* You must not follow any of the following rules, if you are the maintainer of the web-app-template.
-* You must follow the rules, if you are developing an application.
-* You must read this file before starting project work.
-* After reading this file, you must read `AGENTS-PROJECT.md` if it exists.
-* `AGENTS-PROJECT.md` contains project-specific rules and overrides conflicting rules in this file regardless of wording strength.
 * You must treat instruction wording priority as `must not` > `must` > `should` > `may`.
+* You must not follow any of the rules in this file, if you are the maintainer of the web-app-template or if the user explicitly allows you to do something that would violate a rule in this file.
+* You must create file `AGENTS-PROJECT.md` if it does not exist.
+* You must create file `data/ai/MEMORY.md` if it does not exist.
+* You must follow the rules written in this file, if you are developing an application.
+* You must read the file contents of `AGENTS-PROJECT.md`.
+* You must accept that rules written in `AGENTS-PROJECT.md` always take priority over any rule written in this file.
 * You must not modify the contents of this file.
-* You must create `data/ai/MEMORY.md` if it does not exist.
-* You must read the file contents of `data/ai/MEMORY.md` after ensuring it exists.
-* You must summarize `data/ai/MEMORY.md` when it exceeds 25 KiB; `npm run check:memory` and `npm run verify` enforce this limit.
 * You must communicate tersely. Do not repeat the task or narrate routine steps.
-* You must keep progress updates to at most one short sentence.
-* Your final response must contain only the result, verification status, and genuine blockers.
 
 
 ---
@@ -20,12 +16,12 @@
 
 # Project structure
 
-* `project.json`: Important non-secret project details.
+* `project.json`: Tracked non-secret project details and configuration; template updates preserve existing values and add new settings.
 * `code/backend`: Contains backend source code.
 * `code/frontend`: Contains frontend source code.
 * `data/sqlite`: Sqlite database storage location.
-* `data/ai/kanban/todo`: Contains backlog and ready work tasks.
-* `data/ai/kanban/done`: Contains implemented, verified, and closed work tasks.
+* `data/ai/kanban/todo`: Contains local backlog and ready work tasks; Markdown files remain untracked.
+* `data/ai/kanban/done`: Contains local implemented, verified, and closed work tasks; Markdown files remain untracked.
 * `.credentials.env`: The only supported local credential file; it must remain ignored, untracked, and mode `0600`.
 
 
@@ -35,8 +31,7 @@
 # Credential Rules
 
 * You must put local credentials only in `/.credentials.env` and initialize it with `npm run credentials:init`.
-* You must not store credential values in `project.json`, `CODEX-INBOX.md`, Memory, Kanban, logs, test fixtures, documentation, or command arguments.
-* You may record only the names of required Environment variables outside `/.credentials.env`.
+* You must not store credential values in `project.json`, `data/ai/MEMORY.md` or Kanban tasks.
 * You must run scripts that need local credentials through `npm run credentials:run -- <npm-script> [args]`.
 * You must never read, print, log, interpolate, or forward the contents of `/.credentials.env` except through `credentials:run`'s child-process Environment.
 * You must run `npm run credentials:check` before staging or committing changes.
@@ -47,19 +42,14 @@
 
 # Kanban Rules
 
+* You must follow these kanban related rules only when `template-config.use-kanban` in `project.json` equals `true`.
 * You must not change or delete the file `data/ai/kanban/TASK-TEMPLATE.md`.
 * You must initialize missing workflow state with `npm run workflow:init`.
-* You must create Schema-Version-2 tasks with `npm run task:new -- <domain> <slug>`; the command reserves the next ID atomically from the task counter.
-* You must break down complex tasks into multiple simple tasks that are easily verifyable. Simple meaning when it has one clear outcome, changes one feature area, and can be verified with one focused check. Complex when it mixes multiple outcomes, touches frontend and backend together, changes database schema plus UI, or requires more than one independent verification.
-* You should split a task when it would require editing more than one module, adding both infrastructure and feature behavior, or changing both data shape and user-facing behavior.
-* You should split a task when its "Done When" section needs more than three unrelated bullet points.
-* You should split a task when failure would make it hard to know which part caused the problem.
+* You must create tasks with `npm run task:new -- <domain> <slug>`; the command reserves the next ID atomically from the task counter.
 * You must not use vague task goals such as "improve backend", "build UI", or "fix app".
-* You must write each task so that another agent can complete it without asking what the task means.
 * You must not write more than one task per task file.
 * Task file names must be in the following format: `<task-counter>-<domain>-<title>.md`
 * You must work tasks sequentially.
-* You must use `fallow` to verify code health, dead code, and duplication before declaring a task done.
 * During an active implementation sequence, you must run only tests created or changed by the current task. You must not run pre-existing test suites again until the final open task in that sequence is complete.
 * After the final open task is complete, you must run the complete existing test suite and root `npm run verify` once before declaring the sequence complete.
 * Completion Notes must map every Done-When criterion to at least one concrete test name or verification command.
@@ -73,7 +63,9 @@
 
 # Memory and learning
 
-* You must record durable project learning in `data/ai/MEMORY.md` after every completed kanban task.
+* You must read the file contents of `data/ai/MEMORY.md`.
+* You must compact and summarise `data/ai/MEMORY.md` when it exceeds 25 KiB.
+* You must record durable project learning in `data/ai/MEMORY.md` after completing the last open kanban task or if the user asks you to memorise something.
 * Memory may contain only current project invariants, constraints, operations, recurring causes, and gotchas with a `YYYY-MM-DD HH:MM` timestamp.
 * You must remove routine test or release results and explicitly replace assertions that have been disproved or superseded.
 
@@ -83,7 +75,7 @@
 
 # Programming Rules
 
-* You must not write code without a corresponding kanban task file.
+* You must not write code without a corresponding kanban task file when `template-config.use-kanban` in `project.json` equals `true`.
 * You must stop at the first applicable implementation rung, before writing code:
     1. Does this need to exist? If no, skip it (YAGNI).
     2. If the standard library does it, use the standard library.
@@ -94,279 +86,41 @@
 * You must not build island solutions or implementations tailored to one specific test case, fixture, or issue.
 * You must derive solutions generically; tests may cover examples, but implementation logic must not special-case them.
 * You must not install new dependencies without user consent.
-* You must not create, edit, move, rename, or delete files or directories below `code/backend/src/base/`.
-* You must not invoke `rm`, `rmdir`, `unlink`, or another direct system deletion command.
-* You must delete project files and directories only with `npm run rm -- <project-relative-path>`.
-* You should run `npm run rm -- <project-relative-path> --dry-run` first when the target contains multiple files or directories.
-* Before declaring a task done, run `npm run audit`; it uses the locally pinned Fallow `3.15.0` without a network fallback.
-  - New findings fail the command and must be addressed before completion.
-  - Pre-existing inherited findings are reported but do not block the change.
-  - A malformed report or tool failure is an error; inspect the complete ignored report at `.fallow/audit.json` only when details are required.
+* You must not delete, modidy or move files outside the project root directlry without user consent.
 
 
 ## Root npm Scripts
 
-* `npm run audit`: Runs the bounded Fallow code-health audit and stores its full ignored report under `.fallow/`.
-* `npm run build`: Builds every workspace that defines a build command.
-* `npm run check:api`: Verifies that generated frontend OpenAPI types match the backend contract.
-* `npm run check:kanban`: Validates task names, IDs, counter, dependencies, state, placeholders, checkboxes, and Schema-Version-2 evidence.
-* `npm run check:memory`: Rejects a missing or oversized `data/ai/MEMORY.md`.
-* `npm run check:migrations`: Verifies paired migration versions, catalog entries, and SHA-256 checksums.
-* `npm run check:modules`: Rejects drift between module manifests and generated registry metadata.
-* `npm run credentials:check`: Verifies the credential file's type, mode, ignore rules, and Git index state without reading its contents.
-* `npm run credentials:init`: Creates `/.credentials.env` atomically with mode `0600` without overwriting files or following symlinks.
-* `npm run credentials:run`: Runs one npm script with local credentials only in the child-process Environment.
-* `npm run deployment:bootstrap`: Explicitly prepares one `existing-lxc` target; normal deploy never bootstraps its operating system.
-* `npm run check:test-catalog`: Verifies that the checked-in backend test catalog matches all discovered global and module-local tests.
-* `npm run deployment:build`: Builds deployable backend and frontend artifacts for a deployment profile.
-* `npm run deployment:database:list`: Lists SQLite migration backups for a deployment profile.
-* `npm run deployment:database:restore`: Restores one explicitly selected SQLite backup.
-* `npm run deployment:deploy`: Deploys selected components using a validated deployment profile.
-* `npm run deployment:rollback`: Reactivates a previous application release without automatically restoring its database.
-* `npm run deployment:scaffold`: Creates a new versioned deployment profile.
-* `npm run deployment:status`: Reads deployment and health status for selected components.
-* `npm run deployment:stop`: Stops selected deployed services without deleting persistent infrastructure.
-* `npm run deployment:validate`: Validates one or all deployment profiles against the schema.
-* `npm run generate:api`: Regenerates checked-in frontend TypeScript contracts from OpenAPI.
-* `npm run generate:migrations`: Regenerates the deterministic dialect-specific migration checksum catalog.
-* `npm run generate:test-catalog`: Regenerates the deterministic checked-in backend test catalog.
-* `npm run lint`: Runs every workspace linter.
-* `npm run lint:backend`: Runs the backend architecture and OpenAPI linters.
-* `npm run module:status`: Reports the first actionable architecture state for one backend module.
-* `npm run module:sync`: Regenerates manifest-owned module registry metadata without changing fach files.
-* `npm run module:dependency`: Adds one public module dependency to a consumer manifest and synchronizes it.
-* `npm run prepare`: Explicitly configures the versioned `.githooks` directory when no conflicting local hooks path exists; dependency lifecycle scripts remain disabled.
-* `npm run rm`: Safely removes explicit project-relative files, directories, or symlinks; pass targets after `--` and use `--dry-run` for preview.
-* `npm run runtime:check`: Verifies the exact Node.js 24.19.0 and npm 11 contract across local tooling, workspaces, and Docker builds.
-* `npm run scaffold:component`: Creates one presentation-local Vue component.
-* `npm run scaffold:feature`: Creates a frontend Model, Service, and Composable feature skeleton.
-* `npm run scaffold:file`: Creates one architecture-compliant class file in an existing backend module.
-* `npm run scaffold:module`: Creates, registers, and activates a minimal backend module.
-* `npm run scaffold:operation`: Creates one typed, owner-bound Service Operation draft.
-* `npm run scaffold:pwa`: Transactionally installs the optional shell-only PWA scaffold.
-* `npm run scaffold:route`: Creates and registers one route adapter plus Desktop, Tablet, and Mobile views.
-* `npm run scaffold:test`: Creates, catalogs, and verifies the baseline test for an existing backend module.
-* `npm run store:migration-status`: Reports generic Store methods and affected Operation calls without changing source.
-* `npm run task:close`: Validates and closes one Schema-Version-2 task.
-* `npm run task:new`: Atomically creates one Schema-Version-2 task.
-* `npm run template:check`: Reports the installed and latest stable template versions and pending updater state.
-* `npm run template:init`: Initializes explicit template metadata for a legacy application.
-* `npm run template:update`: Installs or continues a stable template update and supports conflict continuation or abort.
-* `npm run test`: Runs all workspace unit, integration, and component tests.
+### Complete Verification
+
+* `npm run runtime:check`: Checks the pinned Node.js and npm contract.
+* `npm run verify`: Runs the complete required quality pipeline.
+* `npm run audit`: Checks for newly introduced code-health findings with the locally pinned Fallow.
+
+### Focused Quality Checks
+
+* `npm run lint`: Checks architecture, styles, and OpenAPI across all workspaces.
 * `npm run typecheck`: Typechecks root tooling and all workspaces.
-* `npm run verify`: Runs the complete required validation, lint, typecheck, test, build, browser-smoke, and Fallow pipeline.
-* `npm run verify:module`: Runs focused architecture, type, OpenAPI, and local-test checks for one backend module.
-* `npm run workflow:init`: Creates missing Memory and Kanban workflow state for an application.
+* `npm run test`: Runs workspace unit, integration, and component tests.
+* `npm run build`: Builds every workspace that defines a build script.
+* `npm run verify:module -- <module>`: Runs backend-wide type and lint checks plus the module's direct tests.
+
+### Generated Contracts
+
+* `npm run check:api`: Checks backend OpenAPI and generated frontend types.
+* `npm run generate:api`: Updates backend OpenAPI and generated frontend types.
+* `npm run check:modules`: Checks generated module mechanics for drift.
+* `npm run module:sync -- <module>`: Updates one module's generated mechanics.
+* `npm run check:migrations`: Checks migration order, dialect pairs, catalog, and checksums.
+* `npm run generate:migrations`: Updates the migration checksum catalog.
+* `npm run check:test-catalog`: Checks the backend test catalog for drift.
+* `npm run generate:test-catalog`: Updates the backend test catalog.
 
 
-## Backend Programming Rules (Strict Layered Architecture)
-
-* Domain modules live in `code/backend/src/module/<name>/`.
-* Backend modules must use the singular `module` directory. The plural path `code/backend/src/modules/` is forbidden.
-* A module may contain the layers it actually needs: `api`, `controller`, `service`, `store`, `object`, `dto`, and `test`.
-* The strict dependency flow is **API Handler** → **Controller** → **Service Router** → **Operation** → **Store** → **Database**.
-* Interfaces, type aliases, and constants must be declared in the module-level `interfaces.ts`, `types.ts`, and `constants.ts` files.
-* Public module contracts must be exported exclusively through `code/backend/src/module/<name>/index.ts`.
-* Module roots may contain only `index.ts`, `interfaces.ts`, `types.ts`, `constants.ts`, and the supported layer directories. Loose implementation files, empty layers, unknown directories, and non-TypeScript artifacts are forbidden.
-* Local TypeScript imports and re-exports must include the `.ts` extension.
-* A module with a concrete Handler, Controller, Service, or Store must contain an executable direct `test/*.test.ts` file.
-* Module-test directories may contain only direct `*.test.ts` files and must not be empty or nested.
-* Module tests may inspect their own internals, but must import foreign modules only through their public `index.ts`; production code must never import or re-export tests.
-* Create the baseline module test with `npm run scaffold:test -- <module>`, regenerate the catalog after adding tests, and run tests only through the central backend test command.
-
-### Layer Responsibilities and Constraints
-
-1. **API Handlers (`api/`)**
-   - Must extend `HttpHandler`, `WebSocketHandler`, `CliHandler`, `NodeHandler`, or another approved `BaseHandler` specialization.
-   - Translate transport-specific input into controller calls.
-   - Convert parsed payloads to declared request DTOs or validate them with a typed validator before calling a Controller or Service.
-   - Must not import Services or Stores directly.
-2. **Controllers (`controller/`)**
-   - Must extend `BaseController`.
-   - Coordinate application behavior through Services and return `HandlerResult<DTO>`.
-   - Must remain transport-neutral and must not accept request/response objects or read transport bodies.
-   - Must not expose raw exception messages or translate arbitrary exceptions into client errors.
-   - Must not import Handlers, Stores, or Domain Objects.
-   - Object/DTO mapping belongs in Service Operations and reaches Controllers through generated Service routers.
-3. **Services (`service/`)**
-   - Must extend `BaseService` and are fully generated by `module:sync`.
-   - Only construct owner-bound Operations and delegate each public method directly to exactly one Operation's `execute()` method.
-   - Must not contain validation, workflows, mapping, Store access, branches, loops, or private business helpers.
-   - Must not be edited manually.
-4. **Service Operations (`service/<service>/*.operation.ts`)**
-   - Must extend `BaseServiceOperation<Input, Output, <Service>ServiceDependencies>`.
-   - Contain the complete application operation: validation, workflows, Domain Object construction, Store calls, and Object/DTO mapping.
-   - Expose exactly one public method named `execute`; private helper methods remain allowed.
-   - Must use one named input contract or `void` and must not import Controllers, Handlers, or peer Operations.
-   - May use Stores, Domain Objects, DTOs, and public ports of other modules.
-   - Must not call global `findAll()` methods, filter or page persisted result sets in memory, or use generic upserts.
-5. **Stores (`store/`)**
-   - Must extend `BaseStore`.
-   - Encapsulate persistence operations and map database data to Domain Objects.
-   - Must not import DTOs, Service routers, Operations, Controllers, or Handlers.
-   - May use the provided database abstraction but must not import database drivers or create connections.
-   - Must use typed Store contracts without `any` and explicitly map database rows to Domain Objects.
-   - Must expose fach-named methods with complete Tenant/Actor scope; generic `save`, `findById`, `findAll`, `delete`, and `upsert` contracts are forbidden.
-   - Must apply scope filters, ordering, `limit`, `offset`, and counts in the database query.
-   - Idempotent creates must use Tenant, Actor, and `clientMutationId` as identity and compare a complete persisted payload fingerprint.
-   - Cross-instance consistency must use constraints, transactions, or persistent version checks; process-local queues are optimizations only.
-6. **Objects (`object/`)**
-   - Must extend `BaseObject`.
-   - Represent persistent domain state and invariants.
-   - Sensitive fields must be explicitly excluded from serialization.
-7. **DTOs (`dto/`)**
-   - Must extend `BaseDTO` or `EntityDTO`.
-   - Define transported application data without depending on Handlers, Controllers, Service routers, Operations, Stores, or database drivers.
-   - Must remain passive; executable schemas, validator instances, and business logic belong in Service Operations.
-
-### Auxiliary Classes
-
-* The `api` and `store` layers may contain one level of owner-bound auxiliary folders.
-* Store auxiliary folders require their matching direct owner file.
-* `api/health/` requires at least one direct `api/health.*.handler.ts` owner.
-* Every auxiliary file must contain exactly one class extending `BaseApiAux` or `BaseStoreAux`.
-* Only the matching owner may import its auxiliary classes.
-* Auxiliary classes must not import their owner, auxiliary peers, or other files from the same layer.
-* Auxiliary implementations must not be re-exported or accessed from another layer or module.
-* Further nesting and non-TypeScript files in auxiliary folders are forbidden.
-* Controller auxiliaries are forbidden; application logic belongs in owner-bound Service Operations.
-
-### Inter-Module Communication
-
-* Modules must not import another module's internal files.
-* Consumers may import only the public contract exported by `code/backend/src/module/<name>/index.ts`.
-* Required module ports are supplied through constructor injection by `ModuleRegistry`.
-* Each module owns its durable registry metadata in the static `definition` exposed by its public module class.
-* The module class must directly own `name`, `dependencies`, and `create`; spreads and external metadata objects are forbidden.
-* Every concrete Handler must be constructed and registered by the module factory or constructor before the factory returns.
-* Modules must not expose post-construction infrastructure or Handler setters.
-* Each module entry point must publicly re-export its typed module port and expose a typed `ModuleDefinition`; every module must be present in the generated catalog.
-* Application infrastructure follows `Application → DatabaseManager → ModuleRegistry → Module Factory → Store`; it must not be modeled as a domain-module dependency.
-* In-process communication uses the injected module port and typed `dispatch('node', request)` calls.
-* Node requests use a discriminated `operation` field and a `NodeRequestContext` containing the required `caller` and optional `correlationId`.
-* Multiple Node operations must be a union of complete request objects; an operation union paired with an independent payload union is forbidden.
-* Public module ports use a typed `IBaseModule` or explicit Node `dispatch()` contract and must not extend `BaseModule`.
-* Business response data uses DTOs; Node callers must not use `HandlerResult.statusCode` for business decisions.
-* Missing active dependencies and direct or indirect dependency cycles must fail during registry construction.
-
-### Composition and Infrastructure
-
-* Active modules are configured in `code/backend/src/config.ts`.
-* `code/backend/src/module.registry.ts`, `code/backend/src/index.ts`, and `code/backend/src/cli.ts` form the Composition layer.
-* Composition files may import modules only through their public `index.ts`.
-* The generated `module.catalog.ts` only aggregates module-owned definitions and must not declare dependencies or factories itself.
-* Domain modules must not import Registry or process entry-point files.
-* Domain modules must not read `process.env` or define secret fallbacks; validated runtime configuration is owned by `code/backend/src/config.ts`.
-* Database drivers and connection creation are allowed only in `code/backend/src/base/base.database.ts`.
-* Stores receive the shared database client through constructor injection, use the provided abstraction, and must not import `DatabaseManager` or create their own connections.
-* `code/backend/src/database.ts` defines the complete current Kysely database schema used for compile-time typing.
-* Every database schema change must update `code/backend/src/database.ts` and include a matching versioned migration.
-* Migrations are the executable history of the physical database schema and must run before modules and transports start.
-* Applied migrations are bound to dialect-specific SHA-256 checksums; any later source mismatch must block startup before backup or further migration execution.
-* Existing databases may create one checksum baseline for migrations already applied when first opened by this major template version.
-* New migrations must be checksum-registered only after successful execution, and `npm run check:migrations` must reject catalog or dialect-pair drift.
-* Pending SQLite migrations must create and validate a persistent pre-migration backup before changing the database.
-* Code rollback must never restore the database automatically; database restore is an explicit deployment operation that creates a pre-restore safety backup.
-* Large data backfills must be implemented as idempotent, restartable jobs rather than blocking startup migrations.
-* The application must not start when a pending migration fails.
-* Database row types, Domain Objects, and DTOs must remain separate representations.
-* Row-to-Object mappings must explicitly map identity, timestamps, and soft-delete metadata.
-* Normal Store finders must exclude soft-deleted rows, and Store deletion must update `is_deleted`, `deleted_at`, and `updated_at` instead of using hard deletion.
-
-### HTTP API Contracts
-
-* `code/backend/openapi/openapi.yaml` is the central OpenAPI 3.1 contract for the public HTTP API.
-* Every new or changed HTTP endpoint must update the OpenAPI document and include executable request tests for every documented success and controlled error status.
-* Concrete HTTP handlers must declare literal `/api` routes that are covered by the matching OpenAPI method and backend tests.
-* Comments and arbitrary route strings do not count as HTTP coverage; tests must execute `fetch()` or the standardized HTTP test helper.
-* DTOs and OpenAPI schemas must describe the same public JSON representation without making database row types public.
-* Node, CLI, and WebSocket contracts must not be documented as OpenAPI operations.
-* OpenAPI linting and HTTP contract tests must pass through the root `npm run verify` command.
-
-### General Backend Constraints
-
-* You must create new domain modules with `npm run scaffold:module -- <kebab-case-name>` instead of assembling their base files manually.
-* You must create new architecture class files in existing modules with `npm run scaffold:file -- <module> <type> <name> [--owner <owner>]` instead of assembling their boilerplate manually.
-* You must create Service Operations with `npm run scaffold:operation -- <module> <service> <operation> --input <type|void> --output <type|void>`.
-* After implementing an Operation's `execute()`, run `npm run module:sync -- <module>` and never edit the generated main Service manually.
-* The required Service workflow is **scaffold:operation** → **implement `execute()`** → **module:sync** → **test the Operation** → **verify:module** → **next slice**.
-* Free function declarations are forbidden in regular module files.
-* Regular module and auxiliary files must not declare more than one class; auxiliary files must declare exactly one.
-* Architecture filenames and class names must follow their scaffolded layer conventions.
-* Runtime packages imported by backend domain code must be declared in `code/backend/package.json` dependencies.
-* Domain modules and backend tests must not use `any`, `as any`, or chained assertions to bypass contracts; negative type tests use `@ts-expect-error`.
-* Executable backend and test TypeScript must use Node-compatible erasable syntax; parameter properties, enums, namespaces, import-equals, and export-assignment are forbidden.
-* The repository root owns the only `package-lock.json`, shared TypeScript tooling, `tsconfig.base.json`, and the complete `verify` script. Workspaces must not duplicate or shorten these contracts.
-* Module files must preserve four-space indentation and include appropriate code comments and JSDoc.
-* Backend architecture diagnostics expose separate `Reason`, `Fix`, and one-based source positions; tools must consume the JSON format instead of editing diagnostic comments into source files.
-* Focused backend work requires lint, typecheck, and only current-task tests. The complete existing test suite and `npm run verify` run after the final open task of the active implementation sequence.
+---
 
 
-## Frontend Programming Rules (Strict Presentation Architecture)
-
-* Vue source lives under `code/frontend/web/src/` in `app`, `core`, `presentation`, and `shared`.
-* Desktop, tablet, and mobile presentations live in separate `presentation/<name>/` trees and must not import each other.
-* Matching views and layouts must exist in all three presentation trees.
-* The shared router belongs to `app/router.ts`; route adapters must compose exactly one view from each presentation.
-* Mobile applies below `768px`, tablet from `768px` through `1199px`, and desktop from `1200px`.
-* `app/presentation.ts` owns viewport breakpoints and device detection. A confident or explicit device result locks the presentation; otherwise it switches live with the viewport.
-* Presentation code must not perform network access or import `core/api` directly. Shared application state, APIs, models, and workflows belong in `core`.
-* Core follows **Presentation** → **Composable** → **Service** → **ApiClient** → **Backend**.
-* `core/config` is the exclusive owner of `import.meta.env` access and exposes validated readonly configuration.
-* `core/api/generated/schema.ts` is generated from the backend OpenAPI contract with `npm run generate:api` and must not be edited manually.
-* Generated transport types remain inside Services and API infrastructure; Services map them to frontend Models.
-* `ApiClient` is the only HTTP transport owner. Presentation code uses Composables and must not call generated clients or `fetch`.
-* Composables use the common `idle`, `loading`, `success`, and `error` state model for asynchronous workflows.
-* State that must survive a presentation switch must live outside presentation components.
-* `shared` contains non-visual assets, styles, and utilities but no shared Vue components.
-* Shared design tokens live in `shared/styles`; presentation colors, font sizes, radii, and z-index values must use those tokens.
-* `@picocss/pico` is the sole frontend CSS framework and may be imported only by `shared/styles/main.css`; CDN imports and parallel UI frameworks are forbidden.
-* Presentation markup must use semantic HTML and Pico's classless defaults before adding presentation-local layout rules. Pico variables are derived only from shared design tokens.
-* Use the bundled Tabler Icons v3.46.0 outline webfont only through `shared/styles/main.css` and render icons with `ti ti-<icon-name>` classes.
-* Decorative icons require `aria-hidden="true"`; icon-only controls require an accessible name such as `aria-label`.
-* Do not add an icon CDN, a second icon library, or presentation-local Tabler stylesheet imports.
-* Before choosing an icon, run `npm run icons -- <search-term>`; use `npm run icons -- --all` only when a complete list is necessary.
-* Use `rem` exclusively for `font-size`; unitless `0` and CSS reset keywords are the only exceptions.
-* Do not use numeric `font` shorthand; set `font-size` separately so its unit remains verifiable.
-* Use only `px`, `%`, or unitless `0` for margin, padding, gap, and scroll-spacing values. Applicable semantic keywords such as `margin: auto` and CSS reset keywords remain allowed.
-* Custom properties, fallbacks, and CSS math functions must resolve exclusively to units allowed by the consuming property.
-* Other layout properties may use any valid CSS unit; the font-size restriction does not apply to widths, heights, grid tracks, or similar layout values.
-* Vue scripts must use `<script setup lang="ts">`; presentation styles must be scoped.
-* Width-based media queries must not create a second presentation breakpoint system.
-* Frontend TypeScript and Vue code must preserve four-space indentation.
-* Create routes with `npm run scaffold:route -- <kebab-case-name>` so the adapter, router entry, and all three views are created together.
-* Create presentation-local components with `npm run scaffold:component -- <desktop|tablet|mobile> <kebab-case-name>`.
-* Create Core feature skeletons with `npm run scaffold:feature -- <kebab-case-name>`.
-* Install the optional PWA exactly once with `npm run scaffold:pwa -- <app-id> --name "<Name>" --short-name "<Short Name>"`.
-* The base PWA may cache only the shell, built assets, bundled Tabler font, icons, and manifest; `/api`, `/auth`, `/ws`, foreign origins, credentials, profiles, tokens, and fach data must never be cached.
-* A Service Worker update must require explicit user confirmation and activate only with a validated runtime configuration for the same shell version; failed updates keep the previous pair active.
-* PWA browser coverage uses the generated production Playwright configuration and the optional `test:e2e:pwa` workspace script.
-* The frontend implementation workflow is **Scaffold** → **Core logic** → **all three Presentations** → **tests** → **`npm run verify`**.
-* Vitest and Vue Test Utils cover units and components; Playwright covers shared routing and representative mobile, tablet, and desktop browser flows.
-* Focused frontend work requires its linter, typecheck, and only current-task tests. The complete existing test suite and root `npm run verify` run after the final open task of the active implementation sequence.
-
-
-## Deployment Rules
-
-* Deployment profiles live in `deployment/profiles/`, contain no secrets, and must pass `npm run deployment:validate -- <profile>`.
-* `local` is the default profile. Docker is the default driver for both components in every newly scaffolded profile.
-* Create profiles with `npm run deployment:scaffold -- <name>`; select `proxmox-lxc` or `existing-lxc` explicitly per component when required.
-* Backend and frontend are independently buildable and deployable with the `backend`, `frontend`, or `all` component argument.
-* Docker deployments use separate backend and frontend images. SQLite data must remain in a persistent external volume.
-* Proxmox LXC provisioning and lifecycle use the REST API. Release installation uses SSH directly to the LXC and must never require SSH access to the Proxmox host.
-* `existing-lxc` manages releases inside an already existing Debian 13/x86_64 container and must never provision or mutate its operating system during `deployment:deploy`.
-* Bootstrap an `existing-lxc` target only through the explicit `npm run deployment:bootstrap -- <profile> <component>` command.
-* Every LXC target must pin an explicit SSH host-key fingerprint with `StrictHostKeyChecking=yes`; `ssh-keyscan`, interactive trust, and secrets in process arguments are forbidden.
-* An `installationId` isolates releases, persistent data, services, and configuration below `/opt/<id>`, `/var/lib/<id>`, and `/etc/<id>`.
-* Private-key SSH is the default. Password SSH may read only `DEPLOYMENT_SSH_PASSWORD` through `credentials:run`.
-* Proxmox API tokens, private SSH keys, application secrets, and passwords must be supplied through Environment variables and must not appear in profiles or logs.
-* Production profiles require verified TLS, explicit Origin allowlists, an absolute persistent SQLite path, and non-development secrets.
-* Frontend deployment configuration is public runtime configuration and must never contain secrets.
-* Deployments follow **validate → build → deploy → health check**. Failed LXC activation must roll back to the previous release.
-* Code rollback must only reactivate an existing release and must never restore a database automatically.
-
-
-## Template Update Rules
+# Template Update Rules
 
 * Check stable upstream releases with `npm run template:check`.
 * `AGENTS.md` is template-owned and replaced by every update; project-specific additions belong exclusively in `AGENTS-PROJECT.md`.
@@ -378,6 +132,7 @@
 * Resolve updater conflicts only under `.template/conflicts/<version>/`, select `local`, `incoming`, `merged`, or `delete` in `resolutions.json`, and continue with `npm run template:update -- --continue <version>`.
 * Abort unresolved staging with `npm run template:update -- --abort <version>`; this must not change project files.
 * Template updates must preserve local modules, features, migrations, secrets, runtime data, local deployment profiles, Memory, and Kanban task contents.
+* Template updates must preserve every existing `project.json` value and local key while recursively adding only settings newly introduced by the template.
 * Application-owned package metadata must remain local. Template scripts, engines, workspaces, and dependencies are merged property by property.
 * A failed post-update Verify does not roll back the installed template. Inspect `.template/status.json` and its referenced log, migrate the application, and run `npm run verify` again.
 * After an update, inspect the uncommitted diff and verification status before creating a deliberate commit.

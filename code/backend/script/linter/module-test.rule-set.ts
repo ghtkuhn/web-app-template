@@ -1,6 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { LintIssueDraft, SourceAnalysis } from './interfaces.ts';
+import type {
+    LintIssueDraft,
+    SourceAnalysis,
+    SourceSpan,
+} from './interfaces.ts';
 import { FileScanner } from './file.scanner.ts';
 import { PathResolver } from './path.resolver.ts';
 import { TestCatalogManager } from '../test-catalog/test-catalog.manager.ts';
@@ -44,6 +48,7 @@ export class ModuleTestRuleSet {
                           analysis.filePath,
                           'MODULE_TEST_PRODUCTION_IMPORT',
                           'Production code must not import or re-export module-local tests.',
+                          dependency.location,
                       ),
                   ]
                 : [];
@@ -54,11 +59,16 @@ export class ModuleTestRuleSet {
     public evaluateTest(analysis: SourceAnalysis): LintIssueDraft[] {
         const sourceModule = this.paths.moduleName(analysis.filePath);
         return analysis.dependencies.flatMap((dependency) => [
-            ...this.testReExportIssues(analysis, dependency.kind),
+            ...this.testReExportIssues(
+                analysis,
+                dependency.kind,
+                dependency.location,
+            ),
             ...this.testCrossImportIssues(
                 analysis,
                 dependency.source,
                 sourceModule,
+                dependency.location,
             ),
         ]);
     }
@@ -138,6 +148,7 @@ export class ModuleTestRuleSet {
     private testReExportIssues(
         analysis: SourceAnalysis,
         dependencyKind: string,
+        location: SourceSpan,
     ): LintIssueDraft[] {
         return dependencyKind === 'export'
             ? [
@@ -145,6 +156,7 @@ export class ModuleTestRuleSet {
                       analysis.filePath,
                       'MODULE_TEST_REEXPORT',
                       'Module-local tests must not re-export dependencies.',
+                      location,
                   ),
               ]
             : [];
@@ -155,6 +167,7 @@ export class ModuleTestRuleSet {
         analysis: SourceAnalysis,
         dependencySource: string,
         sourceModule: string | null,
+        location: SourceSpan,
     ): LintIssueDraft[] {
         const target = this.paths.resolveDependency(
             analysis.filePath,
@@ -170,6 +183,7 @@ export class ModuleTestRuleSet {
                       analysis.filePath,
                       'MODULE_TEST_CROSS_IMPORT',
                       `Tests must import module '${targetModule}' through its public index.ts.`,
+                      location,
                   ),
               ]
             : [];
@@ -228,14 +242,16 @@ export class ModuleTestRuleSet {
     /** Creates one normalized module-test diagnostic draft. */
     private issue(
         filePath: string,
-        ruleId: string,
-        message: string,
+        ruleId: LintIssueDraft['ruleId'],
+        observed: string,
+        location?: SourceSpan,
     ): LintIssueDraft {
         return {
             ruleId,
             severity: 'error',
             file: this.paths.relative(filePath),
-            message,
+            observed,
+            location,
         };
     }
 }

@@ -184,14 +184,14 @@ export class ArchitectureEvasionRuleSet {
     /** Creates one normalized architecture finding. */
     private issue(
         analysis: SourceAnalysis,
-        ruleId: string,
-        message: string,
+        ruleId: LintIssueDraft['ruleId'],
+        observed: string,
     ): LintIssueDraft {
         return {
             ruleId,
             severity: 'error',
             file: this.paths.relative(analysis.filePath),
-            message,
+            observed,
         };
     }
 }

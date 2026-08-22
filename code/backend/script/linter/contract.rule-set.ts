@@ -99,7 +99,7 @@ export class ContractRuleSet {
                     this.issue(
                         analysis,
                         'HANDLER_CONCRETE_DTO_CONTRACT',
-                        'Handler success contracts must name one concrete business Response DTO. Fix: return HandlerResult<ConcreteResponseDTO>; do not widen the contract to BaseDTO, object, or an ad hoc union.',
+                        'The Handler success contract does not name one concrete business Response DTO.',
                     ),
                 );
             }
@@ -112,7 +112,7 @@ export class ContractRuleSet {
                     this.issue(
                         analysis,
                         'HANDLER_DTO_OUTPUT',
-                        'Handlers must declare the concrete Response DTO carried by HandlerResult. Fix: use HandlerResult<ConcreteResponseDTO>.',
+                        'The HandlerResult does not declare a concrete Response DTO.',
                     ),
                 );
             }
@@ -126,7 +126,7 @@ export class ContractRuleSet {
                     this.issue(
                         analysis,
                         'HANDLER_DTO_OUTPUT',
-                        'HandlerResult payloads must use concrete business Response DTO classes. Fix: use HandlerResult<ConcreteResponseDTO>, not a base type or anonymous payload.',
+                        'The HandlerResult payload uses a base, anonymous, or otherwise non-concrete contract.',
                     ),
                 );
             }
@@ -174,14 +174,14 @@ export class ContractRuleSet {
     // fallow-ignore-next-line code-duplication -- Stable issue construction mirrors the established infrastructure rules.
     private issue(
         analysis: SourceAnalysis,
-        ruleId: string,
-        message: string,
+        ruleId: LintIssueDraft['ruleId'],
+        observed: string,
     ): LintIssueDraft {
         return {
             ruleId,
             severity: 'error',
             file: this.paths.relative(analysis.filePath),
-            message,
+            observed,
         };
     }
 }

@@ -13,8 +13,6 @@
         "script/memory-check/**/*.ts",
         "script/runtime-check.ts",
         "script/runtime-check/**/*.ts",
-        "script/safe-remove.ts",
-        "script/safe-remove/**/*.ts",
         "script/template-update.ts",
         "script/template-update/**/*.ts",
         "script/workflow.ts",

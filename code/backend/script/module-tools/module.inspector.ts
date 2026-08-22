@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { BackendLinter } from '../linter/backend.linter.ts';
 import { ModuleName } from '../scaffold-module/module-name.ts';
+import { DiagnosticRenderer } from '../../../../script/lint-diagnostics/diagnostic.renderer.ts';
 
 /** Compact deterministic status for one backend module. */
 export interface ModuleStatus {
@@ -13,10 +14,12 @@ export interface ModuleStatus {
 /** Inspects one module without mutating its source. */
 export class ModuleInspector {
     private readonly projectRoot: string;
+    private readonly renderer: DiagnosticRenderer;
 
     /** Creates an inspector for one repository root. */
     constructor(projectRoot: string) {
         this.projectRoot = path.resolve(projectRoot);
+        this.renderer = new DiagnosticRenderer(this.projectRoot);
     }
 
     /** Returns the first actionable module status. */
@@ -41,10 +44,7 @@ export class ModuleInspector {
             return {
                 moduleName: moduleName.value,
                 state: 'blocked',
-                message:
-                    `${issue.ruleId} at ${issue.file}:` +
-                    `${issue.location.start.line}:${issue.location.start.column}. ` +
-                    `${issue.fix}`,
+                message: this.renderer.render(issue).trimEnd(),
             };
         }
         if (!this.isExecutable(moduleRoot)) {

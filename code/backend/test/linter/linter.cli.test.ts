@@ -55,13 +55,19 @@ test('linter CLI returns one with deterministic architecture diagnostics', () =>
             stderr,
         ).run();
         assert.equal(exitCode, 1);
-        const lines = stderr.value.trim().split('\n');
-        assert.equal(
-            lines[0],
-            'You must Read code/backend/ARCHITECTURE.md to understand the required backend structure.',
+        assert.match(stderr.value, /ERROR \[[A-Z_]+\] .+/u);
+        assert.match(stderr.value, /Where: .*module\/alpha/u);
+        assert.match(stderr.value, /Found: /u);
+        assert.match(stderr.value, /Why: /u);
+        assert.match(stderr.value, /Meaning: /u);
+        assert.match(stderr.value, /Architecture: /u);
+        assert.match(stderr.value, /How to fix:\n  1\. /u);
+        assert.match(stderr.value, /Verify:\n  npm run /u);
+        assert.ok(
+            stderr.value.indexOf('module/alpha') <
+                stderr.value.indexOf('module/zeta'),
         );
-        assert.match(lines[1], /module\/alpha/);
-        assert.match(lines[4], /module\/zeta/);
+        assert.doesNotMatch(stderr.value, /ARCHITECTURE\.md/u);
     } finally {
         fixture.dispose();
     }
@@ -85,19 +91,27 @@ test('linter CLI emits one versioned JSON diagnostic document', () => {
         const payload = JSON.parse(stdout.value) as {
             schemaVersion: number;
             issues: Array<{
-                reason: string;
-                fix: string;
-                location: { start: { line: number; column: number } };
+                title: string;
+                observed: string;
+                why: string;
+                meaning: string;
+                context: string;
+                fixSteps: string[];
+                verify: string[];
+                location: { start: { line: number; column: number } } | null;
             }>;
         };
 
         assert.equal(exitCode, 1);
         assert.equal(stderr.value, '');
-        assert.equal(payload.schemaVersion, 1);
-        assert.ok(payload.issues[0].reason.length > 0);
-        assert.ok(payload.issues[0].fix.length > 0);
-        assert.ok(payload.issues[0].location.start.line >= 1);
-        assert.ok(payload.issues[0].location.start.column >= 1);
+        assert.equal(payload.schemaVersion, 2);
+        assert.ok(payload.issues[0].title.length > 0);
+        assert.ok(payload.issues[0].observed.length > 0);
+        assert.ok(payload.issues[0].why.length > 0);
+        assert.ok(payload.issues[0].meaning.length > 0);
+        assert.ok(payload.issues[0].context.length > 0);
+        assert.ok(payload.issues[0].fixSteps.length > 0);
+        assert.ok(payload.issues[0].verify.length > 0);
     } finally {
         fixture.dispose();
     }
@@ -117,16 +131,10 @@ test('linter CLI returns two for parser failures', () => {
             stderr,
         ).run();
         assert.equal(exitCode, 2);
-        const lines = stderr.value.trim().split('\n');
-        assert.equal(
-            lines[0],
-            'You must Read code/backend/ARCHITECTURE.md to understand the required backend structure.',
-        );
-        assert.ok(
-            lines
-                .slice(1)
-                .some((line) => /FATAL \[SOURCE_PARSE_ERROR\]/.test(line)),
-        );
+        assert.match(stderr.value, /FATAL \[SOURCE_PARSE_ERROR\]/u);
+        assert.match(stderr.value, /Why: /u);
+        assert.match(stderr.value, /How to fix:/u);
+        assert.doesNotMatch(stderr.value, /ARCHITECTURE\.md/u);
     } finally {
         fixture.dispose();
     }

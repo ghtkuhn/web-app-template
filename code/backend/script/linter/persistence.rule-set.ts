@@ -198,7 +198,7 @@ export class PersistenceRuleSet {
                     ruleId: 'DATABASE_OBJECT_METADATA',
                     severity: 'error',
                     file: this.paths.relative(filePath),
-                    message: `${match[1]} is missing BaseObject columns: ${missing.join(', ')}.`,
+                    observed: `${match[1]} is missing BaseObject columns: ${missing.join(', ')}.`,
                 });
             }
         }
@@ -239,14 +239,14 @@ export class PersistenceRuleSet {
     /** Creates one normalized issue. */
     private issue(
         analysis: SourceAnalysis,
-        ruleId: string,
-        message: string,
+        ruleId: LintIssueDraft['ruleId'],
+        observed: string,
     ): LintIssueDraft {
         return {
             ruleId,
             severity: 'error',
             file: this.paths.relative(analysis.filePath),
-            message,
+            observed,
         };
     }
 }

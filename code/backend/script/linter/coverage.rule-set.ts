@@ -36,7 +36,7 @@ export class CoverageRuleSet {
                       file: this.paths.relative(
                           this.paths.openApiDocument(),
                       ),
-                      message: this.openApiError,
+                      observed: this.openApiError,
                   },
               ]
             : [];
@@ -141,7 +141,7 @@ export class CoverageRuleSet {
                         file: this.paths.relative(
                             permissive.test.filePath,
                         ),
-                        message: `HTTP operation '${operation.method} ${operation.path}' uses a permissive status assertion. Fix: prepare one deterministic scenario per documented result and assert one exact status with equal() or strictEqual().`,
+                        observed: `HTTP operation '${operation.method} ${operation.path}' uses a permissive status assertion.`,
                         location: permissive.assertion.location,
                     },
                 );
@@ -152,7 +152,7 @@ export class CoverageRuleSet {
                         file: this.paths.relative(
                             permissive.test.filePath,
                         ),
-                        message: 'Tests must not accept multiple business outcomes with logical alternatives or status ranges. Fix: use separate deterministic tests with one exact expected result.',
+                        observed: 'The test accepts multiple business outcomes through logical alternatives or status ranges.',
                         location: permissive.assertion.location,
                     },
                 );
@@ -174,7 +174,7 @@ export class CoverageRuleSet {
                         file: this.paths.relative(
                             serverError.test.filePath,
                         ),
-                        message: `HTTP operation '${operation.method} ${operation.path}' asserts status 500 although OpenAPI does not document it. Fix: make the scenario deterministic and assert its documented business status.`,
+                        observed: `HTTP operation '${operation.method} ${operation.path}' asserts status 500 although OpenAPI does not document it.`,
                         location: serverError.assertion.location,
                     });
                 }
@@ -190,7 +190,7 @@ export class CoverageRuleSet {
                     this.issue(
                         analysis,
                         'HTTP_STATUS_CONTRACT',
-                        `Executable tests for '${operation.method} ${operation.path}' must assert documented statuses: ${missing.join(', ')}. Fix: create one deterministic test per status and assert it exactly with equal() or strictEqual().`,
+                        `Executable tests for '${operation.method} ${operation.path}' do not assert documented statuses: ${missing.join(', ')}.`,
                     ),
                 );
             }
@@ -274,14 +274,14 @@ export class CoverageRuleSet {
     /** Creates one normalized issue. */
     private issue(
         analysis: SourceAnalysis,
-        ruleId: string,
-        message: string,
+        ruleId: LintIssueDraft['ruleId'],
+        observed: string,
     ): LintIssueDraft {
         return {
             ruleId,
             severity: 'error',
             file: this.paths.relative(analysis.filePath),
-            message,
+            observed,
         };
     }
 }

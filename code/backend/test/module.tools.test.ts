@@ -11,6 +11,7 @@ import { ModuleInspector } from '../script/module-tools/module.inspector.ts';
 import { ModuleToolsCli } from '../script/module-tools/module-tools.cli.ts';
 import { ModuleVerifier } from '../script/module-tools/module.verifier.ts';
 import { ModuleManifestManager } from '../script/module-tools/module-manifest.manager.ts';
+import { FixtureProject } from './linter/fixture-project.ts';
 
 /** Captures focused verifier commands. */
 class RecordingRunner implements ModuleCommandRunner {
@@ -51,6 +52,27 @@ test('module status reports one deterministic next state', () => {
     const inspector = new ModuleInspector(projectRoot);
     assert.equal(inspector.inspect('health').state, 'ready');
     assert.throws(() => inspector.inspect('missing'), /does not exist/u);
+});
+
+test('blocked module status preserves the complete tutorial diagnostic', () => {
+    const fixture = new FixtureProject();
+    try {
+        fixture.write(
+            'code/backend/src/module/example/index.ts',
+            'export class IncorrectModule {}',
+        );
+        const status = new ModuleInspector(fixture.root).inspect('example');
+        assert.equal(status.state, 'blocked');
+        assert.match(status.message, /Where: /u);
+        assert.match(status.message, /Found: /u);
+        assert.match(status.message, /Why: /u);
+        assert.match(status.message, /Meaning: /u);
+        assert.match(status.message, /Architecture: /u);
+        assert.match(status.message, /How to fix:/u);
+        assert.match(status.message, /Verify:/u);
+    } finally {
+        fixture.dispose();
+    }
 });
 
 test('focused verifier runs required checks and direct module tests', () => {

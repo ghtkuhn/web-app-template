@@ -1,5 +1,9 @@
 import path from 'node:path';
-import type { LintIssueDraft, SourceAnalysis } from './interfaces.ts';
+import type {
+    LintIssueDraft,
+    SourceAnalysis,
+    SourceSpan,
+} from './interfaces.ts';
 import { PathResolver } from './path.resolver.ts';
 
 /** Enforces centralized database-driver and connection ownership. */
@@ -31,6 +35,7 @@ export class InfrastructureRuleSet {
                         analysis,
                         'DATABASE_DRIVER_OWNERSHIP',
                         `Database driver '${dependency.source}' may only be imported by base.database.ts.`,
+                        dependency.location,
                     ),
                 );
             }
@@ -43,18 +48,18 @@ export class InfrastructureRuleSet {
             'PostgresDialect',
             'Pool',
         ]);
-        if (
-            analysis.constructorCalls.some(
-                (constructor) =>
-                    constructor.className !== null &&
-                    connectionClasses.has(constructor.className),
-            )
-        ) {
+        const connection = analysis.constructorCalls.find(
+            (constructor) =>
+                constructor.className !== null &&
+                connectionClasses.has(constructor.className),
+        );
+        if (connection) {
             issues.push(
                 this.issue(
                     analysis,
                     'DATABASE_CONNECTION_CREATION',
                     'Database connections may only be created in base.database.ts.',
+                    connection.location,
                 ),
             );
         }
@@ -64,14 +69,16 @@ export class InfrastructureRuleSet {
     /** Creates one normalized infrastructure issue. */
     private issue(
         analysis: SourceAnalysis,
-        ruleId: string,
-        message: string,
+        ruleId: LintIssueDraft['ruleId'],
+        observed: string,
+        location?: SourceSpan,
     ): LintIssueDraft {
         return {
             ruleId,
             severity: 'error',
             file: this.paths.relative(analysis.filePath),
-            message,
+            observed,
+            location,
         };
     }
 }
