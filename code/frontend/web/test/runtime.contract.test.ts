@@ -71,7 +71,7 @@ test('repository runtime contract uses the active canonical runtime', () => {
 });
 
 test('runtime contract rejects a different Node version without installing it', () => {
-    expect(() => new RuntimeContract(fixture()).check(
+    expect(() => new RuntimeContract(fixture(), false).check(
         '24.18.0',
         '11.8.0',
     )).toThrow(/Node\.js 24\.19\.0 is required/);
@@ -82,7 +82,7 @@ test('runtime contract rejects workspace and Docker version drift', () => {
     write(workspaceRoot, 'code/backend/package.json', JSON.stringify({
         engines: { node: '22.23.1', npm: '>=11 <12' },
     }));
-    expect(() => new RuntimeContract(workspaceRoot).check(
+    expect(() => new RuntimeContract(workspaceRoot, false).check(
         '24.19.0',
         '11.8.0',
     )).toThrow(/code\/backend\/package\.json engines\.node/);
@@ -93,7 +93,7 @@ test('runtime contract rejects workspace and Docker version drift', () => {
         'deployment/docker/frontend.Dockerfile',
         'FROM node:22.23.1-bookworm-slim\n',
     );
-    expect(() => new RuntimeContract(dockerRoot).check(
+    expect(() => new RuntimeContract(dockerRoot, false).check(
         '24.19.0',
         '11.8.0',
     )).toThrow(/frontend\.Dockerfile must start/);

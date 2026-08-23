@@ -6,7 +6,10 @@ import type {
     UpdatePlan,
 } from './interfaces.ts';
 import { AgentInstructionPlanner } from './agent-instruction.planner.ts';
-import { PackageManifestMerger } from './package-manifest.merger.ts';
+import {
+    PACKAGE_MANIFEST_PATHS,
+    PackageManifestMerger,
+} from './package-manifest.merger.ts';
 import { ProjectConfigMerger } from './project-config.merger.ts';
 
 export const TEMPLATE_UPDATE_EXACT_IGNORES = new Set([
@@ -40,7 +43,10 @@ export class UpdatePlanner {
         ])]
             .filter((relativePath) =>
                 !this.agentInstructions.owns(relativePath) &&
-                relativePath !== ProjectConfigMerger.relativePath,
+                relativePath !== ProjectConfigMerger.relativePath &&
+                !PACKAGE_MANIFEST_PATHS.includes(
+                    relativePath as typeof PACKAGE_MANIFEST_PATHS[number],
+                ),
             )
             .sort();
         const actions: UpdateAction[] = [
@@ -60,16 +66,19 @@ export class UpdatePlanner {
                 conflicts,
             );
         }
-        const packagePlan = this.packageManifest.plan(
-            baseRoot,
-            localRoot,
-            incomingRoot,
-        );
-        if (packagePlan.action) {
-            actions.push(packagePlan.action);
-        }
-        if (packagePlan.conflict) {
-            conflicts.push(packagePlan.conflict);
+        for (const relativePath of PACKAGE_MANIFEST_PATHS) {
+            const packagePlan = this.packageManifest.plan(
+                baseRoot,
+                localRoot,
+                incomingRoot,
+                relativePath,
+            );
+            if (packagePlan.action) {
+                actions.push(packagePlan.action);
+            }
+            if (packagePlan.conflict) {
+                conflicts.push(packagePlan.conflict);
+            }
         }
         const projectConfigAction = this.projectConfig.plan(
             baseRoot,

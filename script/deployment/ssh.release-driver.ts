@@ -2,7 +2,31 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { ComponentName } from './interfaces.ts';
-import { ProcessRunner } from './process.runner.ts';
+import {
+    LXC_INFRASTRUCTURE_SCHEMA_VERSION,
+    LxcRuntimeContract,
+    type LxcReleaseContractData,
+} from './lxc-runtime.contract.ts';
+import {
+    ProcessExecutionError,
+    ProcessRunner,
+} from './process.runner.ts';
+
+export class SshTransportError extends Error {
+    public readonly exitCode = 255;
+}
+
+export class RemoteCommandError extends Error {
+    public readonly exitCode: number | null;
+
+    public constructor(exitCode: number | null) {
+        super(
+            `Remote SSH command failed${exitCode === null ? '' : ` with exit code ${exitCode}`}.`,
+        );
+        this.name = 'RemoteCommandError';
+        this.exitCode = exitCode;
+    }
+}
 
 export interface SshReleaseTarget {
     readonly installationId: string;
@@ -22,6 +46,7 @@ export class SshReleaseDriver {
     private readonly processes: ProcessRunner;
     private readonly environment: NodeJS.ProcessEnv;
     private readonly projectRoot: string;
+    private readonly runtimeContract = new LxcRuntimeContract();
     private temporaryRoot: string | undefined;
     private transportEnvironment: NodeJS.ProcessEnv | undefined;
     private hostKeyCommand: string | undefined;
@@ -53,21 +78,27 @@ export class SshReleaseDriver {
     ): Promise<void> {
         await this.withConnection(async () => {
             await this.waitForSsh();
+            if (this.privilegeMode === 'managed') {
+                await this.preflightRuntime();
+            }
             const installer = path.join(
                 this.projectRoot,
                 'deployment/lxc',
                 `install-${component}.sh`,
             );
+            const validator = this.validatorFile();
+            const expected = this.releaseContract(component);
             this.transport('scp', this.scpArguments([
                 archive,
                 `${archive}.sha256`,
                 installer,
+                validator,
                 configuration,
                 `${this.destination()}:/tmp/`,
             ]));
             this.transport('ssh', this.sshArguments([
                 this.destination(),
-                this.activationCommand(component, release),
+                this.activationCommand(component, release, expected),
             ]));
         });
     }
@@ -86,16 +117,31 @@ export class SshReleaseDriver {
         release?: string,
     ): Promise<void> {
         await this.withConnection(async () => {
+            await this.waitForSsh();
+            if (this.privilegeMode === 'managed') {
+                await this.preflightRuntime();
+            }
+            const validator = this.validatorFile();
+            this.transport('scp', this.scpArguments([
+                validator,
+                `${this.destination()}:/tmp/`,
+            ]));
             const root = this.componentRoot(component);
             const candidate = release
                 ? `${root}/releases/${release}`
                 : `${root}/previous`;
+            const expected = this.rollbackContracts(component);
             const command = [
                 `candidate=$(readlink -f ${candidate})`,
                 'test -d "$candidate"',
+                `case "$candidate/" in ${root}/releases/*/) true ;; *) exit 65 ;; esac`,
+                this.validateCandidate('$candidate', expected),
+                component === 'backend'
+                    ? 'test -d "$candidate/node_modules" && test ! -L "$candidate/node_modules"'
+                    : 'true',
                 `current=$(if [ -L ${root}/current ]; then readlink -f ${root}/current; fi)`,
                 `ln -sfnT "$candidate" ${root}/current`,
-                `if ! sh ${root}/install.sh ${root} ${this.target.installationId} ${this.privilegeMode} ${this.nodeVersion()} || ! ${this.healthCommand(component)}; then if [ -n "$current" ]; then ln -sfnT "$current" ${root}/current; sh ${root}/install.sh ${root} ${this.target.installationId} ${this.privilegeMode} ${this.nodeVersion()}; fi; exit 1; fi`,
+                `if ! ${this.installCommand(root, component)} || ! ${this.healthCommand(component)}; then if [ -n "$current" ]; then ln -sfnT "$current" ${root}/current; ${this.installCommand(root, component)}; fi; exit 1; fi`,
             ].join(' && ');
             this.transport('ssh', this.sshArguments([
                 this.destination(),
@@ -134,7 +180,7 @@ export class SshReleaseDriver {
             const command = [
                 `${this.serviceCommand('stop', 'backend')} || true`,
                 `${this.databaseMaintenanceCommand('restore')} ${backupId}`,
-                `sh ${root}/install.sh ${root} ${this.target.installationId} ${this.privilegeMode} ${this.nodeVersion()}`,
+                this.installCommand(root, 'backend'),
                 `if ! ${this.healthCommand('backend')}; then ${this.serviceCommand('stop', 'backend')} || true; exit 1; fi`,
                 this.databaseMaintenanceCommand('retain'),
             ].join(' && ');
@@ -150,45 +196,57 @@ export class SshReleaseDriver {
         if (!/^\d+\.\d+\.\d+$/u.test(nodeVersion)) {
             throw new Error('Bootstrap Node version is invalid.');
         }
-        await this.withConnection(async () => {
+        await this.infrastructure('bootstrap', nodeVersion);
+    }
+
+    /** Reports the installed Existing-LXC infrastructure contract. */
+    public async infrastructureStatus(): Promise<string> {
+        return this.withConnection(async () => {
             await this.waitForSsh();
-            const script = path.join(
-                this.projectRoot,
-                'deployment/lxc/bootstrap-existing-lxc.sh',
-            );
-            this.transport('scp', this.scpArguments([
-                script,
-                `${this.destination('root')}:/tmp/bootstrap-existing-lxc.sh`,
-            ]));
-            this.transport('ssh', this.sshArguments([
-                this.destination('root'),
-                `test "$(id -u)" -eq 0 && sh /tmp/bootstrap-existing-lxc.sh ${this.target.installationId} ${nodeVersion}`,
-            ]));
+            const infrastructure = this.remoteInfrastructure();
+            return `${JSON.stringify(infrastructure, null, 4)}\n`;
         });
+    }
+
+    /** Explicitly upgrades Existing-LXC operating-system integration. */
+    public async infrastructureUpgrade(nodeVersion: string): Promise<void> {
+        await this.infrastructure('upgrade', nodeVersion);
     }
 
     private activationCommand(
         component: ComponentName,
         release: string,
+        expected: LxcReleaseContractData,
     ): string {
         if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(release)) {
             throw new Error('Deployment release identifier is invalid.');
         }
         const root = this.componentRoot(component);
+        const candidate = `${root}/releases/${release}`;
         return [
             `cd /tmp && sha256sum -c ${component}-${release}.tgz.sha256`,
-            this.configurationCommand(component),
             `mkdir -p ${root}`,
             `install -m 700 /tmp/install-${component}.sh ${root}/install.sh`,
             `previous=$(if [ -L ${root}/current ] && [ -e ${root}/current ]; then readlink -f ${root}/current; fi)`,
+            `if [ -n "$previous" ]; then case "$previous/" in ${root}/releases/*/) true ;; *) exit 65 ;; esac; fi`,
+            `test ! -e ${candidate}`,
+            `mkdir -p ${candidate}`,
+            `tar -xzf /tmp/${component}-${release}.tgz -C ${candidate}`,
+            this.privilegeMode === 'root'
+                ? this.installCommand(root, component, 'prepare')
+                : 'true',
+            this.validateCandidate(candidate, expected),
+            `if [ -n "$previous" ]; then ${this.validateCandidate('$previous', this.rollbackContracts(component))}; fi`,
+            component === 'backend'
+                ? `cd ${candidate} && /usr/local/bin/npm ci --ignore-scripts --omit=dev --workspace @app/backend`
+                : 'true',
+            this.configurationCommand(component),
             component === 'backend'
                 ? `${this.serviceCommand('stop', component)} || true`
                 : 'true',
-            `mkdir -p ${root}/releases/${release}`,
-            `tar -xzf /tmp/${component}-${release}.tgz -C ${root}/releases/${release}`,
             `if [ -n "$previous" ]; then ln -sfnT "$previous" ${root}/previous; fi`,
-            `ln -sfnT ${root}/releases/${release} ${root}/current`,
-            `if ! sh ${root}/install.sh ${root} ${this.target.installationId} ${this.privilegeMode} ${this.nodeVersion()} || ! ${this.healthCommand(component)}; then if [ -n "$previous" ]; then ln -sfnT "$previous" ${root}/current; sh ${root}/install.sh ${root} ${this.target.installationId} ${this.privilegeMode} ${this.nodeVersion()}; fi; exit 1; fi`,
+            `ln -sfnT ${candidate} ${root}/current`,
+            `if ! ${this.installCommand(root, component)} || ! ${this.healthCommand(component)}; then if [ -n "$previous" ]; then ln -sfnT "$previous" ${root}/current; ${this.installCommand(root, component)}; fi; exit 1; fi`,
             component === 'backend'
                 ? this.sqliteMaintenanceIfConfigured('retain')
                 : 'true',
@@ -227,6 +285,17 @@ export class SshReleaseDriver {
         return `systemctl ${systemctl} ${service}`;
     }
 
+    private installCommand(
+        root: string,
+        component: ComponentName,
+        action: 'prepare' | 'activate' = 'activate',
+    ): string {
+        const base = `sh ${root}/install.sh ${root} ${this.target.installationId} ${this.privilegeMode} ${this.nodeVersion()} ${action}`;
+        return component === 'backend'
+            ? `${base} ${LxcRuntimeContract.backendLauncher}`
+            : base;
+    }
+
     private healthCommand(component: ComponentName): string {
         const request = component === 'backend'
             ? 'curl -fsS http://127.0.0.1:3000/api/health'
@@ -242,7 +311,7 @@ export class SshReleaseDriver {
             `DB_SQLITE_PATH="$(sed -n 's/^DB_SQLITE_PATH=//p' /etc/${id}/backend.env)"`,
             `DB_BACKUP_RETENTION="$(sed -n 's/^DB_BACKUP_RETENTION=//p' /etc/${id}/backend.env)"`,
             'export DB_SQLITE_PATH DB_BACKUP_RETENTION',
-            `/usr/local/bin/node --experimental-transform-types /opt/${id}/backend/current/script/database-maintenance.ts ${command}`,
+            `/usr/local/bin/node --experimental-transform-types /opt/${id}/backend/current/${LxcRuntimeContract.backendMaintenanceLauncher} ${command}`,
         ].join('; ');
     }
 
@@ -265,18 +334,223 @@ export class SshReleaseDriver {
         return value;
     }
 
-    private async waitForSsh(): Promise<void> {
+    private npmRange(): string {
+        const value = JSON.parse(fs.readFileSync(
+            path.join(this.projectRoot, 'package.json'),
+            'utf8',
+        )) as { engines?: { npm?: unknown } };
+        if (typeof value.engines?.npm !== 'string') {
+            throw new Error('package.json engines.npm is required.');
+        }
+        return value.engines.npm;
+    }
+
+    private releaseContract(component: ComponentName): LxcReleaseContractData {
+        return this.runtimeContract.release(
+            component,
+            this.nodeVersion(),
+            this.npmRange(),
+        );
+    }
+
+    private rollbackContracts(
+        component: ComponentName,
+    ): readonly LxcReleaseContractData[] {
+        const current = this.releaseContract(component);
+        return component === 'backend'
+            ? [
+                  current,
+                  ...this.runtimeContract.legacyBackendReleases(
+                      this.nodeVersion(),
+                      this.npmRange(),
+                  ),
+              ]
+            : [current];
+    }
+
+    private validatorFile(): string {
+        const target = path.join(
+            this.temporaryRoot as string,
+            'lxc-release-validator.mjs',
+        );
+        fs.writeFileSync(
+            target,
+            this.runtimeContract.candidateValidator(),
+            { mode: 0o700 },
+        );
+        return target;
+    }
+
+    private validateCandidate(
+        candidate: string,
+        expected: LxcReleaseContractData | readonly LxcReleaseContractData[],
+    ): string {
+        return `/usr/local/bin/node /tmp/lxc-release-validator.mjs "${candidate}" ${this.shellQuote(JSON.stringify(expected))}`;
+    }
+
+    private async preflightRuntime(): Promise<void> {
+        const infrastructure = this.remoteInfrastructure();
+        const requiredNode = this.nodeVersion();
+        const requiredNpm = this.npmRange();
+        if (
+            infrastructure.schemaVersion !== LXC_INFRASTRUCTURE_SCHEMA_VERSION ||
+            infrastructure.nodeVersion !== requiredNode ||
+            infrastructure.npmRange !== requiredNpm ||
+            infrastructure.backendLauncher !==
+                LxcRuntimeContract.backendLauncher ||
+            infrastructure.maintenanceLauncher !==
+                LxcRuntimeContract.backendMaintenanceLauncher
+        ) {
+            throw new Error(
+                `Existing-LXC infrastructure contract requires schema ${LXC_INFRASTRUCTURE_SCHEMA_VERSION}, Node.js ${requiredNode}, npm '${requiredNpm}', launcher ${LxcRuntimeContract.backendLauncher}, and maintenance launcher ${LxcRuntimeContract.backendMaintenanceLauncher}; observed metadata is missing, stale, or invalid. Run deployment:infrastructure:upgrade before deploying.`,
+            );
+        }
+        const observedNode = this.transport('ssh', this.sshArguments([
+            this.destination(),
+            '/usr/local/bin/node --version',
+        ])).replace(/^v/u, '');
+        const observedNpm = this.transport('ssh', this.sshArguments([
+            this.destination(),
+            '/usr/local/bin/npm --version',
+        ]));
+        if (
+            observedNode !== requiredNode ||
+            !this.matchesNpm(observedNpm, requiredNpm)
+        ) {
+            throw new Error(
+                `Remote runtime mismatch: required Node.js ${requiredNode} and npm '${requiredNpm}'; observed Node.js ${observedNode} and npm ${observedNpm}. Run deployment:infrastructure:upgrade before deploying.`,
+            );
+        }
+    }
+
+    private remoteInfrastructure(): Record<string, unknown> {
+        const target = `/etc/${this.target.installationId}/infrastructure.json`;
+        const output = this.transport('ssh', this.sshArguments([
+            this.destination(),
+            `if [ -f ${target} ]; then cat ${target}; else printf '{"schemaVersion":0}'; fi`,
+        ]));
+        const value = JSON.parse(output) as unknown;
+        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+            throw new Error('Remote Existing-LXC infrastructure metadata is invalid.');
+        }
+        return value as Record<string, unknown>;
+    }
+
+    private matchesNpm(version: string, range: string): boolean {
+        const match = /^>=(\d+) <(\d+)$/u.exec(range);
+        const major = /^(\d+)\./u.exec(version)?.[1];
+        return Boolean(
+            match?.[1] &&
+            match[2] &&
+            major &&
+            Number(major) >= Number(match[1]) &&
+            Number(major) < Number(match[2]),
+        );
+    }
+
+    private async infrastructure(
+        mode: 'bootstrap' | 'upgrade',
+        nodeVersion: string,
+    ): Promise<void> {
+        await this.withConnection(async () => {
+            await this.waitForSsh('root');
+            const script = path.join(
+                this.projectRoot,
+                'deployment/lxc/bootstrap-existing-lxc.sh',
+            );
+            const files = [
+                this.validatorFile(),
+                ...this.legacyMigrationFiles(),
+            ];
+            this.transport('scp', this.scpArguments([
+                script,
+                ...files,
+                `${this.destination('root')}:/tmp/`,
+            ]));
+            this.transport('ssh', this.sshArguments([
+                this.destination('root'),
+                [
+                    'test "$(id -u)" -eq 0',
+                    `sh /tmp/bootstrap-existing-lxc.sh ${mode} ${this.target.installationId} ${nodeVersion} ${this.shellQuote(this.npmRange())} ${LXC_INFRASTRUCTURE_SCHEMA_VERSION} ${LxcRuntimeContract.backendLauncher} ${LxcRuntimeContract.backendMaintenanceLauncher}`,
+                ].join(' && '),
+            ]));
+        });
+    }
+
+    private legacyMigrationFiles(): string[] {
+        const root = this.temporaryRoot as string;
+        const nodeVersion = this.nodeVersion();
+        const npmRange = this.npmRange();
+        const variants = this.runtimeContract.legacyBackendReleases(
+            nodeVersion,
+            npmRange,
+        );
+        const files: string[] = [];
+        const canonical = path.join(root, 'canonical-backend-contract.json');
+        fs.writeFileSync(
+            canonical,
+            this.runtimeContract.render(this.runtimeContract.release(
+                'backend',
+                nodeVersion,
+                npmRange,
+            )),
+            'utf8',
+        );
+        files.push(canonical);
+        for (const [index, variant] of variants.entries()) {
+            const label = index === 0 ? 'workspace' : 'flat';
+            const entrypoint = index === 0
+                ? 'code/backend/src/index.ts'
+                : 'src/index.ts';
+            const launcher = path.join(root, `legacy-${label}-launcher.mjs`);
+            const maintenanceLauncher = path.join(
+                root,
+                `legacy-${label}-maintenance-launcher.mjs`,
+            );
+            const contract = path.join(root, `legacy-${label}-contract.json`);
+            fs.writeFileSync(
+                launcher,
+                this.runtimeContract.backendLauncher(entrypoint),
+                'utf8',
+            );
+            fs.writeFileSync(
+                maintenanceLauncher,
+                this.runtimeContract.backendMaintenanceLauncher(
+                    index === 0
+                        ? 'code/backend/script/database-maintenance.ts'
+                        : 'script/database-maintenance.ts',
+                ),
+                'utf8',
+            );
+            fs.writeFileSync(
+                contract,
+                this.runtimeContract.render(variant),
+                'utf8',
+            );
+            files.push(launcher, maintenanceLauncher, contract);
+        }
+        return files;
+    }
+
+    private shellQuote(value: string): string {
+        return `'${value.replaceAll("'", "'\\''")}'`;
+    }
+
+    private async waitForSsh(user = this.target.sshUser): Promise<void> {
         for (let attempt = 0; attempt < 60; attempt += 1) {
             try {
                 this.transport('ssh', this.sshArguments([
-                    this.destination(),
+                    this.destination(user),
                     'true',
                 ]));
                 return;
-            } catch {
+            } catch (error) {
+                if (!(error instanceof SshTransportError)) {
+                    throw error;
+                }
                 if (this.target.sshAuthentication === 'password') {
                     throw new Error(
-                        `SSH password authentication failed for ${this.target.sshHost}.`,
+                        `SSH transport or authentication failed for ${this.target.sshHost}.`,
                     );
                 }
                 await new Promise((resolve) => setTimeout(resolve, 2_000));
@@ -407,10 +681,18 @@ export class SshReleaseDriver {
                 env: this.transportEnvironment,
             });
         } catch (error) {
-            if (this.target.sshAuthentication === 'password') {
-                throw new Error(
-                    `SSH password transport failed for ${this.target.sshHost}.`,
+            if (
+                error instanceof ProcessExecutionError &&
+                error.exitCode === 255
+            ) {
+                const transportError = new SshTransportError(
+                    `SSH transport or authentication failed for ${this.target.sshHost}.`,
                 );
+                transportError.name = 'SshTransportError';
+                throw transportError;
+            }
+            if (command === 'ssh' && error instanceof ProcessExecutionError) {
+                throw new RemoteCommandError(error.exitCode);
             }
             throw error;
         }

@@ -11,12 +11,23 @@ import { DockerDeploymentDriver } from '../../../../script/deployment/docker.dri
 import { ExistingLxcDeploymentDriver } from '../../../../script/deployment/existing-lxc.driver.ts';
 import { DeploymentConfigRenderer } from '../../../../script/deployment/config.renderer.ts';
 import { ReleaseBuilder } from '../../../../script/deployment/release.builder.ts';
+import {
+    LXC_INFRASTRUCTURE_SCHEMA_VERSION,
+    LxcRuntimeContract,
+} from '../../../../script/deployment/lxc-runtime.contract.ts';
+import {
+    LXC_CONTRACT_FILES,
+    LxcContractCatalog,
+} from '../../../../script/deployment/lxc-contract.catalog.ts';
 import type {
     DockerTarget,
     ExistingLxcTarget,
     ProxmoxLxcTarget,
 } from '../../../../script/deployment/interfaces.ts';
-import type { ProcessRunner } from '../../../../script/deployment/process.runner.ts';
+import {
+    ProcessExecutionError,
+    ProcessRunner,
+} from '../../../../script/deployment/process.runner.ts';
 
 const roots: string[] = [];
 const HOST_KEY_FINGERPRINT =
@@ -405,34 +416,66 @@ test('Docker driver builds only the selected component image', () => {
     }]);
 });
 
-test('release builder uses a backend allowlist that excludes credentials', () => {
-    const calls: Array<{ command: string; arguments_: readonly string[] }> = [];
-    const runner = {
-        run(command: string, arguments_: readonly string[]): string {
-            calls.push({ command, arguments_ });
-            if (command === 'tar') {
-                fs.writeFileSync(arguments_[1] as string, 'archive');
-            }
-            return '';
-        },
-    } as ProcessRunner;
+test('real backend release matches the service contract and strict allowlist', () => {
     const projectRoot = path.resolve(
         path.dirname(new URL(import.meta.url).pathname),
         '../../../..',
     );
-    const release = new ReleaseBuilder(projectRoot, runner).build('backend');
-
-    expect(calls[0]?.arguments_).toEqual([
-        '-czf',
+    const release = new ReleaseBuilder(projectRoot).build('backend');
+    roots.push(path.dirname(release.archive));
+    const extracted = fs.mkdtempSync(path.join(os.tmpdir(), 'release-extracted-'));
+    roots.push(extracted);
+    new ProcessRunner().run('tar', [
+        '-xzf',
         release.archive,
         '-C',
-        'code/backend',
-        'package.json',
-        'src',
-        'script/database-maintenance.ts',
+        extracted,
     ]);
-    expect(JSON.stringify(calls)).not.toContain('.credentials.env');
-    fs.rmSync(path.dirname(release.archive), { recursive: true, force: true });
+    const expected = new LxcRuntimeContract().release(
+        'backend',
+        '24.19.0',
+        '>=11 <12',
+    );
+    const manifest = JSON.parse(fs.readFileSync(
+        path.join(extracted, LxcRuntimeContract.manifest),
+        'utf8',
+    ));
+
+    expect(manifest).toEqual(expected);
+    new LxcRuntimeContract().validate(extracted, expected);
+    expect(fs.readFileSync(
+        path.join(extracted, LxcRuntimeContract.backendLauncher),
+        'utf8',
+    )).toContain('./code/backend/src/index.ts');
+    for (const relativePath of [
+        'package.json',
+        'package-lock.json',
+        'run-database-maintenance.mjs',
+        'code/backend/package.json',
+        'code/backend/src/index.ts',
+        'code/backend/script/database-maintenance.ts',
+    ]) {
+        expect(fs.statSync(path.join(extracted, relativePath)).isFile()).toBe(true);
+    }
+    const archivedPaths = new ProcessRunner().run(
+        'tar',
+        ['-tzf', release.archive],
+    );
+    for (const forbidden of [
+        '.credentials.env',
+        '.DS_Store',
+        'node_modules',
+        'data/',
+        'code/frontend/',
+    ]) {
+        expect(archivedPaths).not.toContain(forbidden);
+    }
+    expect(fs.readFileSync(
+        path.join(projectRoot, 'deployment/lxc/bootstrap-existing-lxc.sh'),
+        'utf8',
+    )).toContain(
+        'ExecStart=/usr/local/bin/node --experimental-transform-types ${backend_launcher}',
+    );
 });
 
 test('backend deployment configuration carries backup policy and release', () => {
@@ -688,7 +731,7 @@ test('LXC database restore keeps stop, restore, restart, and health ordered', as
 
     const command = calls.at(-1)?.arguments_.at(-1) ?? '';
     expect(command).toContain('systemctl stop web-app-backend');
-    expect(command).toContain('database-maintenance.ts restore');
+    expect(command).toContain('run-database-maintenance.mjs restore');
     expect(command).toContain('install.sh');
     expect(command).toContain('while [ "$attempt" -lt 30 ]');
     expect(command).toContain('systemctl stop web-app-backend || true; exit 1');
@@ -715,6 +758,23 @@ test('Existing-LXC pins host keys and supports release lifecycle operations', as
                 arguments_,
                 environment: options?.env,
             });
+            const remoteCommand = arguments_.at(-1) ?? '';
+            if (remoteCommand.includes('infrastructure.json')) {
+                return JSON.stringify({
+                    schemaVersion: LXC_INFRASTRUCTURE_SCHEMA_VERSION,
+                    nodeVersion: '24.19.0',
+                    npmRange: '>=11 <12',
+                    backendLauncher: LxcRuntimeContract.backendLauncher,
+                    maintenanceLauncher:
+                        LxcRuntimeContract.backendMaintenanceLauncher,
+                });
+            }
+            if (remoteCommand === '/usr/local/bin/node --version') {
+                return 'v24.19.0';
+            }
+            if (remoteCommand === '/usr/local/bin/npm --version') {
+                return '11.17.0';
+            }
             return command === 'ssh' ? 'active' : '';
         },
     } as ProcessRunner;
@@ -745,6 +805,210 @@ test('Existing-LXC pins host keys and supports release lifecycle operations', as
     expect(argumentsText).toContain('KnownHostsCommand=');
     expect(argumentsText).toContain('/opt/sample-app/backend');
     expect(argumentsText).toContain('releases/release-1');
+    const activation = calls.find((call) =>
+        call.arguments_.at(-1)?.includes('sha256sum -c'),
+    )?.arguments_.at(-1) ?? '';
+    expect(() => new ProcessRunner().run(
+        'sh',
+        ['-n', '-c', activation],
+    )).not.toThrow();
+    expect(activation.indexOf('lxc-release-validator.mjs')).toBeLessThan(
+        activation.indexOf('service-control stop backend'),
+    );
+    expect(activation.indexOf('npm ci')).toBeLessThan(
+        activation.indexOf('service-control stop backend'),
+    );
+    expect(activation).toContain(
+        'run-database-maintenance.mjs',
+    );
+    const rollback = calls.at(-1)?.arguments_.at(-1) ?? '';
+    expect(() => new ProcessRunner().run(
+        'sh',
+        ['-n', '-c', rollback],
+    )).not.toThrow();
+    expect(rollback.indexOf('lxc-release-validator.mjs')).toBeLessThan(
+        rollback.indexOf('ln -sfnT'),
+    );
+});
+
+test('Existing-LXC runtime mismatch fails before upload or downtime', async () => {
+    const calls: Array<{ command: string; arguments_: readonly string[] }> = [];
+    const runner = {
+        run(command: string, arguments_: readonly string[]): string {
+            calls.push({ command, arguments_ });
+            const remoteCommand = arguments_.at(-1) ?? '';
+            if (remoteCommand.includes('infrastructure.json')) {
+                return JSON.stringify({
+                    schemaVersion: 2,
+                    nodeVersion: '24.19.0',
+                    npmRange: '>=11 <12',
+                    backendLauncher: LxcRuntimeContract.backendLauncher,
+                    maintenanceLauncher:
+                        LxcRuntimeContract.backendMaintenanceLauncher,
+                });
+            }
+            if (remoteCommand === '/usr/local/bin/node --version') {
+                return 'v22.23.1';
+            }
+            if (remoteCommand === '/usr/local/bin/npm --version') {
+                return '11.17.0';
+            }
+            return '';
+        },
+    } as ProcessRunner;
+    const projectRoot = path.resolve(
+        path.dirname(new URL(import.meta.url).pathname),
+        '../../../..',
+    );
+
+    await expect(new ExistingLxcDeploymentDriver(
+        existingTarget(),
+        runner,
+        { DEPLOYMENT_SSH_PRIVATE_KEY: '/keys/deploy' },
+        projectRoot,
+    ).deploy(
+        'backend',
+        '/tmp/backend-release.tgz',
+        'release-1',
+        '/tmp/backend.env',
+    )).rejects.toThrow(
+        /required Node\.js 24\.19\.0.*observed Node\.js 22\.23\.1/u,
+    );
+    expect(calls.some((call) => call.command === 'scp')).toBe(false);
+    expect(calls.flatMap((call) => call.arguments_).join(' '))
+        .not.toContain('systemctl stop');
+});
+
+test('remote service failures remain distinct from SSH transport failures', async () => {
+    const projectRoot = path.resolve(
+        path.dirname(new URL(import.meta.url).pathname),
+        '../../../..',
+    );
+    const statusRunner = {
+        run(command: string): string {
+            throw new ProcessExecutionError(command, 3, null);
+        },
+    } as ProcessRunner;
+    await expect(new ExistingLxcDeploymentDriver(
+        existingTarget('password'),
+        statusRunner,
+        { DEPLOYMENT_SSH_PASSWORD: 'secret' },
+        projectRoot,
+    ).status('backend')).rejects.toThrow(/Remote SSH command.*exit code 3/u);
+
+    const transportRunner = {
+        run(command: string): string {
+            throw new ProcessExecutionError(command, 255, null);
+        },
+    } as ProcessRunner;
+    await expect(new ExistingLxcDeploymentDriver(
+        existingTarget('password'),
+        transportRunner,
+        { DEPLOYMENT_SSH_PASSWORD: 'secret' },
+        projectRoot,
+    ).status('backend')).rejects.toThrow(/transport or authentication/u);
+});
+
+test('process failures preserve exit codes without echoing arguments', () => {
+    let observed: unknown;
+    try {
+        new ProcessRunner().run(process.execPath, [
+            '--eval',
+            "process.stderr.write('sensitive-output'); process.exit(7);",
+        ]);
+    } catch (error) {
+        observed = error;
+    }
+
+    expect(observed).toBeInstanceOf(ProcessExecutionError);
+    expect(observed).toMatchObject({
+        command: process.execPath,
+        exitCode: 7,
+        signal: null,
+    });
+    expect(String(observed)).not.toContain('sensitive-output');
+    expect(String(observed)).not.toContain('process.exit');
+});
+
+test('release validation rejects symlinks that escape the candidate', () => {
+    const candidate = fs.mkdtempSync(path.join(os.tmpdir(), 'release-candidate-'));
+    roots.push(candidate);
+    const outside = path.join(path.dirname(candidate), 'outside-entrypoint.ts');
+    fs.writeFileSync(outside, 'export {};');
+    roots.push(outside);
+    const contract = new LxcRuntimeContract();
+    const expected = contract.release('backend', '24.19.0', '>=11 <12');
+    for (const relativePath of expected.requiredFiles) {
+        const target = path.join(candidate, relativePath);
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.writeFileSync(target, relativePath);
+    }
+    fs.writeFileSync(
+        path.join(candidate, LxcRuntimeContract.manifest),
+        contract.render(expected),
+    );
+    fs.rmSync(path.join(candidate, LxcRuntimeContract.backendLauncher));
+    fs.symlinkSync(outside, path.join(
+        candidate,
+        LxcRuntimeContract.backendLauncher,
+    ));
+
+    expect(() => contract.validate(candidate, expected)).toThrow(
+        /forbidden symlink/u,
+    );
+});
+
+test('release validation rejects missing entrypoints and altered contracts', () => {
+    const candidate = fs.mkdtempSync(path.join(os.tmpdir(), 'release-missing-'));
+    roots.push(candidate);
+    const contract = new LxcRuntimeContract();
+    const expected = contract.release('backend', '24.19.0', '>=11 <12');
+    for (const relativePath of expected.requiredFiles) {
+        const target = path.join(candidate, relativePath);
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.writeFileSync(target, relativePath);
+    }
+    fs.writeFileSync(
+        path.join(candidate, LxcRuntimeContract.manifest),
+        contract.render(expected),
+    );
+    fs.rmSync(path.join(candidate, 'code/backend/src/index.ts'));
+    expect(() => contract.validate(candidate, expected)).toThrow(
+        /index\.ts.*missing/u,
+    );
+
+    fs.writeFileSync(
+        path.join(candidate, 'code/backend/src/index.ts'),
+        'restored',
+    );
+    fs.writeFileSync(
+        path.join(candidate, LxcRuntimeContract.manifest),
+        contract.render({ ...expected, layout: 'legacy-flat-v0' }),
+    );
+    expect(() => contract.validate(candidate, expected)).toThrow(
+        /does not match/u,
+    );
+});
+
+test('LXC contract catalog rejects a mixed cross-file implementation', () => {
+    const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'lxc-contract-'));
+    roots.push(fixture);
+    for (const relativePath of LXC_CONTRACT_FILES) {
+        const target = path.join(fixture, relativePath);
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.writeFileSync(target, `incoming:${relativePath}\n`);
+    }
+    const catalog = new LxcContractCatalog();
+    catalog.generate(fixture);
+    expect(() => catalog.check(fixture)).not.toThrow();
+
+    fs.appendFileSync(
+        path.join(fixture, 'script/deployment/release.builder.ts'),
+        'local legacy layout\n',
+    );
+    expect(() => catalog.check(fixture)).toThrow(
+        /cross-file contract|contract drift/u,
+    );
 });
 
 test('Existing-LXC password stays out of arguments and missing secrets fail', async () => {
@@ -798,7 +1062,7 @@ test('Existing-LXC bootstrap is explicit and passes validated parameters', async
 
     expect(calls.some((call) =>
         call.arguments_.at(-1)?.includes(
-            'bootstrap-existing-lxc.sh sample-app 24.19.0',
+            'bootstrap-existing-lxc.sh bootstrap sample-app 24.19.0',
         ),
     )).toBe(true);
     expect(calls.some((call) =>
@@ -809,4 +1073,77 @@ test('Existing-LXC bootstrap is explicit and passes validated parameters', async
     expect(calls.some((call) =>
         call.arguments_.at(-1)?.includes('deployment:deploy'),
     )).toBe(false);
+    const bootstrapScript = fs.readFileSync(
+        path.join(projectRoot, 'deployment/lxc/bootstrap-existing-lxc.sh'),
+        'utf8',
+    );
+    expect(bootstrapScript).toContain('trap cleanup EXIT HUP INT TERM');
+    expect(bootstrapScript).toContain('restore_path "$unit_file" backend-unit');
+    expect(bootstrapScript).toContain(
+        'Unversioned Existing-LXC infrastructure exists',
+    );
+});
+
+test('Existing-LXC infrastructure upgrade is explicit and versioned', async () => {
+    const calls: Array<{ command: string; arguments_: readonly string[] }> = [];
+    const runner = {
+        run(command: string, arguments_: readonly string[]): string {
+            calls.push({ command, arguments_ });
+            return '';
+        },
+    } as ProcessRunner;
+    const projectRoot = path.resolve(
+        path.dirname(new URL(import.meta.url).pathname),
+        '../../../..',
+    );
+
+    await new ExistingLxcDeploymentDriver(
+        existingTarget(),
+        runner,
+        { DEPLOYMENT_SSH_PRIVATE_KEY: '/keys/deploy' },
+        projectRoot,
+    ).infrastructureUpgrade('24.19.0');
+
+    const text = calls.flatMap((call) => call.arguments_).join(' ');
+    expect(text).toContain(
+        'bootstrap-existing-lxc.sh upgrade sample-app 24.19.0',
+    );
+    expect(text).toContain(String(LXC_INFRASTRUCTURE_SCHEMA_VERSION));
+    expect(text).toContain('legacy-workspace-contract.json');
+    expect(text).not.toContain('deployment:deploy');
+});
+
+test('Existing-LXC infrastructure status is read-only and structured', async () => {
+    const calls: Array<{ command: string; arguments_: readonly string[] }> = [];
+    const runner = {
+        run(command: string, arguments_: readonly string[]): string {
+            calls.push({ command, arguments_ });
+            return arguments_.at(-1)?.includes('infrastructure.json')
+                ? JSON.stringify({
+                      schemaVersion: LXC_INFRASTRUCTURE_SCHEMA_VERSION,
+                      nodeVersion: '24.19.0',
+                      npmRange: '>=11 <12',
+                  })
+                : '';
+        },
+    } as ProcessRunner;
+    const projectRoot = path.resolve(
+        path.dirname(new URL(import.meta.url).pathname),
+        '../../../..',
+    );
+
+    const output = await new ExistingLxcDeploymentDriver(
+        existingTarget(),
+        runner,
+        { DEPLOYMENT_SSH_PRIVATE_KEY: '/keys/deploy' },
+        projectRoot,
+    ).infrastructureStatus();
+
+    expect(JSON.parse(output)).toMatchObject({
+        schemaVersion: LXC_INFRASTRUCTURE_SCHEMA_VERSION,
+        nodeVersion: '24.19.0',
+    });
+    expect(calls.some((call) => call.command === 'scp')).toBe(false);
+    expect(calls.flatMap((call) => call.arguments_).join(' '))
+        .not.toContain('systemctl');
 });

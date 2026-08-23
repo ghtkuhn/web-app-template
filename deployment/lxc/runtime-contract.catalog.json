@@ -1,0 +1,11 @@
+{
+    "schemaVersion": 1,
+    "files": {
+        "script/deployment/lxc-runtime.contract.ts": "81a1b7d3eda2d0911130a11a81b066a060efefa6c7ac87ae5307d10dd33ad34a",
+        "script/deployment/release.builder.ts": "9e0fe7e485ca16c2e4b522756951ff161506b807a22861a7cef550cc4303ae33",
+        "script/deployment/ssh.release-driver.ts": "01e697332b5b83fa68c48071abda325760ba1859cfadf8b4129fb088bfec65a0",
+        "deployment/lxc/bootstrap-existing-lxc.sh": "ed04dc1e6068f521d9708663690fdca04806bab26b11e197eb3dd862cdb3f89f",
+        "deployment/lxc/install-backend.sh": "525daabb7e25e868ca2750a78cf9c5dcca90bc378864a81e8145daa582e35c84",
+        "deployment/lxc/install-frontend.sh": "43d871f3d550a840c405b020e9daf97b7164dd303579a4bb838295a7d060309c"
+    }
+}

@@ -53,4 +53,12 @@ export class ExistingLxcDeploymentDriver {
     public bootstrap(nodeVersion: string): Promise<void> {
         return this.releases.bootstrap(nodeVersion);
     }
+
+    public infrastructureStatus(): Promise<string> {
+        return this.releases.infrastructureStatus();
+    }
+
+    public infrastructureUpgrade(nodeVersion: string): Promise<void> {
+        return this.releases.infrastructureUpgrade(nodeVersion);
+    }
 }

@@ -646,6 +646,104 @@ test('package planning migrates a legacy application to the template runtime', (
     });
 });
 
+test('package planning merges workspace manifests and enforces target runtime', () => {
+    const base = temporaryRoot('template-workspace-base-');
+    const local = temporaryRoot('template-workspace-local-');
+    const incoming = temporaryRoot('template-workspace-incoming-');
+    for (const relativePath of [
+        'code/backend/package.json',
+        'code/frontend/web/package.json',
+    ]) {
+        write(base, relativePath, JSON.stringify({
+            name: relativePath.includes('backend') ? '@app/backend' : '@app/web',
+            engines: { node: '>=22.23.1 <23' },
+            scripts: { test: 'old' },
+            dependencies: { shared: '1.0.0' },
+            devDependencies: { '@types/node': '^22.20.1' },
+        }));
+        write(local, relativePath, JSON.stringify({
+            name: relativePath.includes('backend')
+                ? '@customer/backend'
+                : '@customer/web',
+            engines: { node: '>=20' },
+            scripts: { test: 'old', custom: 'local-command' },
+            dependencies: { shared: '1.0.0', local: '7.0.0' },
+            devDependencies: { '@types/node': '^22.20.1' },
+        }));
+        write(incoming, relativePath, JSON.stringify({
+            name: relativePath.includes('backend') ? '@app/backend' : '@app/web',
+            engines: { node: '24.19.0', npm: '>=11 <12' },
+            scripts: { test: 'new' },
+            dependencies: { shared: '1.0.0' },
+            devDependencies: { '@types/node': '^24.13.3' },
+        }));
+    }
+    writeCanonicalInstructions([base, local, incoming]);
+
+    const plan = new UpdatePlanner().plan(base, local, incoming);
+
+    expect(plan.conflicts).toEqual([]);
+    for (const relativePath of [
+        'code/backend/package.json',
+        'code/frontend/web/package.json',
+    ]) {
+        const action = plan.actions.find(
+            (candidate) => candidate.relativePath === relativePath,
+        );
+        expect(action?.kind).toBe('write');
+        const merged = JSON.parse(fs.readFileSync(
+            (action as { sourcePath: string }).sourcePath,
+            'utf8',
+        ));
+        expect(merged.engines).toEqual({
+            node: '24.19.0',
+            npm: '>=11 <12',
+        });
+        expect(merged.name).toContain('@customer/');
+        expect(merged.scripts).toEqual({
+            custom: 'local-command',
+            test: 'new',
+        });
+        expect(merged.dependencies.local).toBe('7.0.0');
+        expect(merged.devDependencies['@types/node']).toBe('^24.13.3');
+    }
+});
+
+test('package planning rejects a symlinked workspace manifest', () => {
+    const base = temporaryRoot('template-workspace-base-');
+    const local = temporaryRoot('template-workspace-local-');
+    const incoming = temporaryRoot('template-workspace-incoming-');
+    const manifest = JSON.stringify({ engines: { node: '24.19.0' } });
+    write(base, 'code/backend/package.json', manifest);
+    write(incoming, 'code/backend/package.json', manifest);
+    write(local, 'backend-manifest.json', manifest);
+    fs.mkdirSync(path.join(local, 'code/backend'), { recursive: true });
+    fs.symlinkSync(
+        path.join(local, 'backend-manifest.json'),
+        path.join(local, 'code/backend/package.json'),
+    );
+    writeCanonicalInstructions([base, local, incoming]);
+
+    expect(() => new UpdatePlanner().plan(base, local, incoming)).toThrow(
+        /regular file, not a symlink/u,
+    );
+});
+
+test('package planning reports invalid workspace JSON before creating actions', () => {
+    const base = temporaryRoot('template-workspace-base-');
+    const local = temporaryRoot('template-workspace-local-');
+    const incoming = temporaryRoot('template-workspace-incoming-');
+    const manifest = JSON.stringify({ engines: { node: '24.19.0' } });
+    write(base, 'code/frontend/web/package.json', manifest);
+    write(incoming, 'code/frontend/web/package.json', manifest);
+    write(local, 'code/frontend/web/package.json', '{invalid');
+    writeCanonicalInstructions([base, local, incoming]);
+
+    expect(() => new UpdatePlanner().plan(base, local, incoming)).toThrow(
+        /code\/frontend\/web\/package\.json must contain valid JSON/u,
+    );
+});
+
 test('package planning reports property-level concurrent changes', () => {
     const base = temporaryRoot('template-base-');
     const local = temporaryRoot('template-local-');
@@ -869,6 +967,132 @@ test('transaction restores files, metadata, and lockfile after install failure',
     )).toBe('{"version":"1.0.0"}');
     expect(fs.readFileSync(path.join(project, 'package-lock.json'), 'utf8'))
         .toBe('old-lock');
+});
+
+test('transaction rejects workspace runtime drift before target npm install', () => {
+    const project = temporaryRoot('template-runtime-project-');
+    const incoming = temporaryRoot('template-runtime-incoming-');
+    const repositoryRoot = path.resolve(
+        path.dirname(new URL(import.meta.url).pathname),
+        '../../../..',
+    );
+    for (const relativePath of [
+        '.nvmrc',
+        '.npmrc',
+        'package.json',
+        'code/backend/package.json',
+        'code/frontend/web/package.json',
+        'deployment/docker/backend.Dockerfile',
+        'deployment/docker/frontend.Dockerfile',
+        'deployment/lxc/runtime-contract.catalog.json',
+        'deployment/lxc/bootstrap-existing-lxc.sh',
+        'deployment/lxc/install-backend.sh',
+        'deployment/lxc/install-frontend.sh',
+        'script/deployment/lxc-runtime.contract.ts',
+        'script/deployment/release.builder.ts',
+        'script/deployment/ssh.release-driver.ts',
+    ]) {
+        write(
+            project,
+            relativePath,
+            fs.readFileSync(path.join(repositoryRoot, relativePath), 'utf8'),
+        );
+    }
+    const backend = JSON.parse(fs.readFileSync(
+        path.join(project, 'code/backend/package.json'),
+        'utf8',
+    ));
+    backend.engines.node = '>=22.23.1 <23';
+    write(
+        incoming,
+        'code/backend/package.json',
+        `${JSON.stringify(backend, null, 4)}\n`,
+    );
+    let installs = 0;
+    const runner = {
+        run(command: string, arguments_: readonly string[]): string {
+            if (command === 'npm' && arguments_[0] === 'install') {
+                installs += 1;
+            }
+            return '';
+        },
+    } as ProcessRunner;
+
+    expect(() => new UpdateTransaction(runner).execute(project, [{
+        kind: 'write',
+        relativePath: 'code/backend/package.json',
+        sourcePath: path.join(incoming, 'code/backend/package.json'),
+        mode: 0o644,
+    }], '4.0.1')).toThrow(/runtime contract is inconsistent/u);
+    expect(installs).toBe(1);
+    expect(JSON.parse(fs.readFileSync(
+        path.join(project, 'code/backend/package.json'),
+        'utf8',
+    )).engines.node).toBe('24.19.0');
+});
+
+test('transaction rejects a mixed legacy and incoming LXC runtime layout', () => {
+    const project = temporaryRoot('template-lxc-project-');
+    const incoming = temporaryRoot('template-lxc-incoming-');
+    const repositoryRoot = path.resolve(
+        path.dirname(new URL(import.meta.url).pathname),
+        '../../../..',
+    );
+    for (const relativePath of [
+        '.nvmrc',
+        '.npmrc',
+        'package.json',
+        'code/backend/package.json',
+        'code/frontend/web/package.json',
+        'deployment/docker/backend.Dockerfile',
+        'deployment/docker/frontend.Dockerfile',
+        'deployment/lxc/runtime-contract.catalog.json',
+        'deployment/lxc/bootstrap-existing-lxc.sh',
+        'deployment/lxc/install-backend.sh',
+        'deployment/lxc/install-frontend.sh',
+        'script/deployment/lxc-runtime.contract.ts',
+        'script/deployment/release.builder.ts',
+        'script/deployment/ssh.release-driver.ts',
+    ]) {
+        write(
+            project,
+            relativePath,
+            fs.readFileSync(path.join(repositoryRoot, relativePath), 'utf8'),
+        );
+    }
+    const releaseBuilder = fs.readFileSync(
+        path.join(repositoryRoot, 'script/deployment/release.builder.ts'),
+        'utf8',
+    );
+    write(
+        incoming,
+        'script/deployment/release.builder.ts',
+        `${releaseBuilder}\n// locally retained legacy release layout\n`,
+    );
+    let installs = 0;
+    const runner = {
+        run(command: string, arguments_: readonly string[]): string {
+            if (command === 'npm' && arguments_[0] === 'install') {
+                installs += 1;
+            }
+            return '';
+        },
+    } as ProcessRunner;
+
+    expect(() => new UpdateTransaction(runner).execute(project, [{
+        kind: 'write',
+        relativePath: 'script/deployment/release.builder.ts',
+        sourcePath: path.join(
+            incoming,
+            'script/deployment/release.builder.ts',
+        ),
+        mode: 0o644,
+    }], '4.0.1')).toThrow(/LXC runtime contract drift/u);
+    expect(installs).toBe(1);
+    expect(fs.readFileSync(
+        path.join(project, 'script/deployment/release.builder.ts'),
+        'utf8',
+    )).toBe(releaseBuilder);
 });
 
 test('updater continues all resolution types and keeps a failed verify update', async () => {

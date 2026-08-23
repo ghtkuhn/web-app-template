@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { UpdateAction } from './interfaces.ts';
 import type { UpdateExecutionResult } from './interfaces.ts';
 import { ProcessRunner } from '../deployment/process.runner.ts';
+import { RuntimeContract } from '../runtime-check/runtime.contract.ts';
 
 /** Applies update actions transactionally and verifies the resulting project. */
 export class UpdateTransaction {
@@ -30,6 +31,7 @@ export class UpdateTransaction {
                 projectRoot,
                 actions.filter((action) => !this.metadata(action)),
             );
+            this.validateRuntime(projectRoot);
             this.install(projectRoot);
             this.apply(
                 projectRoot,
@@ -109,6 +111,20 @@ export class UpdateTransaction {
 
     private install(projectRoot: string): void {
         this.processes.run('npm', ['install'], { cwd: projectRoot });
+    }
+
+    /** Rejects a partially merged runtime contract before npm evaluates it. */
+    private validateRuntime(projectRoot: string): void {
+        if (!fs.existsSync(path.join(projectRoot, '.nvmrc'))) {
+            return;
+        }
+        try {
+            new RuntimeContract(projectRoot).check();
+        } catch (error) {
+            throw new Error(
+                `Updated runtime contract is inconsistent before npm install: ${String(error)}`,
+            );
+        }
     }
 
     /** Identifies metadata that becomes authoritative only after install. */

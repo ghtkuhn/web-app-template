@@ -60,6 +60,10 @@ export class DeploymentCli {
                 await this.deploy(profile, selection);
             } else if (command === 'bootstrap') {
                 await this.bootstrap(profile, selection);
+            } else if (command === 'infrastructure:status') {
+                await this.infrastructureStatus(profile, selection);
+            } else if (command === 'infrastructure:upgrade') {
+                await this.infrastructureUpgrade(profile, selection);
             } else if (command === 'status') {
                 await this.status(profile, selection);
             } else if (command === 'stop') {
@@ -211,6 +215,59 @@ export class DeploymentCli {
                 bootstrapped.add(key);
             }
         });
+    }
+
+    private async infrastructureStatus(
+        profile: DeploymentProfile,
+        selection: ComponentSelection,
+    ): Promise<void> {
+        const visited = new Set<string>();
+        await this.each(profile, selection, async (_component, target) => {
+            if (target.driver !== 'existing-lxc') {
+                throw new Error(
+                    'Infrastructure status applies only to existing-lxc targets.',
+                );
+            }
+            const key = this.infrastructureKey(target);
+            if (!visited.has(key)) {
+                const output = await new ExistingLxcDeploymentDriver(
+                    target,
+                ).infrastructureStatus();
+                process.stdout.write(output);
+                visited.add(key);
+            }
+        });
+    }
+
+    private async infrastructureUpgrade(
+        profile: DeploymentProfile,
+        selection: ComponentSelection,
+    ): Promise<void> {
+        const upgraded = new Set<string>();
+        const nodeVersion = fs.readFileSync(
+            path.join(this.root, '.nvmrc'),
+            'utf8',
+        ).trim();
+        await this.each(profile, selection, async (_component, target) => {
+            if (target.driver !== 'existing-lxc') {
+                throw new Error(
+                    'Infrastructure upgrade applies only to existing-lxc targets.',
+                );
+            }
+            const key = this.infrastructureKey(target);
+            if (!upgraded.has(key)) {
+                await new ExistingLxcDeploymentDriver(
+                    target,
+                ).infrastructureUpgrade(nodeVersion);
+                upgraded.add(key);
+            }
+        });
+    }
+
+    private infrastructureKey(
+        target: Extract<DeploymentTarget, { driver: 'existing-lxc' }>,
+    ): string {
+        return `${target.sshUser}@${target.sshHost}:${target.sshPort}/${target.installationId}`;
     }
 
     private async databaseList(

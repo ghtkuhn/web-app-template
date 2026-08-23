@@ -14,29 +14,91 @@ const APPLICATION_FIELDS = new Set([
     'private',
 ]);
 
+export const PACKAGE_MANIFEST_PATHS = [
+    'package.json',
+    'code/backend/package.json',
+    'code/frontend/web/package.json',
+] as const;
+
+const TEMPLATE_RUNTIME_POINTERS = new Set([
+    '/packageManager',
+    '/engines/node',
+    '/engines/npm',
+    '/devEngines/runtime',
+    '/devEngines/packageManager',
+]);
+
 type JsonObject = Record<string, unknown>;
 
 /** Three-way merges template-owned package metadata while preserving app identity. */
 export class PackageManifestMerger {
-    /** Produces either one merged write or one explicit package conflict. */
+    /** Produces one structured plan for a root or workspace manifest. */
     public plan(
         baseRoot: string,
         localRoot: string,
         incomingRoot: string,
+        relativePath: typeof PACKAGE_MANIFEST_PATHS[number],
     ): {
         readonly action?: UpdateAction;
         readonly conflict?: UpdateConflict;
     } {
-        const relativePath = 'package.json';
         const basePath = path.join(baseRoot, relativePath);
         const localPath = path.join(localRoot, relativePath);
         const incomingPath = path.join(incomingRoot, relativePath);
-        if (
-            !fs.existsSync(basePath) ||
-            !fs.existsSync(localPath) ||
-            !fs.existsSync(incomingPath)
-        ) {
+        const baseExists = fs.existsSync(basePath);
+        const localExists = fs.existsSync(localPath);
+        const incomingExists = fs.existsSync(incomingPath);
+        if (!baseExists && !incomingExists) {
             return {};
+        }
+        if (!incomingExists) {
+            if (!localExists) {
+                return {};
+            }
+            if (baseExists && this.fileEqual(basePath, localPath)) {
+                return { action: { kind: 'delete', relativePath } };
+            }
+            return {
+                conflict: {
+                    id: relativePath,
+                    relativePath,
+                    reason: 'Template removed a locally modified package manifest.',
+                    ...(baseExists ? { basePath } : {}),
+                    localPath,
+                },
+            };
+        }
+        if (!localExists) {
+            if (!baseExists) {
+                return { action: this.write(relativePath, incomingPath) };
+            }
+            if (this.fileEqual(basePath, incomingPath)) {
+                return {};
+            }
+            return {
+                conflict: {
+                    id: relativePath,
+                    relativePath,
+                    reason: 'Locally removed package manifest changed in the template.',
+                    basePath,
+                    incomingPath,
+                },
+            };
+        }
+        this.assertRegular(localPath);
+        if (!baseExists) {
+            if (this.fileEqual(localPath, incomingPath)) {
+                return {};
+            }
+            return {
+                conflict: {
+                    id: relativePath,
+                    relativePath,
+                    reason: 'New template package manifest collides with a local file.',
+                    localPath,
+                    incomingPath,
+                },
+            };
         }
 
         const base = this.read(basePath);
@@ -60,7 +122,7 @@ export class PackageManifestMerger {
 
         const stagedPath = path.join(
             incomingRoot,
-            '.template-package-merged.json',
+            `.template-package-${relativePath.replaceAll('/', '-')}`,
         );
         fs.writeFileSync(
             stagedPath,
@@ -113,6 +175,12 @@ export class PackageManifestMerger {
                 continue;
             }
             const propertyPointer = `${pointer}/${this.escape(key)}`;
+            if (TEMPLATE_RUNTIME_POINTERS.has(propertyPointer)) {
+                if (key in incoming) {
+                    result[key] = incoming[key];
+                }
+                continue;
+            }
             const value = this.mergeValue(
                 base[key],
                 local[key],
@@ -160,11 +228,39 @@ export class PackageManifestMerger {
 
     /** Reads one JSON object with contextual parser failures. */
     private read(filePath: string): JsonObject {
-        const value = JSON.parse(fs.readFileSync(filePath, 'utf8')) as unknown;
+        let value: unknown;
+        try {
+            value = JSON.parse(fs.readFileSync(filePath, 'utf8')) as unknown;
+        } catch {
+            throw new Error(`${filePath} must contain valid JSON.`);
+        }
         if (!this.object(value)) {
             throw new Error(`${filePath} must contain a JSON object.`);
         }
         return value as JsonObject;
+    }
+
+    /** Rejects symlinks and special files before reading local configuration. */
+    private assertRegular(filePath: string): void {
+        const status = fs.lstatSync(filePath);
+        if (!status.isFile() || status.isSymbolicLink()) {
+            throw new Error(`${filePath} must be a regular file, not a symlink.`);
+        }
+    }
+
+    /** Builds a direct write while retaining the source file mode. */
+    private write(relativePath: string, sourcePath: string): UpdateAction {
+        return {
+            kind: 'write',
+            relativePath,
+            sourcePath,
+            mode: fs.statSync(sourcePath).mode & 0o777,
+        };
+    }
+
+    /** Compares complete files for add/remove planning. */
+    private fileEqual(left: string, right: string): boolean {
+        return fs.readFileSync(left).equals(fs.readFileSync(right));
     }
 
     /** Returns whether a value is a non-array object. */

@@ -5,6 +5,11 @@ release_root="$1"
 installation_id="$2"
 privilege_mode="$3"
 node_version="$4"
+action="$5"
+backend_launcher="$6"
+
+test "$#" -eq 6
+test "$backend_launcher" = "start-backend.mjs"
 node_distribution="node-v${node_version}-linux-x64"
 
 if [ "$privilege_mode" = "root" ]; then
@@ -39,7 +44,7 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=${release_root}/current
 EnvironmentFile=/etc/${installation_id}/backend.env
-ExecStart=/usr/local/bin/node --experimental-transform-types src/index.ts
+ExecStart=/usr/local/bin/node --experimental-transform-types ${backend_launcher}
 Restart=on-failure
 User=root
 [Install]
@@ -48,8 +53,11 @@ EOF
     systemctl daemon-reload
 fi
 
-cd "$release_root/current"
-npm install --ignore-scripts --omit=dev
+test "$action" = "prepare" || test "$action" = "activate"
+if [ "$action" = "prepare" ]; then
+    exit 0
+fi
+
 if [ "$privilege_mode" = "managed" ]; then
     sudo -n "/usr/local/sbin/${installation_id}-service-control" activate backend
 else

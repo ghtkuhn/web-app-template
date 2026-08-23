@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { LxcContractCatalog } from '../deployment/lxc-contract.catalog.ts';
 
 interface EngineContract {
     readonly name?: unknown;
@@ -34,9 +35,11 @@ const NODE_DOCKERFILES = [
 /** Enforces one exact Node.js runtime across local tooling and deployments. */
 export class RuntimeContract {
     private readonly projectRoot: string;
+    private readonly validateDeploymentContract: boolean;
 
-    public constructor(projectRoot: string) {
+    public constructor(projectRoot: string, validateDeploymentContract = true) {
         this.projectRoot = projectRoot;
+        this.validateDeploymentContract = validateDeploymentContract;
     }
 
     /** Validates checked-in contracts and the active process runtime. */
@@ -62,6 +65,9 @@ export class RuntimeContract {
         }
         for (const relativePath of NODE_DOCKERFILES) {
             this.assertDockerImage(relativePath, nodeVersion);
+        }
+        if (this.validateDeploymentContract) {
+            new LxcContractCatalog().check(this.projectRoot);
         }
         if (currentNodeVersion !== nodeVersion) {
             throw new Error(

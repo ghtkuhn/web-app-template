@@ -134,6 +134,20 @@ sudo helpers. Scaffolded profiles use that `app` user for normal releases.
 `deployment:deploy` never invokes bootstrap and does not otherwise
 provision or mutate the operating system.
 
+Existing-LXC infrastructure is versioned independently from application
+releases. Inspect and explicitly upgrade it with:
+
+```bash
+npm run credentials:run -- deployment:infrastructure:status -- <profile> <backend|frontend|all>
+npm run credentials:run -- deployment:infrastructure:upgrade -- <profile> <backend|frontend|all>
+```
+
+Deploy refuses a backend upload when the remote infrastructure schema, exact
+Node.js version, or npm major does not match the repository contract. Upgrade
+preserves releases, the active `current` symlink, configuration, and persistent
+data. A recognized legacy backend release receives a compatibility launcher;
+unknown or ambiguous layouts stop the upgrade without changing systemd.
+
 ### Guidance for AI Agents
 
 Before changing external infrastructure, an AI agent must:
@@ -177,6 +191,14 @@ LXC releases are checksummed, installed below
 `/opt/<installationId>/<component>/releases/`, and switched through the
 `current` symlink. Configuration lives below `/etc/<installationId>`. A failed
 install or health check restores the previous release.
+
+Backend archives retain the npm-workspace layout and contain the root manifest,
+root lockfile, backend workspace manifest, backend source, maintenance script,
+versioned release contract, and stable `start-backend.mjs` launcher. The remote
+candidate and fallback release are validated before configuration, service
+state, migrations, or symlinks can change. Dependencies are installed into the
+candidate before downtime starts; symlinks inside release archives are
+forbidden.
 
 Before pending SQLite migrations, the backend creates and validates an online
 backup under `/var/lib/<installationId>/backups`. The default retention is ten backups
