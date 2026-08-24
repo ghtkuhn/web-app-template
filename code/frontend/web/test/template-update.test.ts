@@ -208,6 +208,44 @@ test('three-way planning updates safe files and reports real conflicts', () => {
     );
 });
 
+test('planner restores the target gitignore when it is locally missing', () => {
+    const base = temporaryRoot('template-base-');
+    const local = temporaryRoot('template-local-');
+    const incoming = temporaryRoot('template-incoming-');
+    write(base, '.gitignore', 'node_modules/\n');
+    write(incoming, '.gitignore', 'node_modules/\n.credentials.env\n');
+    writeCanonicalInstructions([base, local, incoming]);
+
+    const plan = new UpdatePlanner().plan(base, local, incoming);
+    const action = plan.actions.find(
+        (candidate) => candidate.relativePath === '.gitignore',
+    );
+
+    expect(action?.kind).toBe('write');
+    expect(action?.kind === 'write' && fs.readFileSync(
+        action.sourcePath,
+        'utf8',
+    )).toBe('node_modules/\n.credentials.env\n');
+    expect(plan.conflicts).toEqual([]);
+});
+
+test('planner preserves an existing locally changed gitignore', () => {
+    const base = temporaryRoot('template-base-');
+    const local = temporaryRoot('template-local-');
+    const incoming = temporaryRoot('template-incoming-');
+    write(base, '.gitignore', 'node_modules/\n');
+    write(local, '.gitignore', 'node_modules/\nlocal-output/\n');
+    write(incoming, '.gitignore', 'node_modules/\n');
+    writeCanonicalInstructions([base, local, incoming]);
+
+    const plan = new UpdatePlanner().plan(base, local, incoming);
+
+    expect(plan.actions.some(
+        (action) => action.relativePath === '.gitignore',
+    )).toBe(false);
+    expect(plan.conflicts).toEqual([]);
+});
+
 test('planner handles safe deletion and conflicts on modified deletion', () => {
     const base = temporaryRoot('template-base-');
     const local = temporaryRoot('template-local-');

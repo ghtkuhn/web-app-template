@@ -23,6 +23,10 @@ export const TEMPLATE_UPDATE_EXACT_IGNORES = new Set([
     'data/ai/MEMORY.md',
 ]);
 
+const REQUIRED_TEMPLATE_FILES = new Set([
+    '.gitignore',
+]);
+
 /** Produces a deterministic three-way update plan. */
 export class UpdatePlanner {
     private readonly agentInstructions = new AgentInstructionPlanner();
@@ -127,6 +131,14 @@ export class UpdatePlanner {
         );
         if (localConflict) {
             conflicts.push(localConflict);
+            return;
+        }
+        if (
+            REQUIRED_TEMPLATE_FILES.has(relativePath) &&
+            !fs.existsSync(localPath) &&
+            incomingPath
+        ) {
+            actions.push(this.write(relativePath, incomingPath));
             return;
         }
         if (!basePath) {
