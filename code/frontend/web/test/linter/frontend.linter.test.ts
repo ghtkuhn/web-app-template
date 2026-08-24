@@ -12,6 +12,15 @@ class Fixture {
         path.join(os.tmpdir(), 'frontend-linter-'),
     );
 
+    public constructor() {
+        this.write('main.ts', "import 'bootstrap';");
+        this.write(
+            'shared/styles/main.scss',
+            `@use "bootstrap/scss/bootstrap";
+             @import "./tabler/tabler-icons.css";`,
+        );
+    }
+
     public write(relativePath: string, source: string): void {
         const filePath = path.join(
             this.root,
@@ -20,6 +29,24 @@ class Fixture {
         );
         fs.mkdirSync(path.dirname(filePath), { recursive: true });
         fs.writeFileSync(filePath, source, 'utf8');
+    }
+
+    public writeFrontend(relativePath: string, source: string): void {
+        const filePath = path.join(
+            this.root,
+            'code/frontend/web',
+            relativePath,
+        );
+        fs.mkdirSync(path.dirname(filePath), { recursive: true });
+        fs.writeFileSync(filePath, source, 'utf8');
+    }
+
+    public remove(relativePath: string): void {
+        fs.rmSync(path.join(
+            this.root,
+            'code/frontend/web/src',
+            relativePath,
+        ));
     }
 
     public issues() {
@@ -172,32 +199,146 @@ test('Core ownership, direction, environment, and design tokens are strict', () 
     }
 });
 
-test('Pico CSS is owned by the global style layer and may not use a CDN', () => {
+test('Bootstrap Sass and JavaScript have global owners and may not use a CDN', () => {
     const fixture = new Fixture();
     try {
         fixture.write(
-            'shared/styles/main.css',
-            '@import "@picocss/pico";',
+            'shared/styles/main.scss',
+            `@use "bootstrap/scss/bootstrap";
+             @import "./tabler/tabler-icons.css";`,
         );
+        fixture.write('main.ts', "import 'bootstrap';");
         fixture.write(
             'presentation/desktop/views/BadView.vue',
-            `<template><link href="https://picocss.com/pico.min.css"></template>
-             <style scoped>@import "@picocss/pico";</style>`,
+            `<script setup lang="ts">import 'bootstrap/js/dist/modal';</script>
+             <template><link href="https://cdn.jsdelivr.net/npm/bootstrap@5/dist/css/bootstrap.min.css"></template>
+             <style scoped>@use "bootstrap/scss/bootstrap";</style>`,
         );
         const ids = fixture.issues().map((issue) => issue.ruleId);
-        expect(ids).toContain('PICO_OWNERSHIP');
-        expect(ids).toContain('PICO_CDN_FORBIDDEN');
+        expect(ids).toContain('BOOTSTRAP_OWNERSHIP');
+        expect(ids).toContain('BOOTSTRAP_CDN_FORBIDDEN');
     } finally {
         fixture.dispose();
     }
 });
 
-test('the global style layer must retain the Pico import', () => {
+test('Bootstrap CDN scripts in the document and remote imports are rejected', () => {
     const fixture = new Fixture();
     try {
-        fixture.write('shared/styles/main.css', ':root {}');
+        fixture.writeFrontend(
+            'index.html',
+            `<main id="app"></main>
+             <script src="//cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>`,
+        );
+        fixture.write(
+            'core/services/remote.service.ts',
+            "import 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.esm.min.js';",
+        );
+
+        const findings = fixture.issues().filter(
+            (issue) => issue.ruleId === 'BOOTSTRAP_CDN_FORBIDDEN',
+        );
+        expect(findings).toHaveLength(2);
+        expect(findings.map((issue) => issue.location?.start.line)).toEqual([
+            2,
+            1,
+        ]);
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('Bootstrap global owners require one canonical complete import', () => {
+    const fixture = new Fixture();
+    try {
+        fixture.write(
+            'shared/styles/main.scss',
+            `@use "bootstrap/scss/bootstrap";
+             @use "bootstrap/scss/bootstrap";
+             @use "bootstrap/scss/functions";`,
+        );
+        fixture.write(
+            'main.ts',
+            `import 'bootstrap';
+             import 'bootstrap';
+             import 'bootstrap/js/dist/modal';`,
+        );
+
+        const ownership = fixture.issues().filter(
+            (issue) => issue.ruleId === 'BOOTSTRAP_OWNERSHIP',
+        );
+        expect(ownership).toHaveLength(2);
+        expect(ownership.every((issue) =>
+            issue.observed.includes('exactly once'),
+        )).toBe(true);
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('missing Bootstrap global owner files are reported without fake spans', () => {
+    const fixture = new Fixture();
+    try {
+        fixture.remove('main.ts');
+        fixture.remove('shared/styles/main.scss');
+
+        const issues = fixture.issues();
+        const script = issues.find(
+            (issue) =>
+                issue.ruleId === 'BOOTSTRAP_GLOBAL_SCRIPT_IMPORT_MISSING',
+        );
+        const style = issues.find(
+            (issue) =>
+                issue.ruleId === 'BOOTSTRAP_GLOBAL_STYLE_IMPORT_MISSING',
+        );
+        expect(script?.file).toBe('code/frontend/web/src/main.ts');
+        expect(style?.file).toBe(
+            'code/frontend/web/src/shared/styles/main.scss',
+        );
+        expect(script?.location).toBeNull();
+        expect(style?.location).toBeNull();
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('the global entrypoints must retain Bootstrap Sass and JavaScript', () => {
+    const fixture = new Fixture();
+    try {
+        fixture.write(
+            'shared/styles/main.scss',
+            '@import "./tabler/tabler-icons.css";',
+        );
+        fixture.write('main.ts', 'export {};');
         const ids = fixture.issues().map((issue) => issue.ruleId);
-        expect(ids).toContain('PICO_GLOBAL_IMPORT_MISSING');
+        expect(ids).toContain('BOOTSTRAP_GLOBAL_STYLE_IMPORT_MISSING');
+        expect(ids).toContain('BOOTSTRAP_GLOBAL_SCRIPT_IMPORT_MISSING');
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('removed Pico imports and custom properties are rejected', () => {
+    const fixture = new Fixture();
+    try {
+        fixture.write(
+            'shared/styles/legacy.scss',
+            `@import "@picocss/pico";
+             :root { --pico-spacing: 20px; }`,
+        );
+        expect(fixture.issues().map((issue) => issue.ruleId)).toContain(
+            'PICO_REFERENCE_FORBIDDEN',
+        );
+        fixture.write(
+            'core/services/legacy.service.ts',
+            "import '@picocss/pico';",
+        );
+        const legacyScript = fixture.issues().find(
+            (issue) =>
+                issue.ruleId === 'PICO_REFERENCE_FORBIDDEN' &&
+                issue.file.endsWith('legacy.service.ts'),
+        );
+        expect(legacyScript?.location?.start.line).toBe(1);
     } finally {
         fixture.dispose();
     }
@@ -207,7 +348,7 @@ test('the bundled Tabler icon font is owned by the global style layer', () => {
     const fixture = new Fixture();
     try {
         fixture.write(
-            'shared/styles/main.css',
+            'shared/styles/main.scss',
             '@import "./tabler/tabler-icons.css";',
         );
         fixture.write(
@@ -226,7 +367,7 @@ test('the bundled Tabler icon font is owned by the global style layer', () => {
 test('the global style layer must retain the local Tabler import', () => {
     const fixture = new Fixture();
     try {
-        fixture.write('shared/styles/main.css', ':root {}');
+        fixture.write('shared/styles/main.scss', ':root {}');
         const ids = fixture.issues().map((issue) => issue.ruleId);
         expect(ids).toContain('TABLER_ICON_GLOBAL_IMPORT_MISSING');
     } finally {
@@ -238,13 +379,12 @@ test('font sizes and box spacing accept their strict unit contracts', () => {
     const fixture = new Fixture();
     try {
         fixture.write(
-            'shared/styles/main.css',
-            `@import "@picocss/pico";
+            'shared/styles/main.scss',
+            `@use "bootstrap/scss/bootstrap";
              @import "./tabler/tabler-icons.css";
              :root {
                  --font-size: clamp(1rem, 2rem, 3rem);
                  --space: calc(100% - 12px);
-                 --pico-spacing: var(--space);
              }
              h1 { font-size: var(--font-size, 4rem); font: inherit; }
              article {
@@ -276,13 +416,12 @@ test('invalid direct, token, fallback, math, and shorthand units are rejected', 
     const fixture = new Fixture();
     try {
         fixture.write(
-            'shared/styles/main.css',
-            `@import "@picocss/pico";
+            'shared/styles/main.scss',
+            `@use "bootstrap/scss/bootstrap";
              @import "./tabler/tabler-icons.css";
              :root {
                  --font-size: clamp(1rem, 2vw, 3rem);
                  --space: calc(100% - 1rem);
-                 --pico-spacing: var(--space);
              }
              h1 { font-size: var(--font-size, 12px); }
              article { margin: var(--space); font: 400 1rem sans-serif; }`,
@@ -307,8 +446,8 @@ test('bundled Tabler CSS is excluded from application unit contracts', () => {
     const fixture = new Fixture();
     try {
         fixture.write(
-            'shared/styles/main.css',
-            `@import "@picocss/pico";
+            'shared/styles/main.scss',
+            `@use "bootstrap/scss/bootstrap";
              @import "./tabler/tabler-icons.css";`,
         );
         fixture.write(
@@ -327,7 +466,7 @@ test('parser failures and CLI exit codes are stable', () => {
     const valid = new Fixture();
     const invalid = new Fixture();
     try {
-        valid.write('main.ts', 'export {};');
+        valid.write('main.ts', "import 'bootstrap';");
         invalid.write('main.ts', 'export const = ;');
         const stdout = new BufferWriter();
         const stderr = new BufferWriter();
@@ -413,8 +552,8 @@ test('TypeScript, Vue script-setup, and standalone CSS keep exact spans', () => 
              <style scoped>div { color: var(--color); }</style>`,
         );
         fixture.write(
-            'shared/styles/main.css',
-            `@import "@picocss/pico";
+            'shared/styles/main.scss',
+            `@use "bootstrap/scss/bootstrap";
              @import "./tabler/tabler-icons.css";
              h1 { font-size: 12px; }`,
         );
@@ -434,6 +573,37 @@ test('TypeScript, Vue script-setup, and standalone CSS keep exact spans', () => 
                 (issue) => issue.ruleId === 'FRONTEND_FONT_SIZE_UNIT',
             )?.location?.start.line,
         ).toBe(3);
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('standalone and Vue SCSS keep exact source spans', () => {
+    const fixture = new Fixture();
+    try {
+        fixture.write('main.ts', "import 'bootstrap';");
+        fixture.write(
+            'shared/styles/main.scss',
+            `@use "bootstrap/scss/bootstrap";
+             @import "./tabler/tabler-icons.css";
+             h1 { font-size: 12px; }`,
+        );
+        fixture.write(
+            'presentation/desktop/components/BadSpacing.vue',
+            `<template><div /></template>
+             <style scoped lang="scss">
+             $space: 1rem;
+             div { padding: $space; }
+             </style>`,
+        );
+
+        const issues = fixture.issues();
+        expect(issues.find(
+            (issue) => issue.ruleId === 'FRONTEND_FONT_SIZE_UNIT',
+        )?.location?.start.line).toBe(3);
+        expect(issues.find(
+            (issue) => issue.ruleId === 'FRONTEND_BOX_SPACING_UNIT',
+        )?.location?.start.line).toBe(4);
     } finally {
         fixture.dispose();
     }

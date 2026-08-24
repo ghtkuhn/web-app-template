@@ -111,3 +111,22 @@ npm run credentials:run -- deployment:status -- <profile> backend
 
 Keep the last healthy backend release active until all three commands succeed.
 Normal deployment never performs this infrastructure migration implicitly.
+
+## Template 5.0.0 Bootstrap migration
+
+Template 5 replaces Pico with Bootstrap 5.3, Sass, complete Bootstrap
+JavaScript, and Popper. The updater merges the workspace dependencies, but
+locally modified frontend source still requires an explicit conflict decision.
+
+If `code/frontend/web/src/shared/styles/main.css` was customized, move the
+application-owned rules into the incoming `main.scss`, retain its Bootstrap
+`@use` configuration and Tabler import, and resolve deletion of the old CSS
+file. Merge the incoming `main.ts` imports and color-mode startup with local
+application initialization. Locally changed views must retain their behavior
+while adopting Bootstrap form, card, navigation, alert, button, and link
+classes.
+
+Pico is no longer a supported parallel framework. Remove `@picocss/pico`,
+`--pico-*` variables, and Pico-only semantic classes from all merged files.
+The frontend linter reports remaining references with migration guidance.
+Tabler Icons and the three independent presentation trees remain unchanged.

@@ -26,8 +26,9 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@picocss/pico": "^2.1.1",
+    "@popperjs/core": "^2.11.8",
     "better-auth": "^1.6.26",
+    "bootstrap": "^5.3.8",
     "vue": "^3.5.40",
     "vue-router": "^4.6.4"
   },
@@ -41,7 +42,9 @@
     "happy-dom": "^20.11.1",
     "openapi-typescript": "^7.13.0",
     "postcss": "^8.5.26",
+    "postcss-scss": "^4.0.9",
     "postcss-value-parser": "^4.2.0",
+    "sass": "^1.103.1",
     "vite": "^8.1.5",
     "vitest": "^4.1.10",
     "vue-tsc": "^3.3.8"

@@ -15,10 +15,10 @@ async function signOut(): Promise<void> {
     <section class="mobile-account">
         <p class="eyebrow">Mobile account</p>
         <h1>Your account.</h1>
-        <article v-if="authComposable.data.value">
-            <header><strong>{{ authComposable.data.value.name }}</strong></header>
-            <p>{{ authComposable.data.value.email }}</p>
-            <footer><button type="button" class="secondary" @click="signOut">Sign out</button></footer>
+        <article v-if="authComposable.data.value" class="card">
+            <header class="card-header"><strong>{{ authComposable.data.value.name }}</strong></header>
+            <div class="card-body"><p class="card-text">{{ authComposable.data.value.email }}</p></div>
+            <footer class="card-footer"><button type="button" class="btn btn-outline-secondary" @click="signOut">Sign out</button></footer>
         </article>
     </section>
 </template>

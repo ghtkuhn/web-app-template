@@ -10,16 +10,18 @@ import { healthComposable } from '../../../core/composables/health.composable.ts
             Tablet keeps navigation compact while retaining enough room for
             focused multi-column content when features need it.
         </p>
-        <article class="health-card" aria-labelledby="tablet-health-title">
-            <header>
+        <article class="health-card card" aria-labelledby="tablet-health-title">
+            <header class="card-header">
                 <strong id="tablet-health-title">Backend health</strong>
             </header>
-            <p>{{ healthComposable.data.value?.status ?? healthComposable.status.value }}</p>
-            <p v-if="healthComposable.error.value" role="alert">
-                {{ healthComposable.error.value }}
-            </p>
-            <footer>
-                <button type="button" @click="healthComposable.load()">
+            <div class="card-body">
+                <p>{{ healthComposable.data.value?.status ?? healthComposable.status.value }}</p>
+                <p v-if="healthComposable.error.value" class="alert alert-danger mb-0" role="alert">
+                    {{ healthComposable.error.value }}
+                </p>
+            </div>
+            <footer class="card-footer">
+                <button class="btn btn-primary" type="button" @click="healthComposable.load()">
                     Check health
                 </button>
             </footer>

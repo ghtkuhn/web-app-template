@@ -4,6 +4,7 @@ import { parse as parseTypeScript } from '@babel/parser';
 import { parse as parseVue } from '@vue/compiler-sfc';
 import type { SFCBlock, SFCDescriptor } from '@vue/compiler-sfc';
 import { parse as parseCss } from 'postcss';
+import { parse as parseScss } from 'postcss-scss';
 import parseCssValue from 'postcss-value-parser';
 import type {
     SourceAnalysis,
@@ -37,9 +38,19 @@ export class SourceAnalyzer {
         const source = fs.readFileSync(filePath, 'utf8');
         const extension = path.extname(filePath);
         const analysis = this.empty(filePath, source);
-        if (extension === '.css') {
+        if (extension === '.html') {
+            return analysis;
+        }
+        if (extension === '.css' || extension === '.scss') {
             analysis.styles = [
-                this.styleBlock(filePath, source, false, source, 0),
+                this.styleBlock(
+                    filePath,
+                    source,
+                    false,
+                    source,
+                    0,
+                    extension === '.scss',
+                ),
             ];
             return analysis;
         }
@@ -118,6 +129,7 @@ export class SourceAnalyzer {
                 Boolean(style.scoped),
                 analysis.source,
                 style.loc.start.offset,
+                style.lang === 'scss',
             ),
         );
     }
@@ -141,8 +153,11 @@ export class SourceAnalyzer {
         scoped: boolean,
         source: string,
         baseOffset: number,
+        scss = false,
     ): StyleBlock {
-        const root = parseCss(content, { from: filePath });
+        const root = scss
+            ? parseScss(content, { from: filePath })
+            : parseCss(content, { from: filePath });
         const declarations: StyleBlock['declarations'] = [];
         const atRules: StyleBlock['atRules'] = [];
         const imports: string[] = [];
@@ -171,7 +186,7 @@ export class SourceAnalyzer {
                 parameters: atRule.params,
                 location,
             });
-            if (atRule.name.toLowerCase() === 'import') {
+            if (['import', 'use'].includes(atRule.name.toLowerCase())) {
                 const importedSource = this.importedStyleSource(atRule.params);
                 if (importedSource) {
                     imports.push(importedSource);

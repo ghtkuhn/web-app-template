@@ -86,8 +86,8 @@
 * You must not build island solutions or implementations tailored to one specific test case, fixture, or issue.
 * You must derive solutions generically; tests may cover examples, but implementation logic must not special-case them.
 * You must not install new dependencies without user consent.
-* You must not delete, modidy or move files outside the project root directlry without user consent.
-
+* You must not delete, modify or move files outside the project root directly without user consent.
+* You should use Bootstrap components and classes whenever possible in the frontend, instead of writing custom code.
 
 ## Root npm Scripts
 

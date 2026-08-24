@@ -6,7 +6,7 @@ import { RouterLink } from 'vue-router';
     <section class="page mobile-not-found">
         <p class="eyebrow">404 · Mobile</p>
         <h1>Page not found.</h1>
-        <RouterLink class="action-link" to="/">Return home</RouterLink>
+        <RouterLink class="action-link btn btn-outline-primary" to="/">Return home</RouterLink>
     </section>
 </template>
 

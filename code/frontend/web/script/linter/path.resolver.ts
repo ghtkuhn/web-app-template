@@ -6,14 +6,20 @@ export type PresentationName = 'desktop' | 'tablet' | 'mobile';
 /** Classifies frontend paths and resolves local source dependencies. */
 export class PathResolver {
     private readonly projectRoot: string;
+    private readonly frontendRootPath: string;
     private readonly sourceRootPath: string;
 
     constructor(projectRoot: string) {
         this.projectRoot = path.resolve(projectRoot);
-        this.sourceRootPath = path.join(
+        this.frontendRootPath = path.join(
             this.projectRoot,
-            'code/frontend/web/src',
+            'code/frontend/web',
         );
+        this.sourceRootPath = path.join(this.frontendRootPath, 'src');
+    }
+
+    public frontendRoot(): string {
+        return this.frontendRootPath;
     }
 
     public sourceRoot(): string {

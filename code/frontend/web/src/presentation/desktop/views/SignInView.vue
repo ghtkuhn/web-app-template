@@ -24,25 +24,25 @@ async function submit(): Promise<void> {
             <p class="page-copy">Continue in your protected workspace.</p>
         </div>
         <form v-if="authComposable.enabled" class="auth-form" @submit.prevent="submit">
-            <fieldset>
-                <label>
+            <fieldset class="border-0 p-0 m-0">
+                <label class="form-label">
                     Email
-                    <input v-model="email" type="email" autocomplete="email" required>
+                    <input v-model="email" class="form-control" type="email" autocomplete="email" required>
                 </label>
-                <label>
+                <label class="form-label">
                     Password
-                    <input v-model="password" type="password" autocomplete="current-password" required>
+                    <input v-model="password" class="form-control" type="password" autocomplete="current-password" required>
                 </label>
             </fieldset>
-            <p v-if="authComposable.error.value" role="alert">
+            <p v-if="authComposable.error.value" class="alert alert-danger" role="alert">
                 {{ authComposable.error.value.message }}
             </p>
-            <button type="submit" :aria-busy="authComposable.status.value === 'loading'" :disabled="authComposable.status.value === 'loading'">
+            <button class="btn btn-primary" type="submit" :aria-busy="authComposable.status.value === 'loading'" :disabled="authComposable.status.value === 'loading'">
                 Sign in
             </button>
-            <RouterLink v-if="authComposable.registrationEnabled" to="/sign-up">Create account</RouterLink>
+            <RouterLink v-if="authComposable.registrationEnabled" class="btn btn-link px-0" to="/sign-up">Create account</RouterLink>
         </form>
-        <p v-else>Authentication is disabled for this deployment.</p>
+        <p v-else class="alert alert-secondary">Authentication is disabled for this deployment.</p>
     </section>
 </template>
 

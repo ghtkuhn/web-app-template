@@ -747,6 +747,60 @@ test('package planning merges workspace manifests and enforces target runtime', 
     }
 });
 
+test('package planning replaces an unchanged Pico contract with Bootstrap', () => {
+    const base = temporaryRoot('template-pico-base-');
+    const local = temporaryRoot('template-pico-local-');
+    const incoming = temporaryRoot('template-bootstrap-incoming-');
+    const relativePath = 'code/frontend/web/package.json';
+    const picoManifest = {
+        name: '@app/web',
+        dependencies: {
+            '@picocss/pico': '^2.1.1',
+            vue: '^3.5.40',
+        },
+        devDependencies: {
+            postcss: '^8.5.26',
+        },
+    };
+    write(base, relativePath, JSON.stringify(picoManifest));
+    write(local, relativePath, JSON.stringify(picoManifest));
+    write(incoming, relativePath, JSON.stringify({
+        name: '@app/web',
+        dependencies: {
+            '@popperjs/core': '^2.11.8',
+            bootstrap: '^5.3.8',
+            vue: '^3.5.40',
+        },
+        devDependencies: {
+            postcss: '^8.5.26',
+            'postcss-scss': '^4.0.9',
+            sass: '^1.103.1',
+        },
+    }));
+    writeCanonicalInstructions([base, local, incoming]);
+
+    const plan = new UpdatePlanner().plan(base, local, incoming);
+    const action = plan.actions.find(
+        (candidate) => candidate.relativePath === relativePath,
+    );
+    const merged = JSON.parse(fs.readFileSync(
+        (action as { sourcePath: string }).sourcePath,
+        'utf8',
+    ));
+
+    expect(plan.conflicts).toEqual([]);
+    expect(merged.dependencies).toEqual({
+        '@popperjs/core': '^2.11.8',
+        bootstrap: '^5.3.8',
+        vue: '^3.5.40',
+    });
+    expect(merged.devDependencies).toEqual({
+        postcss: '^8.5.26',
+        'postcss-scss': '^4.0.9',
+        sass: '^1.103.1',
+    });
+});
+
 test('package planning rejects a symlinked workspace manifest', () => {
     const base = temporaryRoot('template-workspace-base-');
     const local = temporaryRoot('template-workspace-local-');

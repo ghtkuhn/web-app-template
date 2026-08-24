@@ -24,23 +24,23 @@ async function submit(): Promise<void> {
             <h1>Create an account.</h1>
         </div>
         <form v-if="authComposable.registrationEnabled" class="auth-form" @submit.prevent="submit">
-            <fieldset>
+            <fieldset class="border-0 p-0 m-0">
                 <legend>Desktop registration</legend>
-                <label>Name<input v-model="name" autocomplete="name" required></label>
-                <label>
-                    Email<input v-model="email" type="email" autocomplete="email" required>
-                    <small>Use the address for this workspace.</small>
+                <label class="form-label">Name<input v-model="name" class="form-control" autocomplete="name" required></label>
+                <label class="form-label">
+                    Email<input v-model="email" class="form-control" type="email" autocomplete="email" required>
+                    <small class="form-text">Use the address for this workspace.</small>
                 </label>
-                <label>
-                    Password<input v-model="password" type="password" autocomplete="new-password" minlength="8" required>
-                    <small>Choose at least eight characters for this desktop account.</small>
+                <label class="form-label">
+                    Password<input v-model="password" class="form-control" type="password" autocomplete="new-password" minlength="8" required>
+                    <small class="form-text">Choose at least eight characters for this desktop account.</small>
                 </label>
             </fieldset>
-            <p v-if="authComposable.error.value" role="alert">{{ authComposable.error.value.message }}</p>
-            <button type="submit">Register</button>
-            <RouterLink to="/sign-in">Sign in instead</RouterLink>
+            <p v-if="authComposable.error.value" class="alert alert-danger" role="alert">{{ authComposable.error.value.message }}</p>
+            <button class="btn btn-primary" type="submit">Register</button>
+            <RouterLink class="btn btn-link px-0" to="/sign-in">Sign in instead</RouterLink>
         </form>
-        <p v-else>Registration is not available for this deployment.</p>
+        <p v-else class="alert alert-secondary">Registration is not available for this deployment.</p>
     </section>
 </template>
 

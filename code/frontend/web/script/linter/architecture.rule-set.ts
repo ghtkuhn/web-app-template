@@ -40,47 +40,175 @@ export class ArchitectureRuleSet {
             ...this.ownershipIssues(analysis),
             ...this.vueIssues(analysis),
             ...this.routeCoverageIssues(analysis),
-            ...this.picoOwnershipIssues(analysis),
+            ...this.bootstrapOwnershipIssues(analysis),
             ...this.tablerIconOwnershipIssues(analysis),
         ];
     }
 
-    /** Keeps Pico as one global semantic foundation instead of per-view imports. */
-    private picoOwnershipIssues(analysis: SourceAnalysis): LintIssueDraft[] {
+    /** Reports absent global owners even when there is no source to analyze. */
+    public globalContractIssues(
+        files: readonly string[],
+    ): LintIssueDraft[] {
+        const mainScript = path.join(this.paths.sourceRoot(), 'main.ts');
+        const mainStyle = path.join(
+            this.paths.sourceRoot(),
+            'shared/styles/main.scss',
+        );
+        const available = new Set(files.map((file) => path.resolve(file)));
+        const issues: LintIssueDraft[] = [];
+        if (!available.has(mainScript)) {
+            issues.push(this.missingOwnerIssue(
+                mainScript,
+                'BOOTSTRAP_GLOBAL_SCRIPT_IMPORT_MISSING',
+                'src/main.ts does not exist, so Bootstrap JavaScript has no global owner.',
+            ));
+        }
+        if (!available.has(mainStyle)) {
+            issues.push(
+                this.missingOwnerIssue(
+                    mainStyle,
+                    'BOOTSTRAP_GLOBAL_STYLE_IMPORT_MISSING',
+                    'src/shared/styles/main.scss does not exist, so Bootstrap Sass has no global owner.',
+                ),
+                this.missingOwnerIssue(
+                    mainStyle,
+                    'TABLER_ICON_GLOBAL_IMPORT_MISSING',
+                    'src/shared/styles/main.scss does not exist, so the local Tabler font has no global owner.',
+                ),
+            );
+        }
+        return issues;
+    }
+
+    /** Keeps Bootstrap's Sass and JavaScript behind their global entrypoints. */
+    private bootstrapOwnershipIssues(
+        analysis: SourceAnalysis,
+    ): LintIssueDraft[] {
         const issues: LintIssueDraft[] = [];
         const relative = this.paths.relative(analysis.filePath);
         const isGlobalStyle = relative.endsWith(
-            'code/frontend/web/src/shared/styles/main.css',
+            'code/frontend/web/src/shared/styles/main.scss',
+        );
+        const isMainScript = relative.endsWith(
+            'code/frontend/web/src/main.ts',
         );
         const imports = analysis.styles.flatMap((style) => style.imports);
-        const importsPico = imports.includes('@picocss/pico');
-        if (isGlobalStyle && !importsPico) {
+        const styleImports = analysis.styles
+            .flatMap((style) => style.importEvidence)
+            .filter((entry) =>
+                entry.source === 'bootstrap' ||
+                entry.source.startsWith('bootstrap/'),
+            );
+        const canonicalStyleImports = styleImports.filter(
+            (entry) => entry.source === 'bootstrap/scss/bootstrap',
+        );
+        const scriptImports = analysis.dependencies.filter((dependency) =>
+            dependency.source === 'bootstrap' ||
+            dependency.source.startsWith('bootstrap/'),
+        );
+        const completeScriptImports = scriptImports.filter(
+            (dependency) => dependency.source === 'bootstrap',
+        );
+        if (isGlobalStyle && canonicalStyleImports.length === 0) {
             issues.push(this.issue(
                 analysis,
-                'PICO_GLOBAL_IMPORT_MISSING',
-                'shared/styles/main.css must import Pico CSS from @picocss/pico.',
+                'BOOTSTRAP_GLOBAL_STYLE_IMPORT_MISSING',
+                'shared/styles/main.scss must import bootstrap/scss/bootstrap.',
             ));
         }
-        if (importsPico && !isGlobalStyle) {
-            const evidence = analysis.styles
-                .flatMap((style) => style.importEvidence)
-                .find((entry) => entry.source === '@picocss/pico');
+        if (isMainScript && completeScriptImports.length === 0) {
             issues.push(this.issue(
                 analysis,
-                'PICO_OWNERSHIP',
-                'Pico CSS may only be imported by shared/styles/main.css.',
-                evidence?.location,
+                'BOOTSTRAP_GLOBAL_SCRIPT_IMPORT_MISSING',
+                'main.ts must import the complete bootstrap JavaScript package.',
             ));
         }
+        if (styleImports.length > 0 && !isGlobalStyle) {
+            issues.push(this.issue(
+                analysis,
+                'BOOTSTRAP_OWNERSHIP',
+                'Bootstrap Sass may only be imported by shared/styles/main.scss.',
+                styleImports[0].location,
+            ));
+        }
+        if (scriptImports.length > 0 && !isMainScript) {
+            issues.push(this.issue(
+                analysis,
+                'BOOTSTRAP_OWNERSHIP',
+                'Bootstrap JavaScript may only be imported by main.ts.',
+                scriptImports[0].location,
+            ));
+        }
+        const invalidOwnedStyleImport = isGlobalStyle
+            ? styleImports.find(
+                  (entry) =>
+                      entry.source !== 'bootstrap/scss/bootstrap',
+              ) ?? canonicalStyleImports[1]
+            : undefined;
+        if (invalidOwnedStyleImport) {
+            issues.push(this.issue(
+                analysis,
+                'BOOTSTRAP_OWNERSHIP',
+                'shared/styles/main.scss must import Bootstrap Sass exactly once through bootstrap/scss/bootstrap.',
+                invalidOwnedStyleImport.location,
+            ));
+        }
+        const invalidOwnedScriptImport = isMainScript
+            ? scriptImports.find(
+                  (dependency) => dependency.source !== 'bootstrap',
+              ) ?? completeScriptImports[1]
+            : undefined;
+        if (invalidOwnedScriptImport) {
+            issues.push(this.issue(
+                analysis,
+                'BOOTSTRAP_OWNERSHIP',
+                'main.ts must import the complete bootstrap package exactly once and must not import individual plugins.',
+                invalidOwnedScriptImport.location,
+            ));
+        }
+        const remoteDependency = analysis.dependencies.find((dependency) =>
+            this.isBootstrapRemoteSource(dependency.source),
+        );
         if (
-            imports.some((source) => this.isPicoRemoteSource(source)) ||
-            (analysis.isVue && this.hasPicoRemoteLink(analysis.source))
+            imports.some((source) => this.isBootstrapRemoteSource(source)) ||
+            remoteDependency ||
+            (this.isMarkup(analysis) &&
+                this.hasBootstrapRemoteReference(analysis.source))
         ) {
             issues.push(this.issue(
                 analysis,
-                'PICO_CDN_FORBIDDEN',
-                'Pico CSS must be installed through npm, not loaded from a CDN.',
-                this.remoteStyleLocation(analysis, this.isPicoRemoteSource),
+                'BOOTSTRAP_CDN_FORBIDDEN',
+                'Bootstrap must be installed through npm, not loaded from a CDN.',
+                this.remoteReferenceLocation(
+                    analysis,
+                    this.isBootstrapRemoteSource,
+                ),
+            ));
+        }
+        const picoImport = analysis.styles
+            .flatMap((style) => style.importEvidence)
+            .find((entry) => entry.source.includes('@picocss/pico'));
+        const picoVariable = analysis.styles
+            .flatMap((style) => style.declarations)
+            .find((declaration) =>
+                declaration.property.toLowerCase().startsWith('--pico-'),
+            );
+        const picoDependency = analysis.dependencies.find((dependency) =>
+            this.isPicoSource(dependency.source),
+        );
+        const picoText = this.textMatchLocation(
+            analysis.source,
+            /(?:@picocss\/pico|--pico-[a-z0-9-]+)/iu,
+        );
+        if (picoImport || picoVariable || picoDependency || picoText) {
+            issues.push(this.issue(
+                analysis,
+                'PICO_REFERENCE_FORBIDDEN',
+                'Pico imports and --pico-* variables are not part of the Bootstrap styling contract.',
+                picoImport?.location ??
+                    picoVariable?.location ??
+                    picoDependency?.location ??
+                    picoText,
             ));
         }
         return issues;
@@ -91,7 +219,7 @@ export class ArchitectureRuleSet {
         const issues: LintIssueDraft[] = [];
         const relative = this.paths.relative(analysis.filePath);
         const isGlobalStyle = relative.endsWith(
-            'code/frontend/web/src/shared/styles/main.css',
+            'code/frontend/web/src/shared/styles/main.scss',
         );
         const isTablerStyle = relative.endsWith(
             'code/frontend/web/src/shared/styles/tabler/tabler-icons.css',
@@ -104,7 +232,7 @@ export class ArchitectureRuleSet {
             issues.push(this.issue(
                 analysis,
                 'TABLER_ICON_GLOBAL_IMPORT_MISSING',
-                'shared/styles/main.css must import the local Tabler icon stylesheet.',
+                'shared/styles/main.scss must import the local Tabler icon stylesheet.',
             ));
         }
         if (importsTabler && !isGlobalStyle && !isTablerStyle) {
@@ -114,41 +242,52 @@ export class ArchitectureRuleSet {
             issues.push(this.issue(
                 analysis,
                 'TABLER_ICON_OWNERSHIP',
-                'The Tabler icon stylesheet may only be imported by shared/styles/main.css.',
+                'The Tabler icon stylesheet may only be imported by shared/styles/main.scss.',
                 evidence?.location,
             ));
         }
         if (
             imports.some((source) => this.isTablerRemoteSource(source)) ||
-            (analysis.isVue && this.hasTablerRemoteLink(analysis.source))
+            (this.isMarkup(analysis) &&
+                this.hasTablerRemoteReference(analysis.source))
         ) {
             issues.push(this.issue(
                 analysis,
                 'TABLER_ICON_CDN_FORBIDDEN',
                 'Tabler Icons must use the bundled local font, not a CDN.',
-                this.remoteStyleLocation(analysis, this.isTablerRemoteSource),
+                this.remoteReferenceLocation(
+                    analysis,
+                    this.isTablerRemoteSource,
+                ),
             ));
         }
         return issues;
     }
 
-    private isPicoRemoteSource(source: string): boolean {
-        return /^https?:\/\//iu.test(source) &&
-            /(?:picocss\.com|@picocss\/pico)/iu.test(source);
+    private isBootstrapRemoteSource(source: string): boolean {
+        return /^(?:https?:)?\/\//iu.test(source) &&
+            /(?:getbootstrap\.com|bootstrapcdn\.com|bootstrap(?:@|\/|-))/iu.test(
+                source,
+            );
     }
 
-    private hasPicoRemoteLink(source: string): boolean {
-        return /<link\b[^>]*href=["']https?:\/\/[^"']*(?:picocss\.com|@picocss\/pico)[^"']*["']/iu.test(
+    private hasBootstrapRemoteReference(source: string): boolean {
+        return /<(?:link|script)\b[^>]*(?:href|src)=["'](?:https?:)?\/\/[^"']*(?:getbootstrap\.com|bootstrapcdn\.com|bootstrap(?:@|\/|-))[^"']*["']/iu.test(
             source,
         );
     }
 
-    private isTablerRemoteSource(source: string): boolean {
-        return /^https?:\/\//iu.test(source) && /tabler/iu.test(source);
+    private isPicoSource(source: string): boolean {
+        return source.includes('@picocss/pico') ||
+            (/^(?:https?:)?\/\//iu.test(source) && /picocss/iu.test(source));
     }
 
-    private hasTablerRemoteLink(source: string): boolean {
-        return /<link\b[^>]*href=["']https?:\/\/[^"']*tabler[^"']*["']/iu.test(
+    private isTablerRemoteSource(source: string): boolean {
+        return /^(?:https?:)?\/\//iu.test(source) && /tabler/iu.test(source);
+    }
+
+    private hasTablerRemoteReference(source: string): boolean {
+        return /<(?:link|script)\b[^>]*(?:href|src)=["'](?:https?:)?\/\/[^"']*tabler[^"']*["']/iu.test(
             source,
         );
     }
@@ -156,6 +295,11 @@ export class ArchitectureRuleSet {
     private placementIssues(analysis: SourceAnalysis): LintIssueDraft[] {
         const segments = this.paths.segments(analysis.filePath);
         const layer = this.paths.layer(analysis.filePath);
+        if (this.paths.relative(analysis.filePath).endsWith(
+            'code/frontend/web/index.html',
+        )) {
+            return [];
+        }
         if (layer === 'root' && segments.join('/') !== 'main.ts') {
             return [
                 this.issue(
@@ -415,9 +559,10 @@ export class ArchitectureRuleSet {
         analysis: SourceAnalysis,
     ): LintIssueDraft[] {
         const relative = this.paths.relative(analysis.filePath);
-        const isPresentationOwner = relative.endsWith(
+        const isPresentationOwner = [
             'code/frontend/web/src/app/presentation.ts',
-        );
+            'code/frontend/web/src/app/bootstrap-color-mode.ts',
+        ].some((owner) => relative.endsWith(owner));
         if (
             !isPresentationOwner &&
             (analysis.calls.some((call) => call.endsWith('matchMedia')) ||
@@ -719,7 +864,7 @@ export class ArchitectureRuleSet {
               ];
     }
 
-    private remoteStyleLocation(
+    private remoteReferenceLocation(
         analysis: SourceAnalysis,
         predicate: (source: string) => boolean,
     ): SourceSpan | undefined {
@@ -729,11 +874,38 @@ export class ArchitectureRuleSet {
         if (imported) {
             return imported.location;
         }
-        const match = analysis.source.match(/https?:\/\/[^"'\s>]+/iu);
+        const dependency = analysis.dependencies.find((entry) =>
+            predicate(entry.source),
+        );
+        if (dependency) {
+            return dependency.location;
+        }
+        const pattern = /(?:https?:)?\/\/[^"'\s>]+/giu;
+        for (const match of analysis.source.matchAll(pattern)) {
+            if (match.index !== undefined && predicate(match[0])) {
+                return this.offsetLocation(
+                    analysis.source,
+                    match.index,
+                    match.index + match[0].length,
+                );
+            }
+        }
+        return undefined;
+    }
+
+    private isMarkup(analysis: SourceAnalysis): boolean {
+        return analysis.isVue || analysis.filePath.endsWith('.html');
+    }
+
+    private textMatchLocation(
+        source: string,
+        pattern: RegExp,
+    ): SourceSpan | undefined {
+        const match = source.match(pattern);
         return match?.index === undefined
             ? undefined
             : this.offsetLocation(
-                  analysis.source,
+                  source,
                   match.index,
                   match.index + match[0].length,
               );
@@ -776,6 +948,20 @@ export class ArchitectureRuleSet {
             observed,
             location,
             relatedLocations,
+        };
+    }
+
+    private missingOwnerIssue(
+        filePath: string,
+        ruleId: LintIssueDraft['ruleId'],
+        observed: string,
+    ): LintIssueDraft {
+        return {
+            ruleId,
+            severity: 'error',
+            file: this.paths.relative(filePath),
+            observed,
+            location: null,
         };
     }
 }

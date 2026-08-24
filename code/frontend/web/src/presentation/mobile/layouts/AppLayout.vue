@@ -6,16 +6,17 @@ import { authComposable } from '../../../core/composables/auth.composable.ts';
 <template>
     <div class="mobile-shell">
         <header class="mobile-header">
-            <RouterLink class="mobile-brand" to="/">Web App</RouterLink>
+            <RouterLink class="mobile-brand navbar-brand" to="/">Web App</RouterLink>
         </header>
         <main class="mobile-content" id="main-content">
             <slot />
         </main>
-        <nav class="mobile-navigation" aria-label="Mobile navigation">
-            <RouterLink to="/">Home</RouterLink>
-            <RouterLink to="/about">About</RouterLink>
+        <nav class="mobile-navigation nav" aria-label="Mobile navigation">
+            <RouterLink class="nav-link" to="/">Home</RouterLink>
+            <RouterLink class="nav-link" to="/about">About</RouterLink>
             <RouterLink
                 v-if="authComposable.enabled"
+                class="nav-link"
                 :to="authComposable.data.value ? '/account' : '/sign-in'"
             >
                 {{ authComposable.data.value ? 'Account' : 'Sign in' }}

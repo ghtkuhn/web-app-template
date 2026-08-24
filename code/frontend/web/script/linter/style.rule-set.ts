@@ -23,7 +23,6 @@ const GLOBAL_KEYWORDS = new Set([
 ]);
 const MATH_FUNCTIONS = new Set(['calc', 'clamp', 'max', 'min']);
 const MATH_OPERATORS = new Set(['+', '-', '*', '/']);
-const PICO_SPACING_PROPERTIES = new Set(['--pico-spacing']);
 
 /** Enforces units across complete CSS custom-property dependency chains. */
 export class StyleRuleSet {
@@ -97,22 +96,6 @@ export class StyleRuleSet {
                         ));
                     }
                     continue;
-                }
-                if (PICO_SPACING_PROPERTIES.has(property)) {
-                    if (!this.validValue(
-                        declaration.value,
-                        'box-spacing',
-                        property,
-                        variables,
-                        new Set(),
-                    )) {
-                        issues.push(this.issue(
-                            analysis,
-                            'FRONTEND_BOX_SPACING_UNIT',
-                            `${property} must resolve exclusively to px, percent, or unitless zero.`,
-                            declaration.location,
-                        ));
-                    }
                 }
             }
         }

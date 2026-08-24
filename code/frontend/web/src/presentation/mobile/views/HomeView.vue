@@ -10,11 +10,13 @@ import { healthComposable } from '../../../core/composables/health.composable.ts
             Mobile uses a dedicated touch-first flow instead of compressing the
             desktop interface into a narrow viewport.
         </p>
-        <article class="health-card" aria-labelledby="mobile-health-title">
-            <header><strong id="mobile-health-title">Backend health</strong></header>
-            <p>{{ healthComposable.data.value?.status ?? healthComposable.status.value }}</p>
-            <p v-if="healthComposable.error.value" role="alert">{{ healthComposable.error.value }}</p>
-            <footer><button type="button" @click="healthComposable.load()">Check health</button></footer>
+        <article class="health-card card" aria-labelledby="mobile-health-title">
+            <header class="card-header"><strong id="mobile-health-title">Backend health</strong></header>
+            <div class="card-body">
+                <p>{{ healthComposable.data.value?.status ?? healthComposable.status.value }}</p>
+                <p v-if="healthComposable.error.value" class="alert alert-danger mb-0" role="alert">{{ healthComposable.error.value }}</p>
+            </div>
+            <footer class="card-footer"><button class="btn btn-primary" type="button" @click="healthComposable.load()">Check health</button></footer>
         </article>
     </section>
 </template>

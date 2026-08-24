@@ -6,7 +6,7 @@ import { RouterLink } from 'vue-router';
     <section class="page tablet-not-found">
         <p class="eyebrow">404 · Tablet</p>
         <h1>The requested page is unavailable.</h1>
-        <RouterLink class="action-link" to="/">Return home</RouterLink>
+        <RouterLink class="action-link btn btn-outline-primary" to="/">Return home</RouterLink>
     </section>
 </template>
 

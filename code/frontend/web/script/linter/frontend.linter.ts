@@ -36,7 +36,7 @@ export class FrontendLinter {
     }
 
     public run(): LintResult {
-        const files = this.scanner.list(this.paths.sourceRoot());
+        const files = this.sourceFiles();
         const analyses: SourceAnalysis[] = [];
         const drafts: LintIssueDraft[] = [];
         for (const filePath of files) {
@@ -57,6 +57,7 @@ export class FrontendLinter {
                 });
             }
         }
+        drafts.push(...this.rules.globalContractIssues(files));
         drafts.push(...this.styleRules.evaluate(analyses));
         drafts.push(...this.parityIssues(analyses));
         const issues = drafts.map((draft) => this.catalog.create(draft));
@@ -64,6 +65,15 @@ export class FrontendLinter {
             filesChecked: files.length,
             issues: this.sort(issues),
         };
+    }
+
+    private sourceFiles(): string[] {
+        const files = this.scanner.list(this.paths.sourceRoot());
+        const document = path.join(this.paths.frontendRoot(), 'index.html');
+        if (fs.existsSync(document)) {
+            files.push(document);
+        }
+        return files.sort((left, right) => left.localeCompare(right));
     }
 
     private parityIssues(

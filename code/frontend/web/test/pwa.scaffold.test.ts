@@ -68,7 +68,8 @@ function fixture(): string {
     );
     fs.writeFileSync(
         path.join(root, 'src/main.ts'),
-        "import './shared/styles/main.css';\n" +
+        "import 'bootstrap';\n" +
+        "import './shared/styles/main.scss';\n" +
         "createApp(App).use(router).mount('#app');\n",
     );
     fs.writeFileSync(
@@ -105,6 +106,8 @@ test('PWA scaffold validates identity and installs the complete opt-in surface',
         .toContain('new NetworkOnly()');
     expect(fs.existsSync(path.join(root, 'playwright.pwa.config.ts')))
         .toBe(true);
+    expect(fs.readFileSync(path.join(root, 'src/main.ts'), 'utf8'))
+        .toContain("import 'bootstrap';");
     expect(JSON.parse(fs.readFileSync(
         path.join(root, 'package.json'),
         'utf8',

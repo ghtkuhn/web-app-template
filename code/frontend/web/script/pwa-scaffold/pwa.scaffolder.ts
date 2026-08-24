@@ -231,7 +231,7 @@ export class PwaScaffolder {
         if (
             !vite.includes("import vue from '@vitejs/plugin-vue';") ||
             !vite.includes('    plugins: [vue()],') ||
-            !main.includes("import './shared/styles/main.css';") ||
+            !main.includes("import './shared/styles/main.scss';") ||
             !main.includes("createApp(App).use(router).mount('#app');")
         ) {
             throw new Error('Frontend composition is not PWA-scaffold compatible.');
@@ -252,8 +252,8 @@ export class PwaScaffolder {
             .replace('    plugins: [vue()],', pwaConfig.trimEnd());
         const updatedMain = main
             .replace(
-                "import './shared/styles/main.css';",
-                "import './shared/styles/main.css';\nimport { pwaLifecycle } from './app/pwa-lifecycle.ts';",
+                "import './shared/styles/main.scss';",
+                "import './shared/styles/main.scss';\nimport { pwaLifecycle } from './app/pwa-lifecycle.ts';",
             )
             .replace(
                 "createApp(App).use(router).mount('#app');",
