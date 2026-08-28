@@ -3,6 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 export const LXC_CONTRACT_FILES = [
+    'script/deployment/process.runner.ts',
+    'script/deployment/deployment.cli.ts',
+    'script/deployment/existing-lxc.driver.ts',
     'script/deployment/lxc-runtime.contract.ts',
     'script/deployment/release.builder.ts',
     'script/deployment/ssh.release-driver.ts',

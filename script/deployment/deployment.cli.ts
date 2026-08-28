@@ -67,6 +67,8 @@ export class DeploymentCli {
                 await this.infrastructureStatus(profile, selection);
             } else if (command === 'infrastructure:upgrade') {
                 await this.infrastructureUpgrade(profile, selection);
+            } else if (command === 'diagnose') {
+                await this.diagnose(profile, selection);
             } else if (command === 'status') {
                 await this.status(profile, selection);
             } else if (command === 'stop') {
@@ -264,6 +266,24 @@ export class DeploymentCli {
                 ).infrastructureUpgrade(nodeVersion);
                 upgraded.add(key);
             }
+        });
+    }
+
+    private async diagnose(
+        profile: DeploymentProfile,
+        selection: ComponentSelection,
+    ): Promise<void> {
+        await this.each(profile, selection, async (component, target) => {
+            if (target.driver !== 'existing-lxc') {
+                throw new Error(
+                    'Deployment diagnostics apply only to existing-lxc targets.',
+                );
+            }
+            process.stdout.write(
+                await new ExistingLxcDeploymentDriver(target).diagnose(
+                    component,
+                ),
+            );
         });
     }
 

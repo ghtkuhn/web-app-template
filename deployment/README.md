@@ -150,6 +150,7 @@ releases. Inspect and explicitly upgrade it with:
 ```bash
 npm run credentials:run -- deployment:infrastructure:status -- <profile> <backend|frontend|all>
 npm run credentials:run -- deployment:infrastructure:upgrade -- <profile> <backend|frontend|all>
+npm run credentials:run -- deployment:diagnose -- <profile> <backend|frontend|all>
 ```
 
 Deploy refuses a backend upload when the remote infrastructure schema, exact
@@ -157,6 +158,23 @@ Node.js version, or npm major does not match the repository contract. Upgrade
 preserves releases, the active `current` symlink, configuration, and persistent
 data. A recognized legacy backend release receives a compatibility launcher;
 unknown or ambiguous layouts stop the upgrade without changing systemd.
+
+When a deployment fails, the standard command reports the failed remote stage,
+exit code, and bounded child-process output after value-based credential
+redaction. Do not create temporary npm scripts or duplicate the SSH/SCP
+transport to obtain diagnostics. The read-only diagnostic command reports the
+pinned SSH target, infrastructure contract, Node/npm runtime, active release,
+and service state without uploading files or changing the LXC:
+
+```bash
+npm run credentials:run -- deployment:diagnose -- <profile> <backend|frontend|all>
+```
+
+Deployment stages distinguish artifact checksum, release staging and
+validation, dependency installation, configuration, service stop, release
+switch, activation/health check, and backup retention. Failures before the
+service-stop stage leave the active release untouched. A failed activation
+restores the previous release before returning the error.
 
 ### Guidance for AI Agents
 
@@ -207,8 +225,9 @@ root lockfile, backend workspace manifest, backend source, maintenance script,
 versioned release contract, and stable `start-backend.mjs` launcher. The remote
 candidate and fallback release are validated before configuration, service
 state, migrations, or symlinks can change. Dependencies are installed into the
-candidate before downtime starts; symlinks inside release archives are
-forbidden.
+candidate before downtime starts. Source archives contain no `node_modules`;
+npm-generated links in installed dependency trees are accepted only when their
+targets remain inside the release.
 
 Before pending SQLite migrations, the backend creates and validates an online
 backup under `/var/lib/<installationId>/backups`. The default retention is ten backups

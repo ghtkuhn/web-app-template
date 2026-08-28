@@ -164,3 +164,22 @@ catalog-listed LXC contract to one coherent version; do not combine an older
 validator or SSH driver with the 5.0.3 catalog. Existing remote releases and
 infrastructure schema 3 remain compatible and require no migration solely for
 this fix.
+
+## Template 5.0.4 LXC deployment diagnostics
+
+Template 5.0.4 preserves bounded, explicitly redacted child-process output for
+deployment failures and reports the exact remote activation or rollback stage.
+The standard `deployment:deploy` command now exposes actionable npm, validator,
+service, and health-check evidence without printing process arguments, stdin,
+or known SSH/sudo credentials. `deployment:diagnose` provides a read-only JSON
+snapshot of the Existing-LXC connection, infrastructure contract, runtime,
+active release, and service state. The credential runner also normalizes the
+optional separator in `credentials:run -- <script> -- <arguments>` so older
+agent instructions keep invoking the intended deployment profile.
+
+Unmodified older applications receive the ProcessRunner, SSH driver, Existing-
+LXC driver, deployment CLI, package script, and expanded generated LXC contract
+catalog together. Locally modified deployment contract files must be resolved
+as one coherent incoming set. Infrastructure schema 3 and existing remote
+releases remain compatible; neither bootstrap nor infrastructure upgrade is
+required solely for these diagnostics.

@@ -828,6 +828,28 @@ test('Existing-LXC pins host keys and supports release lifecycle operations', as
     expect(activation.indexOf('npm ls --omit=dev --all')).toBeLessThan(
         activation.indexOf('service-control stop backend'),
     );
+    expect(activation).toContain("stage='dependency-installation'");
+    expect(activation).toContain(
+        'Deployment stage %s failed with exit code %s.',
+    );
+    let stagedFailure: unknown;
+    const artifactStage = "stage='artifact-checksum'";
+    try {
+        new ProcessRunner().run('sh', [
+            '-c',
+            `${activation.slice(0, activation.indexOf(artifactStage))}${
+                artifactStage
+            } && false`,
+        ], { failureOutput: { redact: [] } });
+    } catch (error) {
+        stagedFailure = error;
+    }
+    expect(String(stagedFailure)).toContain(
+        'Deployment stage artifact-checksum failed with exit code 1.',
+    );
+    expect(String(stagedFailure)).toContain(
+        'Release state: active release was not switched.',
+    );
     expect(activation).toContain(
         'run-database-maintenance.mjs',
     );
@@ -842,6 +864,75 @@ test('Existing-LXC pins host keys and supports release lifecycle operations', as
     expect(rollback.indexOf('npm ls --omit=dev --all')).toBeLessThan(
         rollback.indexOf('ln -sfnT'),
     );
+    expect(rollback).toContain("stage='activation-healthcheck'");
+});
+
+test('Existing-LXC diagnosis is read-only and reports runtime state', async () => {
+    const calls: Array<{ command: string; arguments_: readonly string[] }> = [];
+    const runner = {
+        run(command: string, arguments_: readonly string[]): string {
+            calls.push({ command, arguments_ });
+            const remoteCommand = arguments_.at(-1) ?? '';
+            if (remoteCommand.includes('infrastructure.json')) {
+                return JSON.stringify({
+                    schemaVersion: LXC_INFRASTRUCTURE_SCHEMA_VERSION,
+                    deploymentUser: 'app',
+                    nodeVersion: '24.19.0',
+                    npmRange: '>=11 <12',
+                    backendLauncher: LxcRuntimeContract.backendLauncher,
+                    maintenanceLauncher:
+                        LxcRuntimeContract.backendMaintenanceLauncher,
+                });
+            }
+            if (remoteCommand.includes('/usr/local/bin/node --version')) {
+                return 'v24.19.0';
+            }
+            if (remoteCommand.includes('/usr/local/bin/npm --version')) {
+                return '11.17.0';
+            }
+            if (remoteCommand.includes("printf 'release=%s")) {
+                return 'release=release-42\nservice=active';
+            }
+            return '';
+        },
+    } as ProcessRunner;
+    const projectRoot = path.resolve(
+        path.dirname(new URL(import.meta.url).pathname),
+        '../../../..',
+    );
+
+    const output = await new ExistingLxcDeploymentDriver(
+        existingTarget(),
+        runner,
+        { DEPLOYMENT_SSH_PRIVATE_KEY: '/keys/deploy' },
+        projectRoot,
+    ).diagnose('backend');
+    const diagnostic = JSON.parse(output);
+
+    expect(diagnostic).toMatchObject({
+        schemaVersion: 1,
+        driver: 'existing-lxc',
+        ssh: 'ok',
+        target: {
+            component: 'backend',
+            sshUser: 'app',
+        },
+        infrastructure: { matches: true },
+        runtime: { matches: true },
+        release: 'release-42',
+        service: 'active',
+    });
+    expect(calls.every((call) => call.command === 'ssh')).toBe(true);
+    const argumentsText = calls.flatMap((call) => call.arguments_).join(' ');
+    expect(argumentsText).not.toContain('scp');
+    expect(argumentsText).not.toContain('sudo');
+    expect(argumentsText).not.toContain('rm ');
+    const manifest = JSON.parse(fs.readFileSync(
+        path.join(projectRoot, 'package.json'),
+        'utf8',
+    ));
+    expect(manifest.scripts['deployment:diagnose'])
+        .toBe('node script/deployment/deployment.cli.ts diagnose');
 });
 
 test('Existing-LXC runtime mismatch fails before upload or downtime', async () => {
@@ -923,6 +1014,57 @@ test('remote service failures remain distinct from SSH transport failures', asyn
     ).status('backend')).rejects.toThrow(/transport or authentication/u);
 });
 
+test('remote activation failures retain phase and package diagnostics', async () => {
+    const runner = {
+        run(command: string, arguments_: readonly string[]): string {
+            const remoteCommand = arguments_.at(-1) ?? '';
+            if (remoteCommand.includes('infrastructure.json')) {
+                return JSON.stringify({
+                    schemaVersion: LXC_INFRASTRUCTURE_SCHEMA_VERSION,
+                    deploymentUser: 'app',
+                    nodeVersion: '24.19.0',
+                    npmRange: '>=11 <12',
+                    backendLauncher: LxcRuntimeContract.backendLauncher,
+                    maintenanceLauncher:
+                        LxcRuntimeContract.backendMaintenanceLauncher,
+                });
+            }
+            if (remoteCommand === '/usr/local/bin/node --version') {
+                return 'v24.19.0';
+            }
+            if (remoteCommand === '/usr/local/bin/npm --version') {
+                return '11.17.0';
+            }
+            if (remoteCommand.includes('sha256sum -c')) {
+                throw new ProcessExecutionError(command, 1, null, [
+                    'stderr:',
+                    'npm error Missing: kysely from @app/backend@1.0.0',
+                    'Deployment stage dependency-installation failed with exit code 1.',
+                ].join('\n'));
+            }
+            return '';
+        },
+    } as ProcessRunner;
+    const projectRoot = path.resolve(
+        path.dirname(new URL(import.meta.url).pathname),
+        '../../../..',
+    );
+
+    await expect(new ExistingLxcDeploymentDriver(
+        existingTarget(),
+        runner,
+        { DEPLOYMENT_SSH_PRIVATE_KEY: '/keys/deploy' },
+        projectRoot,
+    ).deploy(
+        'backend',
+        '/tmp/backend-release.tgz',
+        'release-1',
+        '/tmp/backend.env',
+    )).rejects.toThrow(
+        /activate backend release 'release-1'.*kysely.*dependency-installation/su,
+    );
+});
+
 test('process failures preserve exit codes without echoing arguments', () => {
     let observed: unknown;
     try {
@@ -965,6 +1107,32 @@ test('process input reaches stdin without entering output or errors', () => {
     }
     expect(observed).toBeInstanceOf(ProcessExecutionError);
     expect(String(observed)).not.toContain(secret);
+});
+
+test('requested process diagnostics are bounded and redact explicit values', () => {
+    const secret = 'never-print-this';
+    let observed: unknown;
+    try {
+        new ProcessRunner().run(process.execPath, [
+            '--eval',
+            `process.stdout.write('${secret}'); process.stderr.write('Missing dependency: kysely'); process.exit(7);`,
+        ], {
+            failureOutput: {
+                redact: [secret],
+                maxCharacters: 1_000,
+            },
+        });
+    } catch (error) {
+        observed = error;
+    }
+
+    expect(observed).toBeInstanceOf(ProcessExecutionError);
+    expect(observed).toMatchObject({
+        diagnostic: expect.stringContaining('Missing dependency: kysely'),
+    });
+    expect(String(observed)).toContain('[REDACTED]');
+    expect(String(observed)).not.toContain(secret);
+    expect(String(observed)).not.toContain('process.stderr.write');
 });
 
 test('release validation rejects symlinks that escape the candidate', () => {

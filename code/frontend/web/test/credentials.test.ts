@@ -81,6 +81,31 @@ test('credential run gives an existing environment value precedence', () => {
     expect(fs.readFileSync(path.join(root, 'result.txt'), 'utf8')).toBe('host');
 });
 
+test('credential run accepts the documented optional argument separator', () => {
+    const root = fixture();
+    fs.writeFileSync(
+        path.join(root, '.credentials.env'),
+        'TEST_TEMPLATE_SECRET=local\n',
+        { mode: 0o600 },
+    );
+    fs.writeFileSync(path.join(root, 'capture.mjs'), [
+        "import fs from 'node:fs';",
+        "fs.writeFileSync('arguments.json', JSON.stringify(process.argv.slice(2)));",
+    ].join('\n'));
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+        scripts: { capture: 'node capture.mjs' },
+    }));
+
+    expect(new CredentialManager(root).run(
+        'capture',
+        ['--', 'local', 'all'],
+    )).toBe(0);
+    expect(JSON.parse(fs.readFileSync(
+        path.join(root, 'arguments.json'),
+        'utf8',
+    ))).toEqual(['local', 'all']);
+});
+
 test('credential run redacts file and overridden values from child output', () => {
     const root = fixture();
     fs.writeFileSync(

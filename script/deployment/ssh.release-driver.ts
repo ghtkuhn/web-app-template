@@ -14,14 +14,29 @@ import {
 
 export class SshTransportError extends Error {
     public readonly exitCode = 255;
+
+    public constructor(host: string, diagnostic: string | null) {
+        super(
+            `SSH transport or authentication failed for ${host}.${
+                diagnostic ? `\n${diagnostic}` : ''
+            }`,
+        );
+        this.name = 'SshTransportError';
+    }
 }
 
 export class RemoteCommandError extends Error {
     public readonly exitCode: number | null;
 
-    public constructor(exitCode: number | null) {
+    public constructor(
+        operation: string,
+        exitCode: number | null,
+        diagnostic: string | null,
+    ) {
         super(
-            `Remote SSH command failed${exitCode === null ? '' : ` with exit code ${exitCode}`}.`,
+            `Remote ${operation} failed${
+                exitCode === null ? '' : ` with exit code ${exitCode}`
+            }.${diagnostic ? `\n${diagnostic}` : ''}`,
         );
         this.name = 'RemoteCommandError';
         this.exitCode = exitCode;
@@ -100,11 +115,11 @@ export class SshReleaseDriver {
                 validator,
                 configuration,
                 `${this.destination()}:/tmp/`,
-            ]));
+            ]), undefined, `upload ${component} release`);
             this.transport('ssh', this.sshArguments([
                 this.destination(),
                 this.activationCommand(component, release, expected),
-            ]));
+            ]), undefined, `activate ${component} release '${release}'`);
         });
     }
 
@@ -136,22 +151,45 @@ export class SshReleaseDriver {
                 ? `${root}/releases/${release}`
                 : `${root}/previous`;
             const expected = this.rollbackContracts(component);
-            const command = [
-                `candidate=$(readlink -f ${candidate})`,
-                'test -d "$candidate"',
-                `case "$candidate/" in ${root}/releases/*/) true ;; *) exit 65 ;; esac`,
-                this.validateCandidate('$candidate', expected),
-                component === 'backend'
-                    ? this.backendDependencyTree('$candidate')
-                    : 'true',
-                `current=$(if [ -L ${root}/current ]; then readlink -f ${root}/current; fi)`,
-                `ln -sfnT "$candidate" ${root}/current`,
-                `if ! ${this.installCommand(root, component)} || ! ${this.healthCommand(component)}; then if [ -n "$current" ]; then ln -sfnT "$current" ${root}/current; ${this.installCommand(root, component)}; fi; exit 1; fi`,
-            ].join(' && ');
+            const command = this.stagedCommand([
+                {
+                    stage: 'resolve-release',
+                    command: [
+                        `candidate=$(readlink -f ${candidate})`,
+                        'test -d "$candidate"',
+                        `case "$candidate/" in ${root}/releases/*/) true ;; *) exit 65 ;; esac`,
+                    ].join(' && '),
+                },
+                {
+                    stage: 'release-validation',
+                    command: this.validateCandidate('$candidate', expected),
+                },
+                {
+                    stage: 'dependency-validation',
+                    command: component === 'backend'
+                        ? this.backendDependencyTree('$candidate')
+                        : 'true',
+                },
+                {
+                    stage: 'release-switch',
+                    releaseState:
+                        'release switch may be incomplete; run deployment:diagnose',
+                    command: [
+                        `current=$(if [ -L ${root}/current ]; then readlink -f ${root}/current; fi)`,
+                        `ln -sfnT "$candidate" ${root}/current`,
+                    ].join(' && '),
+                },
+                {
+                    stage: 'activation-healthcheck',
+                    releaseState:
+                        'restoration of the formerly active release was attempted; run deployment:diagnose',
+                    command: `if ! ${this.installCommand(root, component)} || ! ${this.healthCommand(component)}; then if [ -n "$current" ]; then ln -sfnT "$current" ${root}/current; ${this.installCommand(root, component)}; fi; exit 1; fi`,
+                },
+            ]);
             this.transport('ssh', this.sshArguments([
                 this.destination(),
                 command,
-            ]));
+            ]), undefined, `rollback ${component} release`);
         });
     }
 
@@ -213,6 +251,84 @@ export class SshReleaseDriver {
         });
     }
 
+    /** Reports read-only connectivity, runtime, release, and service evidence. */
+    public async diagnose(component: ComponentName): Promise<string> {
+        return this.withConnection(async () => {
+            await this.waitForSsh();
+            const infrastructure = this.remoteInfrastructure();
+            const requiredNode = this.nodeVersion();
+            const requiredNpm = this.npmRange();
+            const observedNode = this.transport('ssh', this.sshArguments([
+                this.destination(),
+                "if [ -x /usr/local/bin/node ]; then /usr/local/bin/node --version; else printf 'missing'; fi",
+            ]), undefined, 'inspect Node.js runtime').replace(/^v/u, '');
+            const observedNpm = this.transport('ssh', this.sshArguments([
+                this.destination(),
+                "if [ -x /usr/local/bin/npm ]; then /usr/local/bin/npm --version; else printf 'missing'; fi",
+            ]), undefined, 'inspect npm runtime');
+            const root = this.componentRoot(component);
+            const state = this.transport('ssh', this.sshArguments([
+                this.destination(),
+                [
+                    `current=$(readlink -f ${root}/current 2>/dev/null || true)`,
+                    `case "$current/" in ${root}/releases/*/) printf 'release=%s\\n' "${'$'}{current##*/}" ;; *) printf 'release=\\n' ;; esac`,
+                    `if ${this.readOnlyServiceStatusCommand(component)} >/dev/null 2>&1; then printf 'service=active\\n'; else code=$?; printf 'service=inactive-or-unavailable:%s\\n' "$code"; fi`,
+                ].join('; '),
+            ]), undefined, `inspect ${component} release state`);
+            const fields = new Map(state.split('\n').map((line) => {
+                const separator = line.indexOf('=');
+                return separator < 0
+                    ? [line, '']
+                    : [line.slice(0, separator), line.slice(separator + 1)];
+            }));
+            const expectedInfrastructure = {
+                schemaVersion: LXC_INFRASTRUCTURE_SCHEMA_VERSION,
+                deploymentUser: this.target.sshUser,
+                nodeVersion: requiredNode,
+                npmRange: requiredNpm,
+                backendLauncher: LxcRuntimeContract.backendLauncher,
+                maintenanceLauncher:
+                    LxcRuntimeContract.backendMaintenanceLauncher,
+            };
+            const infrastructureMatches = Object.entries(
+                expectedInfrastructure,
+            ).every(([name, value]) => infrastructure[name] === value);
+            return `${JSON.stringify({
+                schemaVersion: 1,
+                driver: this.privilegeMode === 'managed'
+                    ? 'existing-lxc'
+                    : 'proxmox-lxc',
+                target: {
+                    installationId: this.target.installationId,
+                    component,
+                    sshHost: this.target.sshHost,
+                    sshPort: this.target.sshPort,
+                    sshUser: this.target.sshUser,
+                },
+                ssh: 'ok',
+                infrastructure: {
+                    matches: infrastructureMatches,
+                    required: expectedInfrastructure,
+                    observed: infrastructure,
+                },
+                runtime: {
+                    matches: observedNode === requiredNode &&
+                        this.matchesNpm(observedNpm, requiredNpm),
+                    required: {
+                        nodeVersion: requiredNode,
+                        npmRange: requiredNpm,
+                    },
+                    observed: {
+                        nodeVersion: observedNode,
+                        npmVersion: observedNpm,
+                    },
+                },
+                release: fields.get('release') || null,
+                service: fields.get('service') || 'unknown',
+            }, null, 4)}\n`;
+        });
+    }
+
     /** Explicitly upgrades Existing-LXC operating-system integration. */
     public async infrastructureUpgrade(nodeVersion: string): Promise<void> {
         await this.infrastructure('upgrade', nodeVersion);
@@ -228,37 +344,78 @@ export class SshReleaseDriver {
         }
         const root = this.componentRoot(component);
         const candidate = `${root}/releases/${release}`;
-        return [
-            `cd /tmp && sha256sum -c ${component}-${release}.tgz.sha256`,
-            `mkdir -p ${root}`,
-            `install -m 700 /tmp/install-${component}.sh ${root}/install.sh`,
-            `previous=$(if [ -L ${root}/current ] && [ -e ${root}/current ]; then readlink -f ${root}/current; fi)`,
-            `if [ -n "$previous" ]; then case "$previous/" in ${root}/releases/*/) true ;; *) exit 65 ;; esac; fi`,
-            `test ! -e ${candidate}`,
-            `mkdir -p ${candidate}`,
-            `tar -xzf /tmp/${component}-${release}.tgz -C ${candidate}`,
-            this.privilegeMode === 'root'
-                ? this.installCommand(root, component, 'prepare')
-                : 'true',
-            this.validateCandidate(candidate, expected),
-            `if [ -n "$previous" ]; then ${this.validateCandidate('$previous', this.rollbackContracts(component))}; fi`,
-            component === 'backend'
-                ? `if [ -n "$previous" ]; then ${this.backendDependencyTree('$previous')}; fi`
-                : 'true',
-            component === 'backend'
-                ? `cd ${candidate} && /usr/local/bin/npm ci --ignore-scripts --omit=dev --workspace @app/backend && ${this.backendDependencyTree(candidate)}`
-                : 'true',
-            this.configurationCommand(component),
-            component === 'backend'
-                ? `${this.serviceCommand('stop', component)} || true`
-                : 'true',
-            `if [ -n "$previous" ]; then ln -sfnT "$previous" ${root}/previous; fi`,
-            `ln -sfnT ${candidate} ${root}/current`,
-            `if ! ${this.installCommand(root, component)} || ! ${this.healthCommand(component)}; then if [ -n "$previous" ]; then ln -sfnT "$previous" ${root}/current; ${this.installCommand(root, component)}; fi; exit 1; fi`,
-            component === 'backend'
-                ? this.sqliteMaintenanceIfConfigured('retain')
-                : 'true',
-        ].join(' && ');
+        return this.stagedCommand([
+            {
+                stage: 'artifact-checksum',
+                command: `cd /tmp && sha256sum -c ${component}-${release}.tgz.sha256`,
+            },
+            {
+                stage: 'release-staging',
+                command: [
+                    `mkdir -p ${root}`,
+                    `install -m 700 /tmp/install-${component}.sh ${root}/install.sh`,
+                    `previous=$(if [ -L ${root}/current ] && [ -e ${root}/current ]; then readlink -f ${root}/current; fi)`,
+                    `if [ -n "$previous" ]; then case "$previous/" in ${root}/releases/*/) true ;; *) exit 65 ;; esac; fi`,
+                    `test ! -e ${candidate}`,
+                    `mkdir -p ${candidate}`,
+                    `tar -xzf /tmp/${component}-${release}.tgz -C ${candidate}`,
+                    this.privilegeMode === 'root'
+                        ? this.installCommand(root, component, 'prepare')
+                        : 'true',
+                ].join(' && '),
+            },
+            {
+                stage: 'release-validation',
+                command: this.validateCandidate(candidate, expected),
+            },
+            {
+                stage: 'previous-release-validation',
+                command: [
+                    `if [ -n "$previous" ]; then ${this.validateCandidate('$previous', this.rollbackContracts(component))}; fi`,
+                    component === 'backend'
+                        ? `if [ -n "$previous" ]; then ${this.backendDependencyTree('$previous')}; fi`
+                        : 'true',
+                ].join(' && '),
+            },
+            {
+                stage: 'dependency-installation',
+                command: component === 'backend'
+                    ? `cd ${candidate} && /usr/local/bin/npm ci --ignore-scripts --omit=dev --workspace @app/backend && ${this.backendDependencyTree(candidate)}`
+                    : 'true',
+            },
+            {
+                stage: 'configuration',
+                command: this.configurationCommand(component),
+            },
+            {
+                stage: 'service-stop',
+                command: component === 'backend'
+                    ? `${this.serviceCommand('stop', component)} || true`
+                    : 'true',
+            },
+            {
+                stage: 'release-switch',
+                releaseState:
+                    'release switch may be incomplete; run deployment:diagnose',
+                command: [
+                    `if [ -n "$previous" ]; then ln -sfnT "$previous" ${root}/previous; fi`,
+                    `ln -sfnT ${candidate} ${root}/current`,
+                ].join(' && '),
+            },
+            {
+                stage: 'activation-healthcheck',
+                releaseState:
+                    'rollback to the previous release was attempted; run deployment:diagnose',
+                command: `if ! ${this.installCommand(root, component)} || ! ${this.healthCommand(component)}; then if [ -n "$previous" ]; then ln -sfnT "$previous" ${root}/current; ${this.installCommand(root, component)}; fi; exit 1; fi`,
+            },
+            {
+                stage: 'backup-retention',
+                releaseState: 'new release is active; backup retention failed',
+                command: component === 'backend'
+                    ? this.sqliteMaintenanceIfConfigured('retain')
+                    : 'true',
+            },
+        ]);
     }
 
     private configurationCommand(component: ComponentName): string {
@@ -291,6 +448,13 @@ export class SshReleaseDriver {
               ? 'is-active'
               : 'stop';
         return `systemctl ${systemctl} ${service}`;
+    }
+
+    private readOnlyServiceStatusCommand(component: ComponentName): string {
+        const service = component === 'backend'
+            ? `${this.target.installationId}-backend`
+            : 'nginx';
+        return `systemctl is-active ${service}`;
     }
 
     private installCommand(
@@ -621,6 +785,37 @@ export class SshReleaseDriver {
         return `'${value.replaceAll("'", "'\\''")}'`;
     }
 
+    /** Adds one stable failure stage without exposing the remote command. */
+    private stagedCommand(
+        steps: readonly {
+            readonly stage: string;
+            readonly command: string;
+            readonly releaseState?: string;
+        }[],
+    ): string {
+        const trap = [
+            'code=$?',
+            'trap - EXIT',
+            'if [ "$code" -ne 0 ]',
+            'then printf "Deployment stage %s failed with exit code %s.\\nRelease state: %s.\\n" "$stage" "$code" "$releaseState" >&2',
+            'fi',
+            'exit "$code"',
+        ].join('; ');
+        return [
+            "stage='initialization'",
+            "releaseState='active release was not switched'",
+            `trap '${trap}' EXIT`,
+            ...steps.flatMap((step) => [
+                `stage=${this.shellQuote(step.stage)}`,
+                ...(step.releaseState
+                    ? [`releaseState=${this.shellQuote(step.releaseState)}`]
+                    : []),
+                step.command,
+            ]),
+            'trap - EXIT',
+        ].join(' && ');
+    }
+
     private async waitForSsh(user = this.target.sshUser): Promise<void> {
         for (let attempt = 0; attempt < 60; attempt += 1) {
             try {
@@ -772,28 +967,43 @@ export class SshReleaseDriver {
         command: 'scp' | 'ssh',
         arguments_: readonly string[],
         input?: string,
+        operation = 'SSH command',
     ): string {
         try {
             return this.processes.run(command, arguments_, {
                 env: this.transportEnvironment,
                 input,
+                failureOutput: {
+                    redact: this.transportSecretValues(),
+                },
             });
         } catch (error) {
             if (
                 error instanceof ProcessExecutionError &&
                 error.exitCode === 255
             ) {
-                const transportError = new SshTransportError(
-                    `SSH transport or authentication failed for ${this.target.sshHost}.`,
+                throw new SshTransportError(
+                    this.target.sshHost,
+                    error.diagnostic,
                 );
-                transportError.name = 'SshTransportError';
-                throw transportError;
             }
             if (command === 'ssh' && error instanceof ProcessExecutionError) {
-                throw new RemoteCommandError(error.exitCode);
+                throw new RemoteCommandError(
+                    operation,
+                    error.exitCode,
+                    error.diagnostic,
+                );
             }
             throw error;
         }
+    }
+
+    private transportSecretValues(): string[] {
+        return [
+            this.environment.DEPLOYMENT_SSH_PASSWORD,
+            this.environment.DEPLOYMENT_SUDO_PASSWORD,
+            this.environment.DEPLOYMENT_SSH_PRIVATE_KEY,
+        ].filter((value): value is string => Boolean(value));
     }
 
     private destination(user = this.target.sshUser): string {

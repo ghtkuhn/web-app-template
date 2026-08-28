@@ -64,6 +64,10 @@ export class ExistingLxcDeploymentDriver {
         return this.releases.infrastructureStatus();
     }
 
+    public diagnose(component: ComponentName): Promise<string> {
+        return this.releases.diagnose(component);
+    }
+
     public infrastructureUpgrade(nodeVersion: string): Promise<void> {
         return this.releases.infrastructureUpgrade(nodeVersion);
     }

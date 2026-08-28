@@ -76,6 +76,7 @@
     "deployment:bootstrap": "node script/deployment/deployment.cli.ts bootstrap",
     "deployment:infrastructure:status": "node script/deployment/deployment.cli.ts infrastructure:status",
     "deployment:infrastructure:upgrade": "node script/deployment/deployment.cli.ts infrastructure:upgrade",
+    "deployment:diagnose": "node script/deployment/deployment.cli.ts diagnose",
     "generate:lxc-contract": "node script/deployment/lxc-contract.ts generate",
     "check:lxc-contract": "node script/deployment/lxc-contract.ts check",
     "deployment:build": "node script/deployment/deployment.cli.ts build",

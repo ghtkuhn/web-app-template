@@ -76,9 +76,16 @@ export class CredentialManager {
             'utf8',
         ));
         const environment = { ...values, ...process.env };
+        const forwardedArguments = args[0] === '--' ? args.slice(1) : args;
         const result = spawnSync(
             'npm',
-            ['run', script, ...(args.length > 0 ? ['--', ...args] : [])],
+            [
+                'run',
+                script,
+                ...(forwardedArguments.length > 0
+                    ? ['--', ...forwardedArguments]
+                    : []),
+            ],
             {
                 cwd: this.projectRoot,
                 env: environment,

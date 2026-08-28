@@ -253,7 +253,11 @@ test('planner upgrades an unchanged legacy LXC validator contract', () => {
     writeCanonicalInstructions([base, local, incoming]);
     const contractPaths = [
         'deployment/lxc/runtime-contract.catalog.json',
+        'script/credentials/credential.manager.ts',
+        'script/deployment/deployment.cli.ts',
+        'script/deployment/existing-lxc.driver.ts',
         'script/deployment/lxc-runtime.contract.ts',
+        'script/deployment/process.runner.ts',
         'script/deployment/ssh.release-driver.ts',
     ];
     for (const relativePath of contractPaths) {
@@ -733,6 +737,7 @@ test('package planning preserves app identity and merges template properties', (
         name: 'template-renamed',
         version: '2.0.0',
         scripts: {
+            'deployment:diagnose': 'node diagnose.ts',
             verify: 'new',
             local: 'base',
         },
@@ -757,6 +762,7 @@ test('package planning preserves app identity and merges template properties', (
     expect(merged.version).toBe('7.4.2');
     expect(merged.repository).toBe('local/repository');
     expect(merged.scripts).toEqual({
+        'deployment:diagnose': 'node diagnose.ts',
         local: 'custom',
         verify: 'new',
     });
@@ -1220,7 +1226,10 @@ test('transaction rejects workspace runtime drift before target npm install', ()
         'deployment/lxc/bootstrap-existing-lxc.sh',
         'deployment/lxc/install-backend.sh',
         'deployment/lxc/install-frontend.sh',
+        'script/deployment/deployment.cli.ts',
+        'script/deployment/existing-lxc.driver.ts',
         'script/deployment/lxc-runtime.contract.ts',
+        'script/deployment/process.runner.ts',
         'script/deployment/release.builder.ts',
         'script/deployment/ssh.release-driver.ts',
     ]) {
@@ -1282,7 +1291,10 @@ test('transaction rejects a mixed legacy and incoming LXC runtime layout', () =>
         'deployment/lxc/bootstrap-existing-lxc.sh',
         'deployment/lxc/install-backend.sh',
         'deployment/lxc/install-frontend.sh',
+        'script/deployment/deployment.cli.ts',
+        'script/deployment/existing-lxc.driver.ts',
         'script/deployment/lxc-runtime.contract.ts',
+        'script/deployment/process.runner.ts',
         'script/deployment/release.builder.ts',
         'script/deployment/ssh.release-driver.ts',
     ]) {
