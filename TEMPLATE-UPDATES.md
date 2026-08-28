@@ -134,3 +134,18 @@ Pico is no longer a supported parallel framework. Remove `@picocss/pico`,
 `--pico-*` variables, and Pico-only semantic classes from all merged files.
 The frontend linter reports remaining references with migration guidance.
 Tabler Icons and the three independent presentation trees remain unchanged.
+
+## Template 5.0.2 Existing-LXC sudo authentication
+
+Template 5.0.2 removes the passwordless-sudo prerequisite introduced by 5.0.1.
+Existing-LXC still connects as the non-root `deployment.sshUser` from
+`project.json`. Bootstrap and infrastructure upgrades first try passwordless
+sudo and otherwise require `DEPLOYMENT_SUDO_PASSWORD` in the ignored
+`/.credentials.env`. Add the new name manually to an existing credential file;
+the updater intentionally never reads or changes that file.
+
+The sudo password is passed only through SSH stdin and is never placed in a
+profile, command argument, or log. Normal deployments continue to use the
+narrow passwordless helpers installed by bootstrap and do not require this
+secret. Infrastructure schema 3 remains current, so this patch does not require
+an infrastructure upgrade solely for the authentication change.

@@ -29,11 +29,16 @@ export class ProcessRunner {
     public run(
         command: string,
         arguments_: readonly string[],
-        options: { cwd?: string; env?: NodeJS.ProcessEnv } = {},
+        options: {
+            cwd?: string;
+            env?: NodeJS.ProcessEnv;
+            input?: string;
+        } = {},
     ): string {
         const result = spawnSync(command, arguments_, {
             cwd: options.cwd,
             env: options.env,
+            input: options.input,
             encoding: 'utf8',
             stdio: 'pipe',
         });

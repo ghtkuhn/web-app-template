@@ -44,6 +44,11 @@ profile explicitly selects password authentication,
 drivers pin `sshHostKeyFingerprint` with `StrictHostKeyChecking=yes`; they do
 not use `ssh-keyscan` or interactive trust.
 
+Existing-LXC bootstrap and infrastructure upgrades first try passwordless
+sudo. If the configured user requires a sudo password, set the separate
+`DEPLOYMENT_SUDO_PASSWORD` in `/.credentials.env`. It is command-specific and
+therefore does not belong in profile `requiredSecrets`.
+
 PostgreSQL profiles additionally require `DATABASE_URL`. The URL is supplied
 only through the deployment environment and must never be stored in the JSON
 profile. Production URLs use the `postgresql:` protocol with
@@ -128,12 +133,14 @@ npm run credentials:run -- deployment:bootstrap -- <profile> <backend|frontend|a
 ```
 
 It connects as the non-root `deployment.sshUser` configured in `project.json`
-and runs the bootstrap script through non-interactive `sudo`. The account must
-already be able to execute that initial command with `sudo -n`; root SSH access
-is neither used nor required. Bootstrap installs the Node version from `.nvmrc`
-and configures that same account as the systemd application owner with Nginx,
-persistent directories, and narrowly scoped sudo helpers. Existing-LXC profiles
-therefore do not own an independent SSH user setting.
+and runs the bootstrap script through sudo. Passwordless sudo is detected
+automatically; otherwise `DEPLOYMENT_SUDO_PASSWORD` is passed only through the
+SSH process stdin to `sudo -S`. A regular sudo-enabled account is therefore
+sufficient, and root SSH access is neither used nor required. Bootstrap
+installs the Node version from `.nvmrc` and configures that same account as the
+systemd application owner with Nginx, persistent directories, and narrowly
+scoped sudo helpers. Existing-LXC profiles therefore do not own an independent
+SSH user setting.
 `deployment:deploy` never invokes bootstrap and does not otherwise
 provision or mutate the operating system.
 

@@ -39,6 +39,11 @@ export interface SshReleaseTarget {
 
 type PrivilegeMode = 'managed' | 'root';
 
+interface SudoInvocation {
+    readonly command: string;
+    readonly input?: string;
+}
+
 /** Owns the shared checksummed, host-key-pinned SSH release protocol. */
 export class SshReleaseDriver {
     private readonly target: SshReleaseTarget;
@@ -455,6 +460,7 @@ export class SshReleaseDriver {
     ): Promise<void> {
         await this.withConnection(async () => {
             await this.waitForSsh();
+            const sudo = this.sudoInvocation();
             const remoteDirectory = this.transport(
                 'ssh',
                 this.sshArguments([
@@ -486,8 +492,8 @@ export class SshReleaseDriver {
                 ]));
                 this.transport('ssh', this.sshArguments([
                     this.destination(),
-                    `sudo -n sh ${remoteDirectory}/bootstrap-existing-lxc.sh ${mode} ${this.target.installationId} ${nodeVersion} ${this.shellQuote(this.npmRange())} ${LXC_INFRASTRUCTURE_SCHEMA_VERSION} ${LxcRuntimeContract.backendLauncher} ${LxcRuntimeContract.backendMaintenanceLauncher} ${this.target.sshUser} ${remoteDirectory}`,
-                ]));
+                    `${sudo.command} sh ${remoteDirectory}/bootstrap-existing-lxc.sh ${mode} ${this.target.installationId} ${nodeVersion} ${this.shellQuote(this.npmRange())} ${LXC_INFRASTRUCTURE_SCHEMA_VERSION} ${LxcRuntimeContract.backendLauncher} ${LxcRuntimeContract.backendMaintenanceLauncher} ${this.target.sshUser} ${remoteDirectory}`,
+                ], sudo.input !== undefined), sudo.input);
             } catch (error) {
                 try {
                     this.removeRemoteBootstrapDirectory(remoteDirectory);
@@ -498,6 +504,47 @@ export class SshReleaseDriver {
             }
             this.removeRemoteBootstrapDirectory(remoteDirectory);
         });
+    }
+
+    /** Chooses passwordless or stdin-only sudo before any remote mutation. */
+    private sudoInvocation(): SudoInvocation {
+        try {
+            this.transport('ssh', this.sshArguments([
+                this.destination(),
+                'sudo -n true',
+            ]));
+            return { command: 'sudo -n --' };
+        } catch (error) {
+            if (!(error instanceof RemoteCommandError)) {
+                throw error;
+            }
+        }
+        const password = this.environment.DEPLOYMENT_SUDO_PASSWORD;
+        if (!password) {
+            throw new Error(
+                `DEPLOYMENT_SUDO_PASSWORD is required because deployment.sshUser '${this.target.sshUser}' needs a sudo password.`,
+            );
+        }
+        if (/\r|\n/u.test(password)) {
+            throw new Error(
+                'DEPLOYMENT_SUDO_PASSWORD must be a non-empty single-line value.',
+            );
+        }
+        const input = `${password}\n`;
+        try {
+            this.transport('ssh', this.sshArguments([
+                this.destination(),
+                "sudo -S -p '' -v",
+            ], true), input);
+        } catch (error) {
+            if (error instanceof RemoteCommandError) {
+                throw new Error(
+                    `sudo authentication or authorization failed for deployment.sshUser '${this.target.sshUser}'.`,
+                );
+            }
+            throw error;
+        }
+        return { command: "sudo -S -p '' --", input };
     }
 
     private removeRemoteBootstrapDirectory(remoteDirectory: string): void {
@@ -650,7 +697,10 @@ export class SshReleaseDriver {
         this.hostKeyCommand = command;
     }
 
-    private authenticationArguments(command: 'scp' | 'ssh'): string[] {
+    private authenticationArguments(
+        command: 'scp' | 'ssh',
+        allowStdin = false,
+    ): string[] {
         const privateKey = this.target.sshAuthentication === 'private-key'
             ? [
                   '-i',
@@ -673,7 +723,9 @@ export class SshReleaseDriver {
                   'PubkeyAuthentication=no',
                   '-o',
                   'KbdInteractiveAuthentication=no',
-                  ...(command === 'ssh' ? ['-o', 'StdinNull=yes'] : []),
+                  ...(command === 'ssh' && !allowStdin
+                      ? ['-o', 'StdinNull=yes']
+                      : []),
               ];
         return [
             command === 'scp' ? '-P' : '-p',
@@ -694,8 +746,14 @@ export class SshReleaseDriver {
         ];
     }
 
-    private sshArguments(arguments_: readonly string[]): string[] {
-        return [...this.authenticationArguments('ssh'), ...arguments_];
+    private sshArguments(
+        arguments_: readonly string[],
+        allowStdin = false,
+    ): string[] {
+        return [
+            ...this.authenticationArguments('ssh', allowStdin),
+            ...arguments_,
+        ];
     }
 
     private scpArguments(arguments_: readonly string[]): string[] {
@@ -705,10 +763,12 @@ export class SshReleaseDriver {
     private transport(
         command: 'scp' | 'ssh',
         arguments_: readonly string[],
+        input?: string,
     ): string {
         try {
             return this.processes.run(command, arguments_, {
                 env: this.transportEnvironment,
+                input,
             });
         } catch (error) {
             if (

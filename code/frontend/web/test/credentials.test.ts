@@ -112,3 +112,20 @@ test('credential run redacts file and overridden values from child output', () =
     expect(writes.join('')).not.toContain('from-host');
     expect(writes.join('')).not.toContain('from-file');
 });
+
+test('repository credential example declares value-free sudo authentication', () => {
+    const projectRoot = path.resolve(
+        path.dirname(new URL(import.meta.url).pathname),
+        '../../../..',
+    );
+    const lines = fs.readFileSync(
+        path.join(projectRoot, '.credentials.example.env'),
+        'utf8',
+    ).split(/\r?\n/u);
+
+    expect(lines).toContain('DEPLOYMENT_SUDO_PASSWORD=');
+    expect(lines.some((line) =>
+        line.startsWith('DEPLOYMENT_SUDO_PASSWORD=') &&
+        line !== 'DEPLOYMENT_SUDO_PASSWORD=',
+    )).toBe(false);
+});

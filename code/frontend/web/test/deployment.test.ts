@@ -125,6 +125,7 @@ test('profile scaffold supports isolated Existing-LXC targets and SQLite', () =>
     expect(profile.frontend.enabled && profile.frontend.target.driver)
         .toBe('existing-lxc');
     expect(profile.requiredSecrets).toContain('DEPLOYMENT_SSH_PRIVATE_KEY');
+    expect(profile.requiredSecrets).not.toContain('DEPLOYMENT_SUDO_PASSWORD');
     expect(
         profile.backend.enabled && profile.backend.target.driver ===
             'existing-lxc' && 'sshUser' in profile.backend.target,
@@ -937,6 +938,29 @@ test('process failures preserve exit codes without echoing arguments', () => {
     expect(String(observed)).not.toContain('process.exit');
 });
 
+test('process input reaches stdin without entering output or errors', () => {
+    const secret = 'stdin-only-secret';
+    const output = new ProcessRunner().run(process.execPath, [
+        '--eval',
+        "const fs = require('node:fs'); process.stdout.write(fs.readFileSync(0, 'utf8') ? 'received' : 'missing');",
+    ], { input: `${secret}\n` });
+
+    expect(output).toBe('received');
+    expect(output).not.toContain(secret);
+
+    let observed: unknown;
+    try {
+        new ProcessRunner().run(process.execPath, [
+            '--eval',
+            "require('node:fs').readFileSync(0, 'utf8'); process.exit(7);",
+        ], { input: `${secret}\n` });
+    } catch (error) {
+        observed = error;
+    }
+    expect(observed).toBeInstanceOf(ProcessExecutionError);
+    expect(String(observed)).not.toContain(secret);
+});
+
 test('release validation rejects symlinks that escape the candidate', () => {
     const candidate = fs.mkdtempSync(path.join(os.tmpdir(), 'release-candidate-'));
     roots.push(candidate);
@@ -1048,10 +1072,18 @@ test('Existing-LXC password stays out of arguments and missing secrets fail', as
 });
 
 test('Existing-LXC bootstrap is explicit and passes validated parameters', async () => {
-    const calls: Array<{ command: string; arguments_: readonly string[] }> = [];
+    const calls: Array<{
+        command: string;
+        arguments_: readonly string[];
+        input?: string;
+    }> = [];
     const runner = {
-        run(command: string, arguments_: readonly string[]): string {
-            calls.push({ command, arguments_ });
+        run(
+            command: string,
+            arguments_: readonly string[],
+            options?: { input?: string },
+        ): string {
+            calls.push({ command, arguments_, input: options?.input });
             return arguments_.at(-1)?.startsWith('mktemp -d ')
                 ? '/tmp/sample-app-bootstrap.ABC123'
                 : '';
@@ -1086,7 +1118,7 @@ test('Existing-LXC bootstrap is explicit and passes validated parameters', async
     )).toBe(false);
     expect(calls.some((call) =>
         call.arguments_.at(-1)?.includes(
-            'sudo -n sh /tmp/sample-app-bootstrap.ABC123/bootstrap-existing-lxc.sh',
+            'sudo -n -- sh /tmp/sample-app-bootstrap.ABC123/bootstrap-existing-lxc.sh',
         ),
     )).toBe(true);
     expect(calls.some((call) =>
@@ -1101,6 +1133,7 @@ test('Existing-LXC bootstrap is explicit and passes validated parameters', async
     expect(calls.some((call) =>
         call.arguments_.at(-1)?.includes('deployment:deploy'),
     )).toBe(false);
+    expect(calls.every((call) => call.input === undefined)).toBe(true);
     const bootstrapScript = fs.readFileSync(
         path.join(projectRoot, 'deployment/lxc/bootstrap-existing-lxc.sh'),
         'utf8',
@@ -1111,6 +1144,123 @@ test('Existing-LXC bootstrap is explicit and passes validated parameters', async
         'Unversioned Existing-LXC infrastructure exists',
     );
     expect(bootstrapScript).toContain('deployment-user must not be root');
+});
+
+test.each(['private-key', 'password'] as const)(
+    'Existing-LXC bootstrap supplies protected sudo stdin with %s SSH',
+    async (sshAuthentication) => {
+        const sudoPassword = 'sudo-secret-value';
+        const calls: Array<{
+            command: string;
+            arguments_: readonly string[];
+            input?: string;
+        }> = [];
+        const runner = {
+            run(
+                command: string,
+                arguments_: readonly string[],
+                options?: { input?: string },
+            ): string {
+                calls.push({
+                    command,
+                    arguments_: [...arguments_],
+                    input: options?.input,
+                });
+                const remoteCommand = arguments_.at(-1) ?? '';
+                if (remoteCommand === 'sudo -n true') {
+                    throw new ProcessExecutionError(command, 1, null);
+                }
+                return remoteCommand.startsWith('mktemp -d ')
+                    ? '/tmp/sample-app-bootstrap.ABC123'
+                    : '';
+            },
+        } as ProcessRunner;
+        const projectRoot = path.resolve(
+            path.dirname(new URL(import.meta.url).pathname),
+            '../../../..',
+        );
+        const environment = sshAuthentication === 'private-key'
+            ? {
+                  DEPLOYMENT_SSH_PRIVATE_KEY: '/keys/deploy',
+                  DEPLOYMENT_SUDO_PASSWORD: sudoPassword,
+              }
+            : {
+                  DEPLOYMENT_SSH_PASSWORD: 'ssh-secret-value',
+                  DEPLOYMENT_SUDO_PASSWORD: sudoPassword,
+              };
+
+        await new ExistingLxcDeploymentDriver(
+            existingTarget(sshAuthentication),
+            runner,
+            environment,
+            projectRoot,
+        ).bootstrap('24.19.0');
+
+        const sudoCalls = calls.filter((call) =>
+            call.arguments_.at(-1)?.startsWith("sudo -S -p ''"),
+        );
+        expect(sudoCalls).toHaveLength(2);
+        expect(sudoCalls.map((call) => call.input)).toEqual([
+            `${sudoPassword}\n`,
+            `${sudoPassword}\n`,
+        ]);
+        expect(sudoCalls.every((call) =>
+            !call.arguments_.includes('StdinNull=yes'),
+        )).toBe(true);
+        expect(JSON.stringify(calls.map((call) => call.arguments_)))
+            .not.toContain(sudoPassword);
+        expect(calls.some((call) =>
+            call.arguments_.some((argument) =>
+                argument.includes('root@existing.test'),
+            ),
+        )).toBe(false);
+    },
+);
+
+test('Existing-LXC rejects missing or invalid sudo credentials before upload', async () => {
+    const projectRoot = path.resolve(
+        path.dirname(new URL(import.meta.url).pathname),
+        '../../../..',
+    );
+    const calls: Array<{ command: string; arguments_: readonly string[] }> = [];
+    const runner = {
+        run(command: string, arguments_: readonly string[]): string {
+            calls.push({ command, arguments_: [...arguments_] });
+            const remoteCommand = arguments_.at(-1) ?? '';
+            if (
+                remoteCommand === 'sudo -n true' ||
+                remoteCommand === "sudo -S -p '' -v"
+            ) {
+                throw new ProcessExecutionError(command, 1, null);
+            }
+            return '';
+        },
+    } as ProcessRunner;
+    const driver = (sudoPassword?: string) =>
+        new ExistingLxcDeploymentDriver(
+            existingTarget(),
+            runner,
+            {
+                DEPLOYMENT_SSH_PRIVATE_KEY: '/keys/deploy',
+                ...(sudoPassword === undefined
+                    ? {}
+                    : { DEPLOYMENT_SUDO_PASSWORD: sudoPassword }),
+            },
+            projectRoot,
+        );
+
+    await expect(driver().bootstrap('24.19.0')).rejects.toThrow(
+        /DEPLOYMENT_SUDO_PASSWORD is required/u,
+    );
+    await expect(driver('wrong-password').bootstrap('24.19.0'))
+        .rejects.toThrow(/sudo authentication or authorization failed/u);
+    await expect(driver('line-one\nline-two').bootstrap('24.19.0'))
+        .rejects.toThrow(/single-line/u);
+
+    expect(calls.some((call) => call.command === 'scp')).toBe(false);
+    expect(calls.some((call) =>
+        call.arguments_.at(-1)?.startsWith('mktemp -d '),
+    )).toBe(false);
 });
 
 test('Existing-LXC deployment user is validated from project.json', () => {
