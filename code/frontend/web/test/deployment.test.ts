@@ -825,6 +825,9 @@ test('Existing-LXC pins host keys and supports release lifecycle operations', as
     expect(activation.indexOf('npm ci')).toBeLessThan(
         activation.indexOf('service-control stop backend'),
     );
+    expect(activation.indexOf('npm ls --omit=dev --all')).toBeLessThan(
+        activation.indexOf('service-control stop backend'),
+    );
     expect(activation).toContain(
         'run-database-maintenance.mjs',
     );
@@ -834,6 +837,9 @@ test('Existing-LXC pins host keys and supports release lifecycle operations', as
         ['-n', '-c', rollback],
     )).not.toThrow();
     expect(rollback.indexOf('lxc-release-validator.mjs')).toBeLessThan(
+        rollback.indexOf('ln -sfnT'),
+    );
+    expect(rollback.indexOf('npm ls --omit=dev --all')).toBeLessThan(
         rollback.indexOf('ln -sfnT'),
     );
 });
@@ -987,6 +993,61 @@ test('release validation rejects symlinks that escape the candidate', () => {
     expect(() => contract.validate(candidate, expected)).toThrow(
         /forbidden symlink/u,
     );
+});
+
+test('release validation accepts contained npm links and rejects escapes', () => {
+    const candidate = fs.mkdtempSync(path.join(os.tmpdir(), 'release-npm-'));
+    roots.push(candidate);
+    const contract = new LxcRuntimeContract();
+    const expected = contract.release('backend', '24.19.0', '>=11 <12');
+    for (const relativePath of expected.requiredFiles) {
+        const target = path.join(candidate, relativePath);
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.writeFileSync(target, relativePath);
+    }
+    fs.writeFileSync(
+        path.join(candidate, LxcRuntimeContract.manifest),
+        contract.render(expected),
+    );
+    const uuidExecutable = path.join(
+        candidate,
+        'node_modules/uuid/dist/bin/uuid',
+    );
+    const uuidLink = path.join(candidate, 'node_modules/.bin/uuid');
+    fs.mkdirSync(path.dirname(uuidExecutable), { recursive: true });
+    fs.mkdirSync(path.dirname(uuidLink), { recursive: true });
+    fs.writeFileSync(uuidExecutable, 'uuid');
+    fs.symlinkSync('../uuid/dist/bin/uuid', uuidLink);
+    fs.mkdirSync(path.join(candidate, 'node_modules/@app'), {
+        recursive: true,
+    });
+    fs.symlinkSync(
+        '../../code/backend',
+        path.join(candidate, 'node_modules/@app/backend'),
+    );
+    const validator = path.join(candidate, 'validator.mjs');
+    fs.writeFileSync(validator, contract.candidateValidator());
+
+    expect(() => contract.validate(candidate, expected)).not.toThrow();
+    expect(() => new ProcessRunner().run(process.execPath, [
+        validator,
+        candidate,
+        JSON.stringify(expected),
+    ])).not.toThrow();
+
+    fs.unlinkSync(uuidLink);
+    const outside = path.join(path.dirname(candidate), 'outside-package');
+    fs.writeFileSync(outside, 'outside');
+    roots.push(outside);
+    fs.symlinkSync(outside, uuidLink);
+    expect(() => contract.validate(candidate, expected)).toThrow(
+        /forbidden symlink/u,
+    );
+    expect(() => new ProcessRunner().run(process.execPath, [
+        validator,
+        candidate,
+        JSON.stringify(expected),
+    ])).toThrow(ProcessExecutionError);
 });
 
 test('release validation rejects missing entrypoints and altered contracts', () => {

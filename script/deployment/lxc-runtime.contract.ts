@@ -126,7 +126,7 @@ export class LxcRuntimeContract {
         if (!rootStatus.isDirectory() || rootStatus.isSymbolicLink()) {
             throw new Error('Release candidate root must be a real directory.');
         }
-        this.rejectSymlinks(releaseRoot, releaseRoot);
+        this.rejectUnsafeSymlinks(releaseRoot, releaseRoot);
         const manifestPath = path.join(
             releaseRoot,
             LxcRuntimeContract.manifest,
@@ -151,11 +151,14 @@ export class LxcRuntimeContract {
             "if (!root || !expectedJson) fail('Release validation arguments are missing.');",
             "const expectedValue = JSON.parse(expectedJson);",
             "const expectedContracts = Array.isArray(expectedValue) ? expectedValue : [expectedValue];",
-            "const inside = (target) => { const relative = path.relative(root, target); return relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative); };",
-            "const regular = (target) => { const status = fs.lstatSync(target); if (!status.isFile() || status.isSymbolicLink() || !inside(fs.realpathSync(target))) fail(`Required release file is unsafe: ${target}`); };",
-            "const walk = (directory) => { for (const entry of fs.readdirSync(directory, { withFileTypes: true })) { const target = path.join(directory, entry.name); const status = fs.lstatSync(target); if (status.isSymbolicLink()) fail(`Release symlink is forbidden: ${target}`); if (status.isDirectory()) walk(target); } };",
             "const rootStatus = fs.lstatSync(root);",
             "if (!rootStatus.isDirectory() || rootStatus.isSymbolicLink()) fail('Release candidate root is unsafe.');",
+            "const rootReal = fs.realpathSync(root);",
+            "const inside = (target) => { const relative = path.relative(rootReal, target); return relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative); };",
+            "const dependencyPath = (target) => path.relative(rootReal, target).split(path.sep).includes('node_modules');",
+            "const safeDependencyLink = (target) => { if (!dependencyPath(target)) return false; try { return inside(fs.realpathSync(target)); } catch { return false; } };",
+            "const regular = (target) => { const status = fs.lstatSync(target); if (!status.isFile() || status.isSymbolicLink() || !inside(fs.realpathSync(target))) fail(`Required release file is unsafe: ${target}`); };",
+            "const walk = (directory) => { for (const entry of fs.readdirSync(directory, { withFileTypes: true })) { const target = path.join(directory, entry.name); const status = fs.lstatSync(target); if (status.isSymbolicLink()) { if (!safeDependencyLink(target)) fail(`Release symlink is forbidden: ${target}`); continue; } if (status.isDirectory()) walk(target); } };",
             "walk(root);",
             `const manifestPath = path.join(root, '${LxcRuntimeContract.manifest}');`,
             "regular(manifestPath);",
@@ -192,18 +195,39 @@ export class LxcRuntimeContract {
         };
     }
 
-    private rejectSymlinks(root: string, directory: string): void {
+    private rejectUnsafeSymlinks(root: string, directory: string): void {
         for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
             const target = path.join(directory, entry.name);
             const status = fs.lstatSync(target);
             if (status.isSymbolicLink()) {
-                throw new Error(
-                    `Release candidate contains forbidden symlink '${path.relative(root, target)}'.`,
-                );
+                if (!this.safeDependencyLink(root, target)) {
+                    throw new Error(
+                        `Release candidate contains forbidden symlink '${path.relative(root, target)}'.`,
+                    );
+                }
+                continue;
             }
             if (status.isDirectory()) {
-                this.rejectSymlinks(root, target);
+                this.rejectUnsafeSymlinks(root, target);
             }
+        }
+    }
+
+    /** Allows npm links only when their resolved target remains in the release. */
+    private safeDependencyLink(root: string, target: string): boolean {
+        if (!path.relative(root, target).split(path.sep).includes('node_modules')) {
+            return false;
+        }
+        try {
+            const relative = path.relative(
+                fs.realpathSync(root),
+                fs.realpathSync(target),
+            );
+            return relative !== '..' &&
+                !relative.startsWith(`..${path.sep}`) &&
+                !path.isAbsolute(relative);
+        } catch {
+            return false;
         }
     }
 

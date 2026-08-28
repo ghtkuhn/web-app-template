@@ -246,6 +246,30 @@ test('planner preserves an existing locally changed gitignore', () => {
     expect(plan.conflicts).toEqual([]);
 });
 
+test('planner upgrades an unchanged legacy LXC validator contract', () => {
+    const base = temporaryRoot('template-lxc-base-');
+    const local = temporaryRoot('template-lxc-local-');
+    const incoming = temporaryRoot('template-lxc-incoming-');
+    writeCanonicalInstructions([base, local, incoming]);
+    const contractPaths = [
+        'deployment/lxc/runtime-contract.catalog.json',
+        'script/deployment/lxc-runtime.contract.ts',
+        'script/deployment/ssh.release-driver.ts',
+    ];
+    for (const relativePath of contractPaths) {
+        write(base, relativePath, `legacy:${relativePath}\n`);
+        write(local, relativePath, `legacy:${relativePath}\n`);
+        write(incoming, relativePath, `current:${relativePath}\n`);
+    }
+
+    const plan = new UpdatePlanner().plan(base, local, incoming);
+
+    expect(plan.actions.map((action) => action.relativePath)).toEqual(
+        [...contractPaths].sort(),
+    );
+    expect(plan.conflicts).toEqual([]);
+});
+
 test('planner handles safe deletion and conflicts on modified deletion', () => {
     const base = temporaryRoot('template-base-');
     const local = temporaryRoot('template-local-');

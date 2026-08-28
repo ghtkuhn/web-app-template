@@ -149,3 +149,18 @@ profile, command argument, or log. Normal deployments continue to use the
 narrow passwordless helpers installed by bootstrap and do not require this
 secret. Infrastructure schema 3 remains current, so this patch does not require
 an infrastructure upgrade solely for the authentication change.
+
+## Template 5.0.3 LXC release validation
+
+Template 5.0.3 accepts npm-generated symlinks below `node_modules` only when
+their resolved targets remain inside the release. Symlinks elsewhere, broken
+links, and dependency links that escape the release remain forbidden. Backend
+activation and rollback additionally run `npm ls --omit=dev --all` before
+changing the active symlink or stopping the service.
+
+Unmodified Template 4.x and 5.x deployment contracts update automatically.
+When an application has locally modified LXC runtime files, resolve the entire
+catalog-listed LXC contract to one coherent version; do not combine an older
+validator or SSH driver with the 5.0.3 catalog. Existing remote releases and
+infrastructure schema 3 remain compatible and require no migration solely for
+this fix.

@@ -142,7 +142,7 @@ export class SshReleaseDriver {
                 `case "$candidate/" in ${root}/releases/*/) true ;; *) exit 65 ;; esac`,
                 this.validateCandidate('$candidate', expected),
                 component === 'backend'
-                    ? 'test -d "$candidate/node_modules" && test ! -L "$candidate/node_modules"'
+                    ? this.backendDependencyTree('$candidate')
                     : 'true',
                 `current=$(if [ -L ${root}/current ]; then readlink -f ${root}/current; fi)`,
                 `ln -sfnT "$candidate" ${root}/current`,
@@ -243,7 +243,10 @@ export class SshReleaseDriver {
             this.validateCandidate(candidate, expected),
             `if [ -n "$previous" ]; then ${this.validateCandidate('$previous', this.rollbackContracts(component))}; fi`,
             component === 'backend'
-                ? `cd ${candidate} && /usr/local/bin/npm ci --ignore-scripts --omit=dev --workspace @app/backend`
+                ? `if [ -n "$previous" ]; then ${this.backendDependencyTree('$previous')}; fi`
+                : 'true',
+            component === 'backend'
+                ? `cd ${candidate} && /usr/local/bin/npm ci --ignore-scripts --omit=dev --workspace @app/backend && ${this.backendDependencyTree(candidate)}`
                 : 'true',
             this.configurationCommand(component),
             component === 'backend'
@@ -326,6 +329,11 @@ export class SshReleaseDriver {
 
     private componentRoot(component: ComponentName): string {
         return `/opt/${this.target.installationId}/${component}`;
+    }
+
+    /** Verifies one installed backend tree without assuming a legacy layout. */
+    private backendDependencyTree(candidate: string): string {
+        return `test -d ${candidate}/node_modules && test ! -L ${candidate}/node_modules && cd ${candidate} && /usr/local/bin/npm ls --omit=dev --all`;
     }
 
     private nodeVersion(): string {
