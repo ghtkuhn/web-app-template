@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -1269,6 +1270,34 @@ test('LXC contract catalog rejects a mixed cross-file implementation', () => {
     expect(() => catalog.check(fixture)).toThrow(
         /cross-file contract|contract drift/u,
     );
+});
+
+test('primary LXC catalog remains valid for the Template 5.0.3 updater', () => {
+    const repositoryRoot = path.resolve(
+        path.dirname(new URL(import.meta.url).pathname),
+        '../../../..',
+    );
+    const legacyFiles = [
+        'script/deployment/lxc-runtime.contract.ts',
+        'script/deployment/release.builder.ts',
+        'script/deployment/ssh.release-driver.ts',
+        'deployment/lxc/bootstrap-existing-lxc.sh',
+        'deployment/lxc/install-backend.sh',
+        'deployment/lxc/install-frontend.sh',
+    ];
+    const catalog = JSON.parse(fs.readFileSync(
+        path.join(repositoryRoot, LxcContractCatalog.relativePath),
+        'utf8',
+    )) as { files: Record<string, string> };
+
+    expect(Object.keys(catalog.files).sort()).toEqual([...legacyFiles].sort());
+    for (const relativePath of legacyFiles) {
+        expect(catalog.files[relativePath]).toBe(
+            createHash('sha256')
+                .update(fs.readFileSync(path.join(repositoryRoot, relativePath)))
+                .digest('hex'),
+        );
+    }
 });
 
 test('Existing-LXC password stays out of arguments and missing secrets fail', async () => {

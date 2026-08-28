@@ -177,9 +177,16 @@ active release, and service state. The credential runner also normalizes the
 optional separator in `credentials:run -- <script> -- <arguments>` so older
 agent instructions keep invoking the intended deployment profile.
 
+The initial 5.0.4 publication expanded the primary LXC contract catalog and
+could therefore be rejected by the still-running 5.0.3 updater before
+`npm install`. The corrected 5.0.4 keeps the established primary catalog stable,
+binds the new diagnostic files in a supplemental checksum catalog, and runs
+future pre-install runtime validation through the incoming on-disk checker in
+a fresh Node.js process.
+
 Unmodified older applications receive the ProcessRunner, SSH driver, Existing-
-LXC driver, deployment CLI, package script, and expanded generated LXC contract
-catalog together. Locally modified deployment contract files must be resolved
+LXC driver, deployment CLI, package script, and both generated LXC contract
+catalogs together. Locally modified deployment contract files must be resolved
 as one coherent incoming set. Infrastructure schema 3 and existing remote
 releases remain compatible; neither bootstrap nor infrastructure upgrade is
 required solely for these diagnostics.

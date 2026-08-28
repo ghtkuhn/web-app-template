@@ -4,7 +4,6 @@ import path from 'node:path';
 import type { UpdateAction } from './interfaces.ts';
 import type { UpdateExecutionResult } from './interfaces.ts';
 import { ProcessRunner } from '../deployment/process.runner.ts';
-import { RuntimeContract } from '../runtime-check/runtime.contract.ts';
 
 /** Applies update actions transactionally and verifies the resulting project. */
 export class UpdateTransaction {
@@ -119,7 +118,17 @@ export class UpdateTransaction {
             return;
         }
         try {
-            new RuntimeContract(projectRoot).check();
+            this.processes.run(
+                process.execPath,
+                ['script/runtime-check.ts'],
+                {
+                    cwd: projectRoot,
+                    failureOutput: {
+                        redact: [],
+                        maxCharacters: 8_192,
+                    },
+                },
+            );
         } catch (error) {
             throw new Error(
                 `Updated runtime contract is inconsistent before npm install: ${String(error)}`,

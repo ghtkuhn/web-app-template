@@ -1,9 +1,6 @@
 {
     "schemaVersion": 1,
     "files": {
-        "script/deployment/process.runner.ts": "e2dedd81b64763270db74a6714bcb90db5bde6f5dc1a96260ce07a8a45ac9a52",
-        "script/deployment/deployment.cli.ts": "ddbec66d5189c7bc5059ca777c6d86fd6fb318e289e328def28a0c0517899ee5",
-        "script/deployment/existing-lxc.driver.ts": "409fdd1d58065a4923002239e1a986c16f850a1c240f7dabd2200ca703352e07",
         "script/deployment/lxc-runtime.contract.ts": "dab651acb1027e5575dc04511339d6897d4f2691265ddb8f1bdf0760cffb350c",
         "script/deployment/release.builder.ts": "9e0fe7e485ca16c2e4b522756951ff161506b807a22861a7cef550cc4303ae33",
         "script/deployment/ssh.release-driver.ts": "c345de468ac904040ceb990bcc8412d4fb53a7677288c93900c40a4b7917aad5",

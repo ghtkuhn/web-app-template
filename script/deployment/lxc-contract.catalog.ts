@@ -2,16 +2,24 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
-export const LXC_CONTRACT_FILES = [
-    'script/deployment/process.runner.ts',
-    'script/deployment/deployment.cli.ts',
-    'script/deployment/existing-lxc.driver.ts',
+const LXC_COMPATIBILITY_CONTRACT_FILES = [
     'script/deployment/lxc-runtime.contract.ts',
     'script/deployment/release.builder.ts',
     'script/deployment/ssh.release-driver.ts',
     'deployment/lxc/bootstrap-existing-lxc.sh',
     'deployment/lxc/install-backend.sh',
     'deployment/lxc/install-frontend.sh',
+] as const;
+
+const LXC_DIAGNOSTIC_CONTRACT_FILES = [
+    'script/deployment/process.runner.ts',
+    'script/deployment/deployment.cli.ts',
+    'script/deployment/existing-lxc.driver.ts',
+] as const;
+
+export const LXC_CONTRACT_FILES = [
+    ...LXC_COMPATIBILITY_CONTRACT_FILES,
+    ...LXC_DIAGNOSTIC_CONTRACT_FILES,
 ] as const;
 
 interface LxcContractCatalogData {
@@ -23,14 +31,33 @@ interface LxcContractCatalogData {
 export class LxcContractCatalog {
     public static readonly relativePath =
         'deployment/lxc/runtime-contract.catalog.json';
+    public static readonly diagnosticRelativePath =
+        'deployment/lxc/diagnostic-contract.catalog.json';
 
     public check(projectRoot: string): void {
-        const catalog = this.read(projectRoot);
+        this.checkCatalog(
+            projectRoot,
+            LxcContractCatalog.relativePath,
+            LXC_COMPATIBILITY_CONTRACT_FILES,
+        );
+        this.checkCatalog(
+            projectRoot,
+            LxcContractCatalog.diagnosticRelativePath,
+            LXC_DIAGNOSTIC_CONTRACT_FILES,
+        );
+    }
+
+    private checkCatalog(
+        projectRoot: string,
+        catalogPath: string,
+        contractFiles: readonly string[],
+    ): void {
+        const catalog = this.read(projectRoot, catalogPath);
         const names = Object.keys(catalog.files).sort();
-        if (JSON.stringify(names) !== JSON.stringify([...LXC_CONTRACT_FILES].sort())) {
+        if (JSON.stringify(names) !== JSON.stringify([...contractFiles].sort())) {
             throw new Error('LXC runtime contract catalog file list is invalid.');
         }
-        for (const relativePath of LXC_CONTRACT_FILES) {
+        for (const relativePath of contractFiles) {
             const expected = catalog.files[relativePath];
             const observed = this.hash(path.join(projectRoot, relativePath));
             if (expected !== observed) {
@@ -42,14 +69,28 @@ export class LxcContractCatalog {
     }
 
     public generate(projectRoot: string): void {
-        const files: Record<string, string> = {};
-        for (const relativePath of LXC_CONTRACT_FILES) {
-            files[relativePath] = this.hash(path.join(projectRoot, relativePath));
-        }
-        const target = path.join(
+        this.generateCatalog(
             projectRoot,
             LxcContractCatalog.relativePath,
+            LXC_COMPATIBILITY_CONTRACT_FILES,
         );
+        this.generateCatalog(
+            projectRoot,
+            LxcContractCatalog.diagnosticRelativePath,
+            LXC_DIAGNOSTIC_CONTRACT_FILES,
+        );
+    }
+
+    private generateCatalog(
+        projectRoot: string,
+        catalogPath: string,
+        contractFiles: readonly string[],
+    ): void {
+        const files: Record<string, string> = {};
+        for (const relativePath of contractFiles) {
+            files[relativePath] = this.hash(path.join(projectRoot, relativePath));
+        }
+        const target = path.join(projectRoot, catalogPath);
         fs.writeFileSync(
             target,
             `${JSON.stringify({ schemaVersion: 1, files }, null, 4)}\n`,
@@ -57,11 +98,11 @@ export class LxcContractCatalog {
         );
     }
 
-    private read(projectRoot: string): LxcContractCatalogData {
-        const target = path.join(
-            projectRoot,
-            LxcContractCatalog.relativePath,
-        );
+    private read(
+        projectRoot: string,
+        catalogPath: string,
+    ): LxcContractCatalogData {
+        const target = path.join(projectRoot, catalogPath);
         const value = JSON.parse(fs.readFileSync(target, 'utf8')) as unknown;
         if (
             !value ||

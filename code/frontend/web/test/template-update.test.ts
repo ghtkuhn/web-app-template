@@ -11,7 +11,7 @@ import { TemplateMetadataRepository } from '../../../../script/template-update/t
 import { TemplateUpdater } from '../../../../script/template-update/template.updater.ts';
 import { UpdatePlanner } from '../../../../script/template-update/update.planner.ts';
 import { UpdateTransaction } from '../../../../script/template-update/update.transaction.ts';
-import type { ProcessRunner } from '../../../../script/deployment/process.runner.ts';
+import { ProcessRunner } from '../../../../script/deployment/process.runner.ts';
 
 const roots: string[] = [];
 
@@ -1222,6 +1222,7 @@ test('transaction rejects workspace runtime drift before target npm install', ()
         'code/frontend/web/package.json',
         'deployment/docker/backend.Dockerfile',
         'deployment/docker/frontend.Dockerfile',
+        'deployment/lxc/diagnostic-contract.catalog.json',
         'deployment/lxc/runtime-contract.catalog.json',
         'deployment/lxc/bootstrap-existing-lxc.sh',
         'deployment/lxc/install-backend.sh',
@@ -1232,6 +1233,9 @@ test('transaction rejects workspace runtime drift before target npm install', ()
         'script/deployment/process.runner.ts',
         'script/deployment/release.builder.ts',
         'script/deployment/ssh.release-driver.ts',
+        'script/runtime-check.ts',
+        'script/runtime-check/runtime.contract.ts',
+        'script/deployment/lxc-contract.catalog.ts',
     ]) {
         write(
             project,
@@ -1250,8 +1254,15 @@ test('transaction rejects workspace runtime drift before target npm install', ()
         `${JSON.stringify(backend, null, 4)}\n`,
     );
     let installs = 0;
+    const runtimeRunner = new ProcessRunner();
     const runner = {
         run(command: string, arguments_: readonly string[]): string {
+            if (command === process.execPath) {
+                return runtimeRunner.run(command, arguments_, {
+                    cwd: project,
+                    failureOutput: { redact: [] },
+                });
+            }
             if (command === 'npm' && arguments_[0] === 'install') {
                 installs += 1;
             }
@@ -1287,6 +1298,7 @@ test('transaction rejects a mixed legacy and incoming LXC runtime layout', () =>
         'code/frontend/web/package.json',
         'deployment/docker/backend.Dockerfile',
         'deployment/docker/frontend.Dockerfile',
+        'deployment/lxc/diagnostic-contract.catalog.json',
         'deployment/lxc/runtime-contract.catalog.json',
         'deployment/lxc/bootstrap-existing-lxc.sh',
         'deployment/lxc/install-backend.sh',
@@ -1297,6 +1309,9 @@ test('transaction rejects a mixed legacy and incoming LXC runtime layout', () =>
         'script/deployment/process.runner.ts',
         'script/deployment/release.builder.ts',
         'script/deployment/ssh.release-driver.ts',
+        'script/runtime-check.ts',
+        'script/runtime-check/runtime.contract.ts',
+        'script/deployment/lxc-contract.catalog.ts',
     ]) {
         write(
             project,
@@ -1314,8 +1329,15 @@ test('transaction rejects a mixed legacy and incoming LXC runtime layout', () =>
         `${releaseBuilder}\n// locally retained legacy release layout\n`,
     );
     let installs = 0;
+    const runtimeRunner = new ProcessRunner();
     const runner = {
         run(command: string, arguments_: readonly string[]): string {
+            if (command === process.execPath) {
+                return runtimeRunner.run(command, arguments_, {
+                    cwd: project,
+                    failureOutput: { redact: [] },
+                });
+            }
             if (command === 'npm' && arguments_[0] === 'install') {
                 installs += 1;
             }
