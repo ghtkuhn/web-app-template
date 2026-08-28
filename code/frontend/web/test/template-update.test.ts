@@ -318,13 +318,17 @@ test('repository ships canonical Boolean project configuration', () => {
     const configuration = JSON.parse(fs.readFileSync(
         path.join(projectRoot, 'project.json'),
         'utf8',
-    )) as { 'template-config': { 'use-kanban': unknown } };
+    )) as {
+        deployment: { sshUser: unknown };
+        'template-config': { 'use-kanban': unknown };
+    };
     const ignoreRules = fs.readFileSync(
         path.join(projectRoot, '.gitignore'),
         'utf8',
     ).split(/\r?\n/u);
 
     expect(configuration['template-config']['use-kanban']).toBe(true);
+    expect(configuration.deployment.sshUser).toBe('app');
     expect(ignoreRules).not.toContain('project.json');
 });
 
@@ -355,6 +359,9 @@ test('project configuration preserves local state and adds only new defaults', (
     }));
     fs.chmodSync(path.join(local, 'project.json'), 0o640);
     write(incoming, 'project.json', JSON.stringify({
+        deployment: {
+            sshUser: 'app',
+        },
         'template-config': {
             'use-kanban': false,
             options: {
@@ -377,6 +384,9 @@ test('project configuration preserves local state and adds only new defaults', (
     const merged = JSON.parse(source) as Record<string, unknown>;
 
     expect(merged).toEqual({
+        deployment: {
+            sshUser: 'app',
+        },
         'template-config': {
             futureSetting: true,
             localOnly: ['keep', 'all'],
@@ -429,6 +439,112 @@ test('project configuration merges legacy apps without a template base', () => {
             'use-kanban': 'true',
         },
     });
+});
+
+test('project configuration migrates one legacy Existing-LXC SSH user', () => {
+    const base = temporaryRoot('template-user-base-');
+    const local = temporaryRoot('template-user-local-');
+    const incoming = temporaryRoot('template-user-incoming-');
+    writeCanonicalInstructions([base, local, incoming]);
+    write(base, 'project.json', JSON.stringify({
+        'template-config': { 'use-kanban': true },
+    }));
+    write(local, 'project.json', JSON.stringify({
+        'template-config': { 'use-kanban': true },
+    }));
+    write(local, 'deployment/profiles/production.json', JSON.stringify({
+        backend: {
+            target: {
+                driver: 'existing-lxc',
+                sshUser: 'deployer',
+            },
+        },
+        frontend: {
+            target: {
+                driver: 'existing-lxc',
+                sshUser: 'deployer',
+            },
+        },
+    }));
+    write(incoming, 'project.json', JSON.stringify({
+        deployment: { sshUser: 'app' },
+        'template-config': { 'use-kanban': true },
+    }));
+
+    const plan = new UpdatePlanner().plan(base, local, incoming);
+    const action = plan.actions.find(
+        (candidate) => candidate.relativePath === 'project.json',
+    );
+    const merged = JSON.parse(fs.readFileSync(
+        action?.kind === 'write' ? action.sourcePath : '',
+        'utf8',
+    )) as { deployment: { sshUser: string } };
+
+    expect(merged.deployment.sshUser).toBe('deployer');
+});
+
+test('project configuration rejects ambiguous legacy deployment users', () => {
+    const base = temporaryRoot('template-users-base-');
+    const local = temporaryRoot('template-users-local-');
+    const incoming = temporaryRoot('template-users-incoming-');
+    writeCanonicalInstructions([base, local, incoming]);
+    for (const root of [base, local]) {
+        write(root, 'project.json', JSON.stringify({
+            'template-config': { 'use-kanban': true },
+        }));
+    }
+    write(local, 'deployment/profiles/one.json', JSON.stringify({
+        backend: {
+            target: {
+                driver: 'existing-lxc',
+                sshUser: 'backend-deployer',
+            },
+        },
+    }));
+    write(local, 'deployment/profiles/two.json', JSON.stringify({
+        frontend: {
+            target: {
+                driver: 'existing-lxc',
+                sshUser: 'frontend-deployer',
+            },
+        },
+    }));
+    write(incoming, 'project.json', JSON.stringify({
+        deployment: { sshUser: 'app' },
+        'template-config': { 'use-kanban': true },
+    }));
+
+    expect(() => new UpdatePlanner().plan(base, local, incoming)).toThrow(
+        /multiple SSH users.*deployment\.sshUser/u,
+    );
+});
+
+test('project configuration rejects a legacy root deployment user', () => {
+    const base = temporaryRoot('template-root-user-base-');
+    const local = temporaryRoot('template-root-user-local-');
+    const incoming = temporaryRoot('template-root-user-incoming-');
+    writeCanonicalInstructions([base, local, incoming]);
+    for (const root of [base, local]) {
+        write(root, 'project.json', JSON.stringify({
+            'template-config': { 'use-kanban': true },
+        }));
+    }
+    write(local, 'deployment/profiles/production.json', JSON.stringify({
+        backend: {
+            target: {
+                driver: 'existing-lxc',
+                sshUser: 'root',
+            },
+        },
+    }));
+    write(incoming, 'project.json', JSON.stringify({
+        deployment: { sshUser: 'app' },
+        'template-config': { 'use-kanban': true },
+    }));
+
+    expect(() => new UpdatePlanner().plan(base, local, incoming)).toThrow(
+        /non-root deployment\.sshUser/u,
+    );
 });
 
 test('project configuration installs the incoming file when local is missing', () => {

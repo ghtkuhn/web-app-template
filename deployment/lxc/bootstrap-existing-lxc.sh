@@ -8,14 +8,15 @@ npm_range="${4:-}"
 infrastructure_schema="${5:-}"
 backend_launcher="${6:-}"
 maintenance_launcher="${7:-}"
-app_user="app"
+app_user="${8:-}"
+staging_directory="${9:-}"
 
 fail() {
     printf '%s\n' "$1" >&2
     exit 1
 }
 
-test "$#" -eq 7 || fail "Usage: bootstrap-existing-lxc.sh <bootstrap|upgrade> <installation-id> <node-version> <npm-range> <schema> <backend-launcher> <maintenance-launcher>"
+test "$#" -eq 9 || fail "Usage: bootstrap-existing-lxc.sh <bootstrap|upgrade> <installation-id> <node-version> <npm-range> <schema> <backend-launcher> <maintenance-launcher> <deployment-user> <staging-directory>"
 test "$mode" = "bootstrap" || test "$mode" = "upgrade" \
     || fail "mode must be bootstrap or upgrade."
 printf '%s' "$installation_id" | grep -Eq '^[a-z][a-z0-9]*(-[a-z0-9]+)*$' \
@@ -29,7 +30,15 @@ test "$backend_launcher" = "start-backend.mjs" \
     || fail "backend launcher is invalid."
 test "$maintenance_launcher" = "run-database-maintenance.mjs" \
     || fail "maintenance launcher is invalid."
-test "$(id -u)" -eq 0 || fail "Bootstrap must run as root."
+printf '%s' "$app_user" | grep -Eq '^[a-z_][a-z0-9_-]*$' \
+    || fail "deployment-user is invalid."
+test "$app_user" != "root" || fail "deployment-user must not be root."
+printf '%s' "$staging_directory" \
+    | grep -Eq "^/tmp/${installation_id}-bootstrap\\.[A-Za-z0-9]+$" \
+    || fail "staging-directory is invalid."
+test -d "$staging_directory" && test ! -L "$staging_directory" \
+    || fail "staging-directory must be a real directory."
+test "$(id -u)" -eq 0 || fail "Bootstrap must run with sudo/root privileges."
 . /etc/os-release
 test "${ID:-}" = "debian" && test "${VERSION_ID:-}" = "13" \
     || fail "Bootstrap requires Debian 13."
@@ -186,31 +195,31 @@ if [ "$mode" = "upgrade" ] && [ -L "${backend_root}/current" ]; then
             || fail "Legacy backend release layout is missing or ambiguous."
         if [ "$workspace" -eq 1 ]; then
             install -o "$app_user" -g "$app_user" -m 0644 \
-                /tmp/legacy-workspace-launcher.mjs \
+                "${staging_directory}/legacy-workspace-launcher.mjs" \
                 "${current}/${backend_launcher}"
             install -o "$app_user" -g "$app_user" -m 0644 \
-                /tmp/legacy-workspace-maintenance-launcher.mjs \
+                "${staging_directory}/legacy-workspace-maintenance-launcher.mjs" \
                 "${current}/${maintenance_launcher}"
             install -o "$app_user" -g "$app_user" -m 0644 \
-                /tmp/legacy-workspace-contract.json \
+                "${staging_directory}/legacy-workspace-contract.json" \
                 "${current}/release.contract.json"
         else
             install -o "$app_user" -g "$app_user" -m 0644 \
-                /tmp/legacy-flat-launcher.mjs \
+                "${staging_directory}/legacy-flat-launcher.mjs" \
                 "${current}/${backend_launcher}"
             install -o "$app_user" -g "$app_user" -m 0644 \
-                /tmp/legacy-flat-maintenance-launcher.mjs \
+                "${staging_directory}/legacy-flat-maintenance-launcher.mjs" \
                 "${current}/${maintenance_launcher}"
             install -o "$app_user" -g "$app_user" -m 0644 \
-                /tmp/legacy-flat-contract.json \
+                "${staging_directory}/legacy-flat-contract.json" \
                 "${current}/release.contract.json"
         fi
     fi
     allowed_contracts="$(printf '[%s,%s,%s]' \
-        "$(cat /tmp/canonical-backend-contract.json)" \
-        "$(cat /tmp/legacy-workspace-contract.json)" \
-        "$(cat /tmp/legacy-flat-contract.json)")"
-    /usr/local/bin/node /tmp/lxc-release-validator.mjs \
+        "$(cat "${staging_directory}/canonical-backend-contract.json")" \
+        "$(cat "${staging_directory}/legacy-workspace-contract.json")" \
+        "$(cat "${staging_directory}/legacy-flat-contract.json")")"
+    /usr/local/bin/node "${staging_directory}/lxc-release-validator.mjs" \
         "$current" "$allowed_contracts"
 fi
 
@@ -310,6 +319,7 @@ cat > "$infrastructure_temporary" <<EOF
     "schemaVersion": ${infrastructure_schema},
     "nodeVersion": "${node_version}",
     "npmRange": "${npm_range}",
+    "deploymentUser": "${app_user}",
     "backendLauncher": "${backend_launcher}",
     "maintenanceLauncher": "${maintenance_launcher}"
 }

@@ -22,8 +22,8 @@ export class ProjectConfigMerger {
         if (!incomingStatus) {
             return undefined;
         }
-        this.assertRegular(incomingPath, incomingStatus, 'Incoming');
-        const incoming = this.read(incomingPath, 'Incoming');
+        this.assertRegular(incomingPath, incomingStatus, 'Incoming project.json');
+        const incoming = this.read(incomingPath, 'Incoming project.json');
 
         const localPath = path.join(
             localRoot,
@@ -33,8 +33,8 @@ export class ProjectConfigMerger {
         if (!localStatus) {
             return this.write(incomingPath, incomingStatus.mode & 0o777);
         }
-        this.assertRegular(localPath, localStatus, 'Local');
-        const local = this.read(localPath, 'Local');
+        this.assertRegular(localPath, localStatus, 'Local project.json');
+        const local = this.read(localPath, 'Local project.json');
 
         const basePath = path.join(
             baseRoot,
@@ -43,10 +43,16 @@ export class ProjectConfigMerger {
         const baseStatus = this.status(basePath);
         let base: JsonObject = {};
         if (baseStatus) {
-            this.assertRegular(basePath, baseStatus, 'Base');
-            base = this.read(basePath, 'Base');
+            this.assertRegular(basePath, baseStatus, 'Base project.json');
+            base = this.read(basePath, 'Base project.json');
         }
 
+        this.migrateLegacyDeploymentUser(
+            base,
+            local,
+            incoming,
+            localRoot,
+        );
         const merged = this.mergeObject(base, local, incoming);
         if (this.equal(local, merged)) {
             return undefined;
@@ -103,18 +109,93 @@ export class ProjectConfigMerger {
         return result;
     }
 
+    /** Preserves one legacy Existing-LXC SSH user when introducing project ownership. */
+    private migrateLegacyDeploymentUser(
+        base: JsonObject,
+        local: JsonObject,
+        incoming: JsonObject,
+        localRoot: string,
+    ): void {
+        if (
+            this.deploymentUser(base) !== undefined ||
+            this.deploymentUser(local) !== undefined ||
+            this.deploymentUser(incoming) === undefined
+        ) {
+            return;
+        }
+        const users = this.legacyDeploymentUsers(localRoot);
+        if (users.size === 0) {
+            return;
+        }
+        if (users.size > 1) {
+            throw new Error(
+                'Legacy Existing-LXC profiles use multiple SSH users; define one non-root deployment.sshUser in project.json before updating.',
+            );
+        }
+        const [sshUser] = users;
+        if (
+            !sshUser ||
+            !/^[a-z_][a-z0-9_-]*$/u.test(sshUser) ||
+            sshUser === 'root'
+        ) {
+            throw new Error(
+                'Legacy Existing-LXC sshUser must be migrated to a non-root deployment.sshUser in project.json before updating.',
+            );
+        }
+        (incoming.deployment as JsonObject).sshUser = sshUser;
+    }
+
+    private deploymentUser(configuration: JsonObject): unknown {
+        const deployment = configuration.deployment;
+        return this.object(deployment) ? deployment.sshUser : undefined;
+    }
+
+    private legacyDeploymentUsers(localRoot: string): Set<string> {
+        const profilesRoot = path.join(localRoot, 'deployment/profiles');
+        if (!fs.existsSync(profilesRoot)) {
+            return new Set();
+        }
+        const users = new Set<string>();
+        for (const name of fs.readdirSync(profilesRoot).sort()) {
+            if (!name.endsWith('.json')) {
+                continue;
+            }
+            const filePath = path.join(profilesRoot, name);
+            const status = fs.lstatSync(filePath);
+            const label = `Local deployment profile ${name}`;
+            this.assertRegular(filePath, status, label);
+            const profile = this.read(filePath, label);
+            for (const component of ['backend', 'frontend']) {
+                const value = profile[component];
+                if (!this.object(value) || !this.object(value.target)) {
+                    continue;
+                }
+                if (value.target.driver !== 'existing-lxc') {
+                    continue;
+                }
+                if (typeof value.target.sshUser !== 'string') {
+                    throw new Error(
+                        `${label} must define its legacy Existing-LXC sshUser before it can be migrated to project.json.`,
+                    );
+                }
+                users.add(value.target.sshUser);
+            }
+        }
+        return users;
+    }
+
     /** Reads one regular JSON object with a stable contextual error. */
-    private read(filePath: string, owner: string): JsonObject {
+    private read(filePath: string, label: string): JsonObject {
         let value: unknown;
         try {
             value = JSON.parse(fs.readFileSync(filePath, 'utf8')) as unknown;
         } catch (error) {
             throw new Error(
-                `${owner} project.json must contain valid JSON: ${this.message(error)}`,
+                `${label} must contain valid JSON: ${this.message(error)}`,
             );
         }
         if (!this.object(value)) {
-            throw new Error(`${owner} project.json must contain a JSON object.`);
+            throw new Error(`${label} must contain a JSON object.`);
         }
         return value;
     }
@@ -123,11 +204,11 @@ export class ProjectConfigMerger {
     private assertRegular(
         filePath: string,
         status: fs.Stats,
-        owner: string,
+        label: string,
     ): void {
         if (!status.isFile() || status.isSymbolicLink()) {
             throw new Error(
-                `${owner} project.json must be a regular non-symlink file: ${filePath}`,
+                `${label} must be a regular non-symlink file: ${filePath}`,
             );
         }
     }

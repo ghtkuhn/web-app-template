@@ -399,10 +399,11 @@ export class SshReleaseDriver {
             infrastructure.backendLauncher !==
                 LxcRuntimeContract.backendLauncher ||
             infrastructure.maintenanceLauncher !==
-                LxcRuntimeContract.backendMaintenanceLauncher
+                LxcRuntimeContract.backendMaintenanceLauncher ||
+            infrastructure.deploymentUser !== this.target.sshUser
         ) {
             throw new Error(
-                `Existing-LXC infrastructure contract requires schema ${LXC_INFRASTRUCTURE_SCHEMA_VERSION}, Node.js ${requiredNode}, npm '${requiredNpm}', launcher ${LxcRuntimeContract.backendLauncher}, and maintenance launcher ${LxcRuntimeContract.backendMaintenanceLauncher}; observed metadata is missing, stale, or invalid. Run deployment:infrastructure:upgrade before deploying.`,
+                `Existing-LXC infrastructure contract requires schema ${LXC_INFRASTRUCTURE_SCHEMA_VERSION}, deployment user ${this.target.sshUser}, Node.js ${requiredNode}, npm '${requiredNpm}', launcher ${LxcRuntimeContract.backendLauncher}, and maintenance launcher ${LxcRuntimeContract.backendMaintenanceLauncher}; observed metadata is missing, stale, or invalid. Run deployment:infrastructure:upgrade before deploying.`,
             );
         }
         const observedNode = this.transport('ssh', this.sshArguments([
@@ -453,7 +454,22 @@ export class SshReleaseDriver {
         nodeVersion: string,
     ): Promise<void> {
         await this.withConnection(async () => {
-            await this.waitForSsh('root');
+            await this.waitForSsh();
+            const remoteDirectory = this.transport(
+                'ssh',
+                this.sshArguments([
+                    this.destination(),
+                    `mktemp -d /tmp/${this.target.installationId}-bootstrap.XXXXXX`,
+                ]),
+            ).trim();
+            if (!new RegExp(
+                `^/tmp/${this.target.installationId}-bootstrap\\.[A-Za-z0-9]+$`,
+                'u',
+            ).test(remoteDirectory)) {
+                throw new Error(
+                    'Remote Existing-LXC bootstrap staging path is invalid.',
+                );
+            }
             const script = path.join(
                 this.projectRoot,
                 'deployment/lxc/bootstrap-existing-lxc.sh',
@@ -462,19 +478,33 @@ export class SshReleaseDriver {
                 this.validatorFile(),
                 ...this.legacyMigrationFiles(),
             ];
-            this.transport('scp', this.scpArguments([
-                script,
-                ...files,
-                `${this.destination('root')}:/tmp/`,
-            ]));
-            this.transport('ssh', this.sshArguments([
-                this.destination('root'),
-                [
-                    'test "$(id -u)" -eq 0',
-                    `sh /tmp/bootstrap-existing-lxc.sh ${mode} ${this.target.installationId} ${nodeVersion} ${this.shellQuote(this.npmRange())} ${LXC_INFRASTRUCTURE_SCHEMA_VERSION} ${LxcRuntimeContract.backendLauncher} ${LxcRuntimeContract.backendMaintenanceLauncher}`,
-                ].join(' && '),
-            ]));
+            try {
+                this.transport('scp', this.scpArguments([
+                    script,
+                    ...files,
+                    `${this.destination()}:${remoteDirectory}/`,
+                ]));
+                this.transport('ssh', this.sshArguments([
+                    this.destination(),
+                    `sudo -n sh ${remoteDirectory}/bootstrap-existing-lxc.sh ${mode} ${this.target.installationId} ${nodeVersion} ${this.shellQuote(this.npmRange())} ${LXC_INFRASTRUCTURE_SCHEMA_VERSION} ${LxcRuntimeContract.backendLauncher} ${LxcRuntimeContract.backendMaintenanceLauncher} ${this.target.sshUser} ${remoteDirectory}`,
+                ]));
+            } catch (error) {
+                try {
+                    this.removeRemoteBootstrapDirectory(remoteDirectory);
+                } catch {
+                    // Preserve the actionable bootstrap or transport failure.
+                }
+                throw error;
+            }
+            this.removeRemoteBootstrapDirectory(remoteDirectory);
         });
+    }
+
+    private removeRemoteBootstrapDirectory(remoteDirectory: string): void {
+        this.transport('ssh', this.sshArguments([
+            this.destination(),
+            `rm -rf -- ${remoteDirectory}`,
+        ]));
     }
 
     private legacyMigrationFiles(): string[] {

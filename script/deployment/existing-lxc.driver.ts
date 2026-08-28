@@ -1,5 +1,8 @@
 import type { ComponentName, ExistingLxcTarget } from './interfaces.ts';
 import { ProcessRunner } from './process.runner.ts';
+import {
+    DeploymentProjectConfigRepository,
+} from './project-config.repository.ts';
 import { SshReleaseDriver } from './ssh.release-driver.ts';
 
 /** Operates releases inside a pre-existing, explicitly bootstrapped LXC. */
@@ -12,8 +15,11 @@ export class ExistingLxcDeploymentDriver {
         environment: NodeJS.ProcessEnv = process.env,
         projectRoot = process.cwd(),
     ) {
+        const { sshUser } = new DeploymentProjectConfigRepository(
+            projectRoot,
+        ).load();
         this.releases = new SshReleaseDriver(
-            target,
+            { ...target, sshUser },
             'managed',
             processes,
             environment,

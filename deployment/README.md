@@ -127,10 +127,13 @@ Bootstrap is an explicit one-time operation:
 npm run credentials:run -- deployment:bootstrap -- <profile> <backend|frontend|all>
 ```
 
-It connects as `root`, installs the Node version from `.nvmrc`, creates the
-`app` deployment user,
-systemd units, Nginx configuration, persistent directories, and narrowly scoped
-sudo helpers. Scaffolded profiles use that `app` user for normal releases.
+It connects as the non-root `deployment.sshUser` configured in `project.json`
+and runs the bootstrap script through non-interactive `sudo`. The account must
+already be able to execute that initial command with `sudo -n`; root SSH access
+is neither used nor required. Bootstrap installs the Node version from `.nvmrc`
+and configures that same account as the systemd application owner with Nginx,
+persistent directories, and narrowly scoped sudo helpers. Existing-LXC profiles
+therefore do not own an independent SSH user setting.
 `deployment:deploy` never invokes bootstrap and does not otherwise
 provision or mutate the operating system.
 

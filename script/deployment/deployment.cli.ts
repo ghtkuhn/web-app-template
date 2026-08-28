@@ -13,6 +13,9 @@ import { ProxmoxLxcDeploymentDriver } from './proxmox.driver.ts';
 import { ExistingLxcDeploymentDriver } from './existing-lxc.driver.ts';
 import { ReleaseBuilder } from './release.builder.ts';
 import { DeploymentConfigRenderer } from './config.renderer.ts';
+import {
+    DeploymentProjectConfigRepository,
+} from './project-config.repository.ts';
 
 /** Coordinates profile validation and the selected deployment drivers. */
 export class DeploymentCli {
@@ -207,7 +210,7 @@ export class DeploymentCli {
                     'Explicit bootstrap applies only to existing-lxc targets.',
                 );
             }
-            const key = `${target.sshUser}@${target.sshHost}:${target.sshPort}/${target.installationId}`;
+            const key = this.infrastructureKey(target);
             if (!bootstrapped.has(key)) {
                 await new ExistingLxcDeploymentDriver(target).bootstrap(
                     fs.readFileSync(path.join(this.root, '.nvmrc'), 'utf8').trim(),
@@ -267,7 +270,10 @@ export class DeploymentCli {
     private infrastructureKey(
         target: Extract<DeploymentTarget, { driver: 'existing-lxc' }>,
     ): string {
-        return `${target.sshUser}@${target.sshHost}:${target.sshPort}/${target.installationId}`;
+        const { sshUser } = new DeploymentProjectConfigRepository(
+            this.root,
+        ).load();
+        return `${sshUser}@${target.sshHost}:${target.sshPort}/${target.installationId}`;
     }
 
     private async databaseList(

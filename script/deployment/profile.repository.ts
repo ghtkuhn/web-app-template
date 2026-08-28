@@ -210,7 +210,6 @@ export class DeploymentProfileRepository {
             sshAuthentication: 'private-key' as const,
             sshHost: `${component}.local`,
             sshPort: 22,
-            sshUser: 'root',
             sshHostKeyFingerprint:
                 'SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
         };
@@ -218,12 +217,12 @@ export class DeploymentProfileRepository {
             return {
                 driver,
                 ...ssh,
-                sshUser: 'app',
             };
         }
         return {
             driver: 'proxmox-lxc',
             ...ssh,
+            sshUser: 'root',
             apiUrl: 'https://proxmox.local:8006',
             node: 'pve',
             vmid: component === 'backend' ? 200 : 201,

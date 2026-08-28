@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { ComponentName } from './interfaces.ts';
 
-export const LXC_INFRASTRUCTURE_SCHEMA_VERSION = 2;
+export const LXC_INFRASTRUCTURE_SCHEMA_VERSION = 3;
 export const LXC_RELEASE_SCHEMA_VERSION = 1;
 
 export interface LxcReleaseContractData {

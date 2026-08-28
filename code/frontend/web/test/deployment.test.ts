@@ -28,6 +28,9 @@ import {
     ProcessExecutionError,
     ProcessRunner,
 } from '../../../../script/deployment/process.runner.ts';
+import {
+    DeploymentProjectConfigRepository,
+} from '../../../../script/deployment/project-config.repository.ts';
 
 const roots: string[] = [];
 const HOST_KEY_FINGERPRINT =
@@ -42,7 +45,7 @@ function existingTarget(
         sshAuthentication,
         sshHost: 'existing.test',
         sshPort: 2222,
-        sshUser: 'app',
+        sshUser: 'legacy-profile-user',
         sshHostKeyFingerprint: HOST_KEY_FINGERPRINT,
     };
 }
@@ -124,8 +127,8 @@ test('profile scaffold supports isolated Existing-LXC targets and SQLite', () =>
     expect(profile.requiredSecrets).toContain('DEPLOYMENT_SSH_PRIVATE_KEY');
     expect(
         profile.backend.enabled && profile.backend.target.driver ===
-            'existing-lxc' && profile.backend.target.sshUser,
-    ).toBe('app');
+            'existing-lxc' && 'sshUser' in profile.backend.target,
+    ).toBe(false);
     expect(
         profile.backend.enabled &&
         profile.backend.database.type === 'sqlite' &&
@@ -762,6 +765,7 @@ test('Existing-LXC pins host keys and supports release lifecycle operations', as
             if (remoteCommand.includes('infrastructure.json')) {
                 return JSON.stringify({
                     schemaVersion: LXC_INFRASTRUCTURE_SCHEMA_VERSION,
+                    deploymentUser: 'app',
                     nodeVersion: '24.19.0',
                     npmRange: '>=11 <12',
                     backendLauncher: LxcRuntimeContract.backendLauncher,
@@ -801,6 +805,8 @@ test('Existing-LXC pins host keys and supports release lifecycle operations', as
 
     expect(calls.some((call) => call.command === 'ssh-keyscan')).toBe(false);
     const argumentsText = calls.flatMap((call) => call.arguments_).join(' ');
+    expect(argumentsText).toContain('app@existing.test');
+    expect(argumentsText).not.toContain('legacy-profile-user@existing.test');
     expect(argumentsText).toContain('StrictHostKeyChecking=yes');
     expect(argumentsText).toContain('KnownHostsCommand=');
     expect(argumentsText).toContain('/opt/sample-app/backend');
@@ -839,7 +845,8 @@ test('Existing-LXC runtime mismatch fails before upload or downtime', async () =
             const remoteCommand = arguments_.at(-1) ?? '';
             if (remoteCommand.includes('infrastructure.json')) {
                 return JSON.stringify({
-                    schemaVersion: 2,
+                    schemaVersion: LXC_INFRASTRUCTURE_SCHEMA_VERSION,
+                    deploymentUser: 'app',
                     nodeVersion: '24.19.0',
                     npmRange: '>=11 <12',
                     backendLauncher: LxcRuntimeContract.backendLauncher,
@@ -1045,7 +1052,9 @@ test('Existing-LXC bootstrap is explicit and passes validated parameters', async
     const runner = {
         run(command: string, arguments_: readonly string[]): string {
             calls.push({ command, arguments_ });
-            return '';
+            return arguments_.at(-1)?.startsWith('mktemp -d ')
+                ? '/tmp/sample-app-bootstrap.ABC123'
+                : '';
         },
     } as ProcessRunner;
     const projectRoot = path.resolve(
@@ -1067,8 +1076,27 @@ test('Existing-LXC bootstrap is explicit and passes validated parameters', async
     )).toBe(true);
     expect(calls.some((call) =>
         call.arguments_.some((argument) =>
+            argument.includes('app@existing.test'),
+        ),
+    )).toBe(true);
+    expect(calls.some((call) =>
+        call.arguments_.some((argument) =>
             argument.includes('root@existing.test'),
         ),
+    )).toBe(false);
+    expect(calls.some((call) =>
+        call.arguments_.at(-1)?.includes(
+            'sudo -n sh /tmp/sample-app-bootstrap.ABC123/bootstrap-existing-lxc.sh',
+        ),
+    )).toBe(true);
+    expect(calls.some((call) =>
+        call.arguments_.at(-1)?.endsWith(
+            ' app /tmp/sample-app-bootstrap.ABC123',
+        ),
+    )).toBe(true);
+    expect(calls.some((call) =>
+        call.arguments_.at(-1) ===
+            'rm -rf -- /tmp/sample-app-bootstrap.ABC123',
     )).toBe(true);
     expect(calls.some((call) =>
         call.arguments_.at(-1)?.includes('deployment:deploy'),
@@ -1082,6 +1110,32 @@ test('Existing-LXC bootstrap is explicit and passes validated parameters', async
     expect(bootstrapScript).toContain(
         'Unversioned Existing-LXC infrastructure exists',
     );
+    expect(bootstrapScript).toContain('deployment-user must not be root');
+});
+
+test('Existing-LXC deployment user is validated from project.json', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'deployment-project-'));
+    roots.push(root);
+    const writeConfiguration = (sshUser: unknown): void => {
+        fs.writeFileSync(
+            path.join(root, 'project.json'),
+            JSON.stringify({ deployment: { sshUser } }),
+        );
+    };
+
+    writeConfiguration('deploy');
+    expect(new DeploymentProjectConfigRepository(root).load()).toEqual({
+        sshUser: 'deploy',
+    });
+    for (const invalid of ['root', 'Bad User', '', 42]) {
+        writeConfiguration(invalid);
+        expect(() => new DeploymentProjectConfigRepository(root).load())
+            .toThrow(/non-root POSIX user name/u);
+    }
+
+    fs.unlinkSync(path.join(root, 'project.json'));
+    expect(() => new DeploymentProjectConfigRepository(root).load())
+        .toThrow(/must exist.*deployment\.sshUser/u);
 });
 
 test('Existing-LXC infrastructure upgrade is explicit and versioned', async () => {
@@ -1089,7 +1143,9 @@ test('Existing-LXC infrastructure upgrade is explicit and versioned', async () =
     const runner = {
         run(command: string, arguments_: readonly string[]): string {
             calls.push({ command, arguments_ });
-            return '';
+            return arguments_.at(-1)?.startsWith('mktemp -d ')
+                ? '/tmp/sample-app-bootstrap.ABC123'
+                : '';
         },
     } as ProcessRunner;
     const projectRoot = path.resolve(

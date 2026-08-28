@@ -16,7 +16,7 @@
 
 # Project structure
 
-* `project.json`: Tracked non-secret project details and configuration; template updates preserve existing values and add new settings.
+* `project.json`: Tracked non-secret project details and configuration, including `deployment.sshUser`; template updates preserve existing values and add new settings.
 * `code/backend`: Contains backend source code.
 * `code/frontend`: Contains frontend source code.
 * `data/sqlite`: Sqlite database storage location.

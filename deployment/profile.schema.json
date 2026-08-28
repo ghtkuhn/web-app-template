@@ -69,14 +69,18 @@
         "existingLxcTarget": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["driver", "installationId", "sshAuthentication", "sshHost", "sshPort", "sshUser", "sshHostKeyFingerprint"],
+            "required": ["driver", "installationId", "sshAuthentication", "sshHost", "sshPort", "sshHostKeyFingerprint"],
             "properties": {
                 "driver": { "const": "existing-lxc" },
                 "installationId": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" },
                 "sshAuthentication": { "enum": ["private-key", "password"] },
                 "sshHost": { "type": "string", "minLength": 1 },
                 "sshPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
-                "sshUser": { "type": "string", "pattern": "^[a-z_][a-z0-9_-]*$" },
+                "sshUser": {
+                    "type": "string",
+                    "pattern": "^[a-z_][a-z0-9_-]*$",
+                    "description": "Deprecated legacy value; Existing-LXC uses project.json deployment.sshUser."
+                },
                 "sshHostKeyFingerprint": { "type": "string", "pattern": "^SHA256:[A-Za-z0-9+/]{43}$" }
             }
         },

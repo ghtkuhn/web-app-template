@@ -1,4 +1,7 @@
 {
+    "deployment": {
+        "sshUser": "app"
+    },
     "template-config": {
         "use-kanban": true
     }

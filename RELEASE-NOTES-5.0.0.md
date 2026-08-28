@@ -17,6 +17,9 @@
 - `data-bs-theme` follows the operating-system color scheme and updates live.
 - The frontend linter parses SCSS and teaches Bootstrap import ownership,
   offline dependency use, and removal of legacy Pico contracts.
+- Existing-LXC bootstrap connects with the non-root `deployment.sshUser` from
+  `project.json` and elevates only through non-interactive `sudo`; root SSH is
+  no longer required. A unique legacy profile user is migrated automatically.
 
 ## Preserved
 

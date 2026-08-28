@@ -43,7 +43,8 @@ export interface ExistingLxcTarget {
     readonly sshAuthentication: 'private-key' | 'password';
     readonly sshHost: string;
     readonly sshPort: number;
-    readonly sshUser: string;
+    /** @deprecated Existing-LXC reads deployment.sshUser from project.json. */
+    readonly sshUser?: string;
     readonly sshHostKeyFingerprint: string;
 }
 
