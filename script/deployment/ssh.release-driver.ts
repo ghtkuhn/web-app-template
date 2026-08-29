@@ -59,6 +59,39 @@ interface SudoInvocation {
     readonly input?: string;
 }
 
+/** Renders one grouped health probe whose exit status covers every retry. */
+export function renderLxcHealthCheck(
+    component: ComponentName,
+    attemptLimit = 30,
+): string {
+    if (!Number.isSafeInteger(attemptLimit) || attemptLimit < 1) {
+        throw new Error('LXC health-check attempt limit must be positive.');
+    }
+    const request = component === 'backend'
+        ? 'curl -fsS http://127.0.0.1:3000/api/health >/dev/null'
+        : [
+            'curl -fsS http://127.0.0.1/healthz >/dev/null',
+            'curl -fsS http://127.0.0.1/runtime-config.js >/dev/null',
+        ].join(' && ');
+    return [
+        '(',
+        'healthy=0;',
+        'attempt=1;',
+        `while [ "$attempt" -le ${attemptLimit} ]; do`,
+        `if ${request}; then`,
+        `printf '${component} health check succeeded on attempt %s/${attemptLimit}.\\n' "$attempt" >&2;`,
+        'healthy=1;',
+        'break;',
+        'fi;',
+        `printf '${component} health check failed on attempt %s/${attemptLimit}.\\n' "$attempt" >&2;`,
+        'attempt=$((attempt + 1));',
+        `if [ "$attempt" -le ${attemptLimit} ]; then sleep 1; fi;`,
+        'done;',
+        'test "$healthy" -eq 1',
+        ')',
+    ].join(' ');
+}
+
 /** Owns the shared checksummed, host-key-pinned SSH release protocol. */
 export class SshReleaseDriver {
     private readonly target: SshReleaseTarget;
@@ -469,10 +502,7 @@ export class SshReleaseDriver {
     }
 
     private healthCommand(component: ComponentName): string {
-        const request = component === 'backend'
-            ? 'curl -fsS http://127.0.0.1:3000/api/health'
-            : 'curl -fsS http://127.0.0.1/healthz && curl -fsS http://127.0.0.1/runtime-config.js';
-        return `healthy=0; attempt=0; while [ "$attempt" -lt 30 ]; do if ${request}; then healthy=1; break; fi; attempt=$((attempt + 1)); sleep 1; done; test "$healthy" -eq 1`;
+        return renderLxcHealthCheck(component);
     }
 
     private databaseMaintenanceCommand(

@@ -190,3 +190,24 @@ catalogs together. Locally modified deployment contract files must be resolved
 as one coherent incoming set. Infrastructure schema 3 and existing remote
 releases remain compatible; neither bootstrap nor infrastructure upgrade is
 required solely for these diagnostics.
+
+## Template 5.0.5 LXC activation reliability
+
+Template 5.0.5 fixes two coupled Existing-LXC backend activation defects. The
+generated `start-backend.mjs` now instantiates `BackendApplication` and awaits
+`start()` explicitly; importing the guarded backend entrypoint alone did not
+start a released application. Health retries now execute in one grouped shell
+expression, so `!` evaluates the final probe result instead of only the first
+variable assignment. A healthy new release therefore remains active, while an
+exhausted health check still triggers rollback.
+
+Health probes no longer print response bodies. They report the component and
+attempt number, retain curl failure evidence, and keep the existing 30-attempt
+limit. The same grouped probe is used for deployment, explicit rollback, and
+post-restore backend activation.
+
+Unmodified Template 4.x and 5.x applications receive both fixes through
+`template:update`. Existing infrastructure schema 3 installations remain
+compatible and do not require bootstrap or infrastructure upgrade. The next
+backend release replaces the generated launcher automatically; existing
+releases remain available for explicit rollback under their recorded contract.

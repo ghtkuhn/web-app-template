@@ -81,7 +81,11 @@ export class LxcRuntimeContract {
 
     /** Renders the stable systemd entrypoint contained in backend archives. */
     public backendLauncher(entrypoint = 'code/backend/src/index.ts'): string {
-        return `await import('./${entrypoint}');\n`;
+        return [
+            `import { BackendApplication } from './${entrypoint}';`,
+            'await new BackendApplication().start();',
+            '',
+        ].join('\n');
     }
 
     /** Renders the stable database-maintenance entrypoint. */

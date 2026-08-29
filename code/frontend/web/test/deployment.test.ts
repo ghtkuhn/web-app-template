@@ -30,6 +30,9 @@ import {
     ProcessRunner,
 } from '../../../../script/deployment/process.runner.ts';
 import {
+    renderLxcHealthCheck,
+} from '../../../../script/deployment/ssh.release-driver.ts';
+import {
     DeploymentProjectConfigRepository,
 } from '../../../../script/deployment/project-config.repository.ts';
 
@@ -451,7 +454,11 @@ test('real backend release matches the service contract and strict allowlist', (
     expect(fs.readFileSync(
         path.join(extracted, LxcRuntimeContract.backendLauncher),
         'utf8',
-    )).toContain('./code/backend/src/index.ts');
+    )).toBe([
+        "import { BackendApplication } from './code/backend/src/index.ts';",
+        'await new BackendApplication().start();',
+        '',
+    ].join('\n'));
     for (const relativePath of [
         'package.json',
         'package-lock.json',
@@ -673,7 +680,7 @@ test('LXC release activation uses direct SSH and contains health rollback', asyn
     );
     expect(calls[2].arguments_.at(-1)).toContain('ln -sfnT');
     expect(calls[2].arguments_.at(-1)).toContain(
-        'while [ "$attempt" -lt 30 ]',
+        '! ( healthy=0; attempt=1; while [ "$attempt" -le 30 ]',
     );
     expect(calls[2].arguments_.at(-1)).toContain('/api/health');
 });
@@ -738,12 +745,58 @@ test('LXC database restore keeps stop, restore, restart, and health ordered', as
     expect(command).toContain('systemctl stop web-app-backend');
     expect(command).toContain('run-database-maintenance.mjs restore');
     expect(command).toContain('install.sh');
-    expect(command).toContain('while [ "$attempt" -lt 30 ]');
+    expect(command).toContain('( healthy=0; attempt=1;');
+    expect(command).toContain('while [ "$attempt" -le 30 ]');
     expect(command).toContain('systemctl stop web-app-backend || true; exit 1');
     expect(command).toContain('/api/health');
     await expect(driver.databaseRestore('../escape.sqlite')).rejects.toThrow(
         /Invalid database backup identifier/,
     );
+});
+
+test('LXC health checks preserve success and failure through shell negation', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lxc-health-check-'));
+    roots.push(root);
+    const bin = path.join(root, 'bin');
+    const attempts = path.join(root, 'attempts');
+    fs.mkdirSync(bin);
+    const curl = path.join(bin, 'curl');
+    fs.writeFileSync(curl, [
+        '#!/bin/sh',
+        'attempt=$(cat "$HEALTH_ATTEMPTS" 2>/dev/null || printf 0)',
+        'attempt=$((attempt + 1))',
+        'printf "%s" "$attempt" > "$HEALTH_ATTEMPTS"',
+        'test "$attempt" -ge "$HEALTH_SUCCESS_AT"',
+        '',
+    ].join('\n'));
+    fs.chmodSync(curl, 0o755);
+    const sleep = path.join(bin, 'sleep');
+    fs.writeFileSync(sleep, '#!/bin/sh\nexit 0\n');
+    fs.chmodSync(sleep, 0o755);
+    const environment = {
+        ...process.env,
+        PATH: `${bin}:${process.env.PATH ?? ''}`,
+        HEALTH_ATTEMPTS: attempts,
+        HEALTH_SUCCESS_AT: '2',
+    };
+    const healthCheck = renderLxcHealthCheck('backend', 3);
+    const success = new ProcessRunner().run('sh', [
+        '-c',
+        `if ! true || ! ${healthCheck}; then printf rollback; else printf keep; fi`,
+    ], { env: environment });
+
+    expect(success).toBe('keep');
+    expect(fs.readFileSync(attempts, 'utf8')).toBe('2');
+
+    fs.rmSync(attempts);
+    environment.HEALTH_SUCCESS_AT = '4';
+    const failure = new ProcessRunner().run('sh', [
+        '-c',
+        `if ! true || ! ${healthCheck}; then printf rollback; else printf keep; fi`,
+    ], { env: environment });
+
+    expect(failure).toBe('rollback');
+    expect(fs.readFileSync(attempts, 'utf8')).toBe('3');
 });
 
 test('Existing-LXC pins host keys and supports release lifecycle operations', async () => {
