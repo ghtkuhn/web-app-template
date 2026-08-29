@@ -211,3 +211,15 @@ Unmodified Template 4.x and 5.x applications receive both fixes through
 compatible and do not require bootstrap or infrastructure upgrade. The next
 backend release replaces the generated launcher automatically; existing
 releases remain available for explicit rollback under their recorded contract.
+
+## Template 5.0.6 versioned Git hook repair
+
+Template 5.0.6 makes the root `prepare` step restore mode `0755` on the
+versioned `.githooks/pre-commit` file before configuring `core.hooksPath`.
+Older applications that accidentally tracked or retained the hook without its
+executable bit therefore recover the credential pre-commit safeguard during
+the normal `npm install` performed by `template:update`.
+
+The setup rejects a symlink or non-file hook instead of following it. An
+application that deliberately uses another `core.hooksPath` still keeps that
+configuration and continues to rely on the mandatory Verify credential check.
