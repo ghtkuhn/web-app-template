@@ -223,3 +223,25 @@ the normal `npm install` performed by `template:update`.
 The setup rejects a symlink or non-file hook instead of following it. An
 application that deliberately uses another `core.hooksPath` still keeps that
 configuration and continues to rely on the mandatory Verify credential check.
+
+## Template 5.0.7 credentialed Auth transport
+
+Template 5.0.7 completes the strict CORS response for explicitly allowed
+browser origins with `Access-Control-Allow-Credentials: true`. The server still
+echoes only an exact configured origin, never permits a wildcard, and emits no
+CORS permission headers for rejected or originless requests. Credentialed
+Better Auth requests therefore work across configured frontend and backend
+origins without widening the origin policy.
+
+Rejected Better Auth transport promises are now normalized inside
+`AuthService`, matching the stable `ApiResult` contract already used by the
+normal API client. Session restoration can no longer reject a Vue router guard
+solely because the backend is unavailable. Failed session restoration clears a
+stale Bearer token, and sign-out clears it for success, returned Auth failures,
+and rejected network requests.
+
+Applications that added a broad `try/catch` around Auth Service calls in
+`auth.composable.ts` should remove that local workaround after accepting the
+incoming Auth Service and API-error changes. The composable should own UI state
+only; transport normalization belongs to the service. No deployment or
+infrastructure migration is required.

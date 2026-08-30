@@ -16,7 +16,7 @@
 
 # Project structure
 
-* `project.json`: Tracked non-secret project details and configuration, including `deployment.sshUser`; template updates preserve existing values and add new settings.
+* `project.json`: Contains project details and AI agent settings (for you).
 * `code/backend`: Contains backend source code.
 * `code/frontend`: Contains frontend source code.
 * `data/sqlite`: Sqlite database storage location.

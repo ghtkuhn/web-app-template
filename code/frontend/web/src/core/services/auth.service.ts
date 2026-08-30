@@ -1,7 +1,17 @@
 import type { ApiError, ApiResult } from '../api/interfaces.ts';
+import { toTransportApiError } from '../api/api-error.ts';
 import type { FrontendAuthClient } from '../api/auth.client.ts';
 import { authTokenStore } from '../api/auth-token.store.ts';
 import type { AuthModel } from '../models/auth.model.ts';
+
+interface AuthClientError {
+    readonly message?: string;
+    readonly status?: number;
+}
+
+interface AuthClientResult {
+    readonly error: AuthClientError | null;
+}
 
 /** Maps Better Auth transport results to stable frontend Auth models. */
 export class AuthService {
@@ -10,7 +20,14 @@ export class AuthService {
 
     /** Restores the current signed Bearer session. */
     public async getSession(): Promise<ApiResult<AuthModel | null>> {
-        const result = await this.authClient.getSession();
+        const transport = await this.captureTransport(
+            () => this.authClient.getSession(),
+        );
+        if (!transport.success) {
+            authTokenStore.clear();
+            return transport;
+        }
+        const result = transport.data;
         if (result.error) {
             authTokenStore.clear();
             return { success: false, error: this.error(result.error) };
@@ -27,10 +44,9 @@ export class AuthService {
         email: string,
         password: string,
     ): Promise<ApiResult<AuthModel | null>> {
-        const result = await this.authClient.signIn.email({ email, password });
-        return result.error
-            ? { success: false, error: this.error(result.error) }
-            : this.getSession();
+        return this.authenticate(
+            () => this.authClient.signIn.email({ email, password }),
+        );
     }
 
     /** Registers an Email/password account when enabled by runtime config. */
@@ -39,19 +55,26 @@ export class AuthService {
         email: string,
         password: string,
     ): Promise<ApiResult<AuthModel | null>> {
-        const result = await this.authClient.signUp.email({ name, email, password });
-        return result.error
-            ? { success: false, error: this.error(result.error) }
-            : this.getSession();
+        return this.authenticate(
+            () => this.authClient.signUp.email({ name, email, password }),
+        );
     }
 
     /** Invalidates the current session and always clears local credentials. */
     public async signOut(): Promise<ApiResult<null>> {
-        const result = await this.authClient.signOut();
-        authTokenStore.clear();
-        return result.error
-            ? { success: false, error: this.error(result.error) }
-            : { success: true, data: null };
+        try {
+            const transport = await this.captureTransport(
+                () => this.authClient.signOut(),
+            );
+            if (!transport.success) {
+                return transport;
+            }
+            return transport.data.error
+                ? { success: false, error: this.error(transport.data.error) }
+                : { success: true, data: null };
+        } finally {
+            authTokenStore.clear();
+        }
     }
 
     /** Maps Better Auth session data without exposing its session token. */
@@ -76,11 +99,38 @@ export class AuthService {
     }
 
     /** Normalizes Better Auth client errors. */
-    private error(error: { message?: string; status?: number }): ApiError {
+    private error(error: AuthClientError): ApiError {
         return {
             type: 'http',
             status: error.status ?? 400,
             message: error.message ?? 'Authentication failed.',
         };
+    }
+
+    /** Completes one credential exchange with a freshly restored session. */
+    private async authenticate(
+        operation: () => Promise<AuthClientResult>,
+    ): Promise<ApiResult<AuthModel | null>> {
+        const transport = await this.captureTransport(operation);
+        if (!transport.success) {
+            return transport;
+        }
+        return transport.data.error
+            ? { success: false, error: this.error(transport.data.error) }
+            : this.getSession();
+    }
+
+    /** Captures only transport invocation failures at the service boundary. */
+    private async captureTransport<T>(
+        operation: () => Promise<T>,
+    ): Promise<ApiResult<T>> {
+        try {
+            return { success: true, data: await operation() };
+        } catch (error) {
+            return {
+                success: false,
+                error: toTransportApiError(error),
+            };
+        }
     }
 }

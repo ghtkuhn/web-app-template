@@ -1,9 +1,9 @@
 import type {
-    ApiError,
     ApiRequest,
     ApiResult,
     AuthTokenReader,
 } from './interfaces.ts';
+import { toTransportApiError } from './api-error.ts';
 import { authTokenStore } from './auth-token.store.ts';
 
 type FetchImplementation = typeof fetch;
@@ -58,7 +58,7 @@ export class ApiClient {
         } catch (error) {
             return {
                 success: false,
-                error: this.transportError(error),
+                error: toTransportApiError(error),
             };
         }
     }
@@ -96,18 +96,4 @@ export class ApiClient {
         }
     }
 
-    private transportError(error: unknown): ApiError {
-        if (error instanceof DOMException && error.name === 'AbortError') {
-            return {
-                type: 'abort',
-                message: 'The request was aborted.',
-            };
-        }
-        return {
-            type: 'network',
-            message: error instanceof Error
-                ? error.message
-                : 'The network request failed.',
-        };
-    }
 }

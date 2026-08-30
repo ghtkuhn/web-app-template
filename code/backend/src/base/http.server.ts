@@ -250,6 +250,7 @@ export class HttpServer {
             return false;
         }
         response.setHeader('Access-Control-Allow-Origin', origin);
+        response.setHeader('Access-Control-Allow-Credentials', 'true');
         response.setHeader('Access-Control-Allow-Methods', 'GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS');
         response.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
         response.setHeader('Access-Control-Expose-Headers', 'set-auth-token');

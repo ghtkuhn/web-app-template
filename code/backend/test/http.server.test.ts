@@ -415,6 +415,11 @@ test('origin policy permits configured origins and rejects others', async () => 
                 allowed.headers.get('access-control-allow-origin'),
                 'https://frontend.test',
             );
+            assert.equal(
+                allowed.headers.get('access-control-allow-credentials'),
+                'true',
+            );
+            assert.equal(allowed.headers.get('vary'), 'Origin');
 
             const preflight = await fetch(
                 `http://127.0.0.1:${server.port}/api/health`,
@@ -424,12 +429,41 @@ test('origin policy permits configured origins and rejects others', async () => 
                 },
             );
             assert.equal(preflight.status, 204);
+            assert.equal(
+                preflight.headers.get('access-control-allow-origin'),
+                'https://frontend.test',
+            );
+            assert.equal(
+                preflight.headers.get('access-control-allow-credentials'),
+                'true',
+            );
 
             const rejected = await fetch(
                 `http://127.0.0.1:${server.port}/api/health`,
                 { headers: { Origin: 'https://other.test' } },
             );
             assert.equal(rejected.status, 403);
+            assert.equal(
+                rejected.headers.get('access-control-allow-origin'),
+                null,
+            );
+            assert.equal(
+                rejected.headers.get('access-control-allow-credentials'),
+                null,
+            );
+
+            const serverToServer = await fetch(
+                `http://127.0.0.1:${server.port}/api/health`,
+            );
+            assert.equal(serverToServer.status, 200);
+            assert.equal(
+                serverToServer.headers.get('access-control-allow-origin'),
+                null,
+            );
+            assert.equal(
+                serverToServer.headers.get('access-control-allow-credentials'),
+                null,
+            );
         },
         undefined,
         ['https://frontend.test'],

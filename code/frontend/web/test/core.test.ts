@@ -1,12 +1,38 @@
-import { describe, expect, test, vi } from 'vitest';
+import {
+    afterEach,
+    beforeEach,
+    describe,
+    expect,
+    test,
+    vi,
+} from 'vitest';
+import { toTransportApiError } from '../src/core/api/api-error.ts';
 import { ApiClient } from '../src/core/api/api.client.ts';
 import { FrontendConfig } from '../src/core/config/frontend.config.ts';
 import { HealthComposable } from '../src/core/composables/health.composable.ts';
 import { HealthService } from '../src/core/services/health.service.ts';
-import { AuthTokenStore } from '../src/core/api/auth-token.store.ts';
+import {
+    authTokenStore,
+    AuthTokenStore,
+} from '../src/core/api/auth-token.store.ts';
 import { createFrontendAuthClient } from '../src/core/api/auth.client.ts';
 import { AuthComposable } from '../src/core/composables/auth.composable.ts';
 import { AuthService } from '../src/core/services/auth.service.ts';
+
+beforeEach(() => {
+    authTokenStore.clear();
+});
+
+afterEach(() => {
+    vi.unstubAllGlobals();
+});
+
+function authClientWithRejectedTransport(error: unknown) {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+        throw error;
+    }) as typeof fetch);
+    return createFrontendAuthClient('http://backend.test');
+}
 
 describe('FrontendConfig', () => {
     test('uses safe defaults and validates presentation locks', () => {
@@ -69,6 +95,23 @@ test('disabled Auth performs no request and reports unavailable registration', a
 });
 
 describe('ApiClient', () => {
+    test('normalizes rejected transports without exposing unknown values', () => {
+        expect(toTransportApiError(
+            new DOMException('cancelled', 'AbortError'),
+        )).toEqual({
+            type: 'abort',
+            message: 'The request was aborted.',
+        });
+        expect(toTransportApiError(new Error('offline'))).toEqual({
+            type: 'network',
+            message: 'offline',
+        });
+        expect(toTransportApiError('sensitive rejected value')).toEqual({
+            type: 'network',
+            message: 'The network request failed.',
+        });
+    });
+
     test('normalizes success, HTTP, parse, network, and abort outcomes', async () => {
         const success = new ApiClient(
             '/',
@@ -122,6 +165,97 @@ describe('ApiClient', () => {
         expect(await aborted.request('/abort')).toMatchObject({
             success: false,
             error: { type: 'abort' },
+        });
+    });
+});
+
+describe('AuthService', () => {
+    test('normalizes session transport failures and clears stale credentials', async () => {
+        const authClient = authClientWithRejectedTransport(
+            new Error('backend unavailable'),
+        );
+        authTokenStore.set('stale-token');
+
+        await expect(new AuthService(authClient).getSession()).resolves.toEqual({
+            success: false,
+            error: { type: 'network', message: 'backend unavailable' },
+        });
+        expect(authTokenStore.get()).toBeNull();
+    });
+
+    test('normalizes sign-in and sign-up transport failures', async () => {
+        const authClient = authClientWithRejectedTransport(
+            new DOMException('cancelled', 'AbortError'),
+        );
+        const service = new AuthService(authClient);
+
+        await expect(service.signIn('user@example.com', 'password')).resolves
+            .toMatchObject({
+                success: false,
+                error: { type: 'abort' },
+            });
+        await expect(
+            service.signUp('User', 'user@example.com', 'password'),
+        ).resolves.toMatchObject({
+            success: false,
+            error: { type: 'abort' },
+        });
+    });
+
+    test('keeps returned Auth errors classified as HTTP failures', async () => {
+        vi.stubGlobal('fetch', vi.fn(async () => new Response(
+            JSON.stringify({ message: 'Invalid credentials.' }),
+            {
+                status: 401,
+                headers: { 'content-type': 'application/json' },
+            },
+        )) as typeof fetch);
+        const authClient = createFrontendAuthClient('http://backend.test');
+
+        await expect(
+            new AuthService(authClient).signIn(
+                'user@example.com',
+                'password',
+            ),
+        ).resolves.toEqual({
+            success: false,
+            error: {
+                type: 'http',
+                status: 401,
+                message: 'Invalid credentials.',
+            },
+        });
+    });
+
+    test('always clears local credentials when sign-out transport fails', async () => {
+        const authClient = authClientWithRejectedTransport(
+            new Error('offline'),
+        );
+        authTokenStore.set('active-token');
+
+        await expect(new AuthService(authClient).signOut()).resolves.toEqual({
+            success: false,
+            error: { type: 'network', message: 'offline' },
+        });
+        expect(authTokenStore.get()).toBeNull();
+    });
+
+    test('lets AuthComposable restore settle in an error state', async () => {
+        const authClient = authClientWithRejectedTransport(
+            new Error('offline'),
+        );
+        const composable = new AuthComposable(
+            new AuthService(authClient),
+            true,
+            false,
+        );
+
+        await expect(composable.restore()).resolves.toBeUndefined();
+        expect(composable.status.value).toBe('error');
+        expect(composable.data.value).toBeNull();
+        expect(composable.error.value).toEqual({
+            type: 'network',
+            message: 'offline',
         });
     });
 });
