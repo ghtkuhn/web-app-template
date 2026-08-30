@@ -1,8 +1,11 @@
 # Deployment Profiles
 
 Deployment is controlled by versioned JSON profiles in `deployment/profiles/`.
-The default profile is `local`, and both components use Docker unless a
-Proxmox LXC driver is selected explicitly.
+The default profile is `local` and continues to use Docker. The tracked
+`project.json` setting `deployment.platform` selects the default driver only
+for newly scaffolded profiles. Its supported values are `docker`,
+`existing-lxc`, and `proxmox-lxc`; `local` is an environment and profile name,
+not a driver.
 
 ```bash
 npm run deployment:validate
@@ -21,6 +24,11 @@ npm run credentials:run -- deployment:database:restore -- local <backup-id>
 
 Backend and frontend targets are independent. A profile can therefore select
 `docker`, `proxmox-lxc`, or `existing-lxc` separately for each component.
+Explicit `--backend-driver` and `--frontend-driver` scaffold options override
+`deployment.platform` for their component. Once a profile exists, its
+`target.driver` values alone control build, deployment, status, stop, rollback,
+and database operations; changing the project default never rewrites or
+overrides existing profiles.
 
 ## Secrets
 

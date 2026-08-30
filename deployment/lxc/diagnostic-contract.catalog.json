@@ -2,7 +2,7 @@
     "schemaVersion": 1,
     "files": {
         "script/deployment/process.runner.ts": "e2dedd81b64763270db74a6714bcb90db5bde6f5dc1a96260ce07a8a45ac9a52",
-        "script/deployment/deployment.cli.ts": "ddbec66d5189c7bc5059ca777c6d86fd6fb318e289e328def28a0c0517899ee5",
+        "script/deployment/deployment.cli.ts": "612a99288885b8f40a8e11e98828df564b920a991df3eae506c4b9cbd5f0bec1",
         "script/deployment/existing-lxc.driver.ts": "409fdd1d58065a4923002239e1a986c16f850a1c240f7dabd2200ca703352e07"
     }
 }

@@ -1,11 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import {
+    DEPLOYMENT_DRIVERS,
+    type DeploymentDriver,
+} from './interfaces.ts';
 
 export interface DeploymentProjectConfiguration {
+    readonly platform: DeploymentDriver;
     readonly sshUser: string;
 }
 
-/** Loads non-secret deployment ownership from the tracked project config. */
+/** Loads non-secret deployment defaults and ownership from project config. */
 export class DeploymentProjectConfigRepository {
     private readonly filePath: string;
 
@@ -24,7 +29,7 @@ export class DeploymentProjectConfigRepository {
                 error.code === 'ENOENT'
             ) {
                 throw new Error(
-                    'project.json must exist and define deployment.sshUser.',
+                    'project.json must exist and define deployment.platform and deployment.sshUser.',
                 );
             }
             throw error;
@@ -40,7 +45,13 @@ export class DeploymentProjectConfigRepository {
         }
         if (!this.object(parsed) || !this.object(parsed.deployment)) {
             throw new Error(
-                'project.json must define deployment.sshUser.',
+                'project.json must define deployment.platform and deployment.sshUser.',
+            );
+        }
+        const platform = parsed.deployment.platform;
+        if (!this.deploymentDriver(platform)) {
+            throw new Error(
+                `project.json deployment.platform must be one of: ${DEPLOYMENT_DRIVERS.join(', ')}. 'local' is an environment and profile name, not a deployment driver.`,
             );
         }
         const sshUser = parsed.deployment.sshUser;
@@ -53,7 +64,11 @@ export class DeploymentProjectConfigRepository {
                 'project.json deployment.sshUser must be a non-root POSIX user name.',
             );
         }
-        return { sshUser };
+        return { platform, sshUser };
+    }
+
+    private deploymentDriver(value: unknown): value is DeploymentDriver {
+        return DEPLOYMENT_DRIVERS.some((driver) => driver === value);
     }
 
     private object(value: unknown): value is Record<string, unknown> {

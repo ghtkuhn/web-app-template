@@ -245,3 +245,15 @@ Applications that added a broad `try/catch` around Auth Service calls in
 incoming Auth Service and API-error changes. The composable should own UI state
 only; transport normalization belongs to the service. No deployment or
 infrastructure migration is required.
+
+The same release introduces `deployment.platform` as the validated default
+driver for newly scaffolded profiles. Template 5.0.6 applications receive the
+default `docker` value automatically. Explicit `--backend-driver` and
+`--frontend-driver` options win for their component, and existing profiles
+remain unchanged and authoritative for all deployment operations.
+
+Only `docker`, `existing-lxc`, and `proxmox-lxc` are valid platform values.
+`local` remains an environment and profile name, while the ambiguous `lxc`
+value is not accepted. The updater preserves an application-owned existing
+value rather than silently translating it; replace unsupported experimental
+values before running deployment validation.

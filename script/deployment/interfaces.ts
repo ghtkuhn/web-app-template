@@ -1,6 +1,12 @@
 export type ComponentName = 'backend' | 'frontend';
 export type ComponentSelection = ComponentName | 'all';
 export type DeploymentEnvironment = 'local' | 'dev' | 'staging' | 'prod';
+export const DEPLOYMENT_DRIVERS = [
+    'docker',
+    'existing-lxc',
+    'proxmox-lxc',
+] as const;
+export type DeploymentDriver = typeof DEPLOYMENT_DRIVERS[number];
 
 export interface DockerTarget {
     readonly driver: 'docker';

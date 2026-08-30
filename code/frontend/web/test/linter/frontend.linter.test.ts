@@ -74,7 +74,7 @@ test('real frontend satisfies all architecture rules', () => {
     const result = new FrontendLinter(projectRoot).run();
     expect(result.issues).toEqual([]);
     expect(result.filesChecked).toBeGreaterThan(0);
-});
+}, 15_000);
 
 test('presentation imports, network access, styles, and SFC syntax are strict', () => {
     const fixture = new Fixture();

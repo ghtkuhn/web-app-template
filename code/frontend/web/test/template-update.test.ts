@@ -347,7 +347,7 @@ test('repository ships canonical Boolean project configuration', () => {
         path.join(projectRoot, 'project.json'),
         'utf8',
     )) as {
-        deployment: { sshUser: unknown };
+        deployment: { platform: unknown; sshUser: unknown };
         'template-config': { 'use-kanban': unknown };
     };
     const ignoreRules = fs.readFileSync(
@@ -356,6 +356,7 @@ test('repository ships canonical Boolean project configuration', () => {
     ).split(/\r?\n/u);
 
     expect(configuration['template-config']['use-kanban']).toBe(true);
+    expect(configuration.deployment.platform).toBe('docker');
     expect(configuration.deployment.sshUser).toBe('app');
     expect(ignoreRules).not.toContain('project.json');
 });
@@ -388,6 +389,7 @@ test('project configuration preserves local state and adds only new defaults', (
     fs.chmodSync(path.join(local, 'project.json'), 0o640);
     write(incoming, 'project.json', JSON.stringify({
         deployment: {
+            platform: 'docker',
             sshUser: 'app',
         },
         'template-config': {
@@ -413,6 +415,7 @@ test('project configuration preserves local state and adds only new defaults', (
 
     expect(merged).toEqual({
         deployment: {
+            platform: 'docker',
             sshUser: 'app',
         },
         'template-config': {
@@ -437,12 +440,19 @@ test('project configuration merges legacy apps without a template base', () => {
     const incoming = temporaryRoot('template-legacy-incoming-');
     writeCanonicalInstructions([base, local, incoming]);
     write(local, 'project.json', JSON.stringify({
+        deployment: {
+            platform: 'existing-lxc',
+        },
         'template-config': {
             'use-kanban': 'true',
             localSetting: 'keep',
         },
     }));
     write(incoming, 'project.json', JSON.stringify({
+        deployment: {
+            platform: 'docker',
+            sshUser: 'app',
+        },
         'template-config': {
             'use-kanban': true,
             futureSetting: 'add',
@@ -460,6 +470,10 @@ test('project configuration merges legacy apps without a template base', () => {
     )) as Record<string, unknown>;
 
     expect(merged).toEqual({
+        deployment: {
+            platform: 'existing-lxc',
+            sshUser: 'app',
+        },
         futureRoot: true,
         'template-config': {
             futureSetting: 'add',

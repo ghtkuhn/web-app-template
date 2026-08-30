@@ -8,6 +8,9 @@ import type {
     DeploymentTarget,
     DisabledDeployment,
 } from './interfaces.ts';
+import {
+    DeploymentProjectConfigRepository,
+} from './project-config.repository.ts';
 
 interface LegacyBackendDeployment
     extends Omit<BackendDeployment, 'database'>
@@ -93,7 +96,7 @@ export class DeploymentProfileRepository {
             .map((name) => this.load(name.slice(0, -5)));
     }
 
-    /** Creates a new profile using Docker unless drivers are explicit. */
+    /** Creates a new profile using explicit drivers or the project default. */
     public scaffold(
         name: string,
         sourceName = 'local',
@@ -109,12 +112,15 @@ export class DeploymentProfileRepository {
         const source = this.load(sourceName);
         const environment = this.environment(name);
         const database = this.database(databaseType);
+        const defaultDriver = new DeploymentProjectConfigRepository(
+            this.projectRoot,
+        ).load().platform;
         const backendTarget = source.backend.enabled
             ? this.target(
                   name,
                   environment,
                   'backend',
-                  backendDriver ?? 'docker',
+                  backendDriver ?? defaultDriver,
               )
             : undefined;
         const frontendTarget = source.frontend.enabled
@@ -122,7 +128,7 @@ export class DeploymentProfileRepository {
                   name,
                   environment,
                   'frontend',
-                  frontendDriver ?? 'docker',
+                  frontendDriver ?? defaultDriver,
               )
             : undefined;
         const profile: DeploymentProfile = {

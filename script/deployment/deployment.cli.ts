@@ -19,17 +19,28 @@ import {
 
 /** Coordinates profile validation and the selected deployment drivers. */
 export class DeploymentCli {
-    private readonly root = path.resolve(
+    private readonly root: string;
+    private readonly profiles: DeploymentProfileRepository;
+    private readonly docker: DockerDeploymentDriver;
+    private readonly releases: ReleaseBuilder;
+    private readonly projectConfiguration: DeploymentProjectConfigRepository;
+    private readonly configurations = new DeploymentConfigRenderer();
+
+    public constructor(root = path.resolve(
         path.dirname(fileURLToPath(import.meta.url)),
         '../..',
-    );
-    private readonly profiles = new DeploymentProfileRepository(this.root);
-    private readonly docker = new DockerDeploymentDriver(this.root);
-    private readonly releases = new ReleaseBuilder(this.root);
-    private readonly configurations = new DeploymentConfigRenderer();
+    )) {
+        this.root = root;
+        this.profiles = new DeploymentProfileRepository(root);
+        this.docker = new DockerDeploymentDriver(root);
+        this.releases = new ReleaseBuilder(root);
+        this.projectConfiguration =
+            new DeploymentProjectConfigRepository(root);
+    }
 
     public async run(arguments_: readonly string[]): Promise<number> {
         try {
+            this.projectConfiguration.load();
             const [command = 'validate', ...rest] = arguments_;
             if (command === 'scaffold') {
                 return this.scaffold(rest);
@@ -460,4 +471,10 @@ export class DeploymentCli {
     }
 }
 
-process.exitCode = await new DeploymentCli().run(process.argv.slice(2));
+const entryPath = process.argv[1];
+if (
+    entryPath &&
+    path.resolve(entryPath) === fileURLToPath(import.meta.url)
+) {
+    process.exitCode = await new DeploymentCli().run(process.argv.slice(2));
+}

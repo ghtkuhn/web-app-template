@@ -2,7 +2,10 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
+import {
+    DeploymentCli,
+} from '../../../../script/deployment/deployment.cli.ts';
 import { DeploymentProfileRepository } from '../../../../script/deployment/profile.repository.ts';
 import {
     ProxmoxLxcDeploymentDriver,
@@ -54,7 +57,7 @@ function existingTarget(
     };
 }
 
-function repository(): DeploymentProfileRepository {
+function deploymentProjectRoot(platform: unknown = 'docker'): string {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'deployment-profile-'));
     roots.push(root);
     fs.mkdirSync(path.join(root, 'deployment/profiles'), { recursive: true });
@@ -70,10 +73,21 @@ function repository(): DeploymentProfileRepository {
         path.join(projectRoot, 'deployment/profiles/local.json'),
         path.join(root, 'deployment/profiles/local.json'),
     );
-    return new DeploymentProfileRepository(root);
+    fs.writeFileSync(
+        path.join(root, 'project.json'),
+        JSON.stringify({
+            deployment: { platform, sshUser: 'app' },
+        }),
+    );
+    return root;
+}
+
+function repository(platform: unknown = 'docker'): DeploymentProfileRepository {
+    return new DeploymentProfileRepository(deploymentProjectRoot(platform));
 }
 
 afterEach(() => {
+    vi.restoreAllMocks();
     for (const root of roots.splice(0)) {
         fs.rmSync(root, { recursive: true, force: true });
     }
@@ -97,6 +111,20 @@ test('local and scaffolded profiles default to independent Docker targets', () =
     expect(staging.frontend.enabled && staging.frontend.target.driver).toBe('docker');
 });
 
+test('profile scaffold uses the project platform without changing existing profiles', () => {
+    const profiles = repository('existing-lxc');
+    const local = profiles.load();
+    expect(local.backend.enabled && local.backend.target.driver).toBe('docker');
+    expect(local.frontend.enabled && local.frontend.target.driver).toBe('docker');
+
+    profiles.scaffold('dev');
+    const scaffolded = profiles.load('dev');
+    expect(scaffolded.backend.enabled && scaffolded.backend.target.driver)
+        .toBe('existing-lxc');
+    expect(scaffolded.frontend.enabled && scaffolded.frontend.target.driver)
+        .toBe('existing-lxc');
+});
+
 test('aggregate validation excludes ignored local profile overrides', () => {
     const profiles = repository();
     const localOverride = profiles.scaffold('workstation');
@@ -109,14 +137,14 @@ test('aggregate validation excludes ignored local profile overrides', () => {
     ]);
 });
 
-test('profile scaffold supports explicit Proxmox per component', () => {
-    const profiles = repository();
-    profiles.scaffold('dev', 'local', 'proxmox-lxc', 'docker');
+test('explicit scaffold drivers override the project platform per component', () => {
+    const profiles = repository('existing-lxc');
+    profiles.scaffold('dev', 'local', 'proxmox-lxc');
     const profile = profiles.load('dev');
     expect(profile.backend.enabled && profile.backend.target.driver)
         .toBe('proxmox-lxc');
     expect(profile.frontend.enabled && profile.frontend.target.driver)
-        .toBe('docker');
+        .toBe('existing-lxc');
 });
 
 test('profile scaffold supports isolated Existing-LXC targets and SQLite', () => {
@@ -1574,29 +1602,53 @@ test('Existing-LXC rejects missing or invalid sudo credentials before upload', a
     )).toBe(false);
 });
 
-test('Existing-LXC deployment user is validated from project.json', () => {
+test('deployment platform and Existing-LXC user are validated from project.json', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'deployment-project-'));
     roots.push(root);
-    const writeConfiguration = (sshUser: unknown): void => {
+    const writeConfiguration = (
+        platform: unknown,
+        sshUser: unknown = 'deploy',
+    ): void => {
         fs.writeFileSync(
             path.join(root, 'project.json'),
-            JSON.stringify({ deployment: { sshUser } }),
+            JSON.stringify({ deployment: { platform, sshUser } }),
         );
     };
 
-    writeConfiguration('deploy');
-    expect(new DeploymentProjectConfigRepository(root).load()).toEqual({
-        sshUser: 'deploy',
-    });
-    for (const invalid of ['root', 'Bad User', '', 42]) {
+    for (const platform of ['docker', 'existing-lxc', 'proxmox-lxc']) {
+        writeConfiguration(platform);
+        expect(new DeploymentProjectConfigRepository(root).load()).toEqual({
+            platform,
+            sshUser: 'deploy',
+        });
+    }
+    for (const invalid of ['local', 'lxc', '', 42]) {
         writeConfiguration(invalid);
+        expect(() => new DeploymentProjectConfigRepository(root).load())
+            .toThrow(/deployment\.platform must be one of/u);
+    }
+    for (const invalid of ['root', 'Bad User', '', 42]) {
+        writeConfiguration('docker', invalid);
         expect(() => new DeploymentProjectConfigRepository(root).load())
             .toThrow(/non-root POSIX user name/u);
     }
 
     fs.unlinkSync(path.join(root, 'project.json'));
     expect(() => new DeploymentProjectConfigRepository(root).load())
-        .toThrow(/must exist.*deployment\.sshUser/u);
+        .toThrow(/must exist.*deployment\.platform.*deployment\.sshUser/u);
+});
+
+test('deployment CLI rejects an invalid project platform before profile work', async () => {
+    const root = deploymentProjectRoot('lxc');
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(
+        () => true,
+    );
+
+    await expect(new DeploymentCli(root).run(['validate', '--all']))
+        .resolves.toBe(1);
+    expect(stderr).toHaveBeenCalledWith(expect.stringMatching(
+        /deployment\.platform must be one of/u,
+    ));
 });
 
 test('Existing-LXC infrastructure upgrade is explicit and versioned', async () => {

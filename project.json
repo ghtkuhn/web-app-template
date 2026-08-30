@@ -1,6 +1,6 @@
 {
     "deployment": {
-        "platform": "lxc",
+        "platform": "docker",
         "sshUser": "app"
     },
     "template-config": {
