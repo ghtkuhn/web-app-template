@@ -91,7 +91,7 @@ export class StyleRuleSet {
                         issues.push(this.issue(
                             analysis,
                             'FRONTEND_BOX_SPACING_UNIT',
-                            `${property} accepts only px, percent, unitless zero, applicable semantic keywords, or resolvable variables using those values.`,
+                            `${property} accepts only px, percent, unitless zero, CSS environment values whose fallback is valid when present, applicable semantic keywords, or resolvable variables using those values.`,
                             declaration.location,
                         ));
                     }
@@ -196,6 +196,15 @@ export class StyleRuleSet {
                 resolving,
             );
         }
+        if (functionName === 'env') {
+            return contract === 'box-spacing' && this.validEnvironment(
+                node,
+                contract,
+                property,
+                variables,
+                resolving,
+            );
+        }
         return MATH_FUNCTIONS.has(functionName) && this.validNodes(
             node.nodes,
             contract,
@@ -203,6 +212,46 @@ export class StyleRuleSet {
             variables,
             resolving,
             true,
+        );
+    }
+
+    private validEnvironment(
+        node: CssFunctionNode,
+        contract: UnitContract,
+        property: string,
+        variables: ReadonlyMap<string, readonly VariableDefinition[]>,
+        resolving: ReadonlySet<string>,
+    ): boolean {
+        const separator = node.nodes.findIndex(
+            (child) => child.type === 'div' && child.value === ',',
+        );
+        const reference = separator === -1
+            ? node.nodes
+            : node.nodes.slice(0, separator);
+        const referenceParts = reference.filter(
+            (child) => child.type !== 'space' && child.type !== 'comment',
+        );
+        const [name, ...indices] = referenceParts;
+        if (
+            name?.type !== 'word' ||
+            !/^[-_a-z][-_a-z0-9]*$/iu.test(name.value) ||
+            !indices.every(
+                (index) => index.type === 'word' && /^\d+$/u.test(index.value),
+            )
+        ) {
+            return false;
+        }
+        if (separator === -1) {
+            return true;
+        }
+        const fallback = node.nodes.slice(separator + 1);
+        return fallback.length > 0 && this.validNodes(
+            fallback,
+            contract,
+            property,
+            variables,
+            resolving,
+            false,
         );
     }
 

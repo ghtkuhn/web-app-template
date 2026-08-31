@@ -412,6 +412,52 @@ test('font sizes and box spacing accept their strict unit contracts', () => {
     }
 });
 
+test('box spacing accepts CSS environment values with valid fallbacks', () => {
+    const fixture = new Fixture();
+    try {
+        fixture.write(
+            'presentation/desktop/components/SafeArea.vue',
+            `<template><main /></template>
+             <style scoped>
+             main {
+                 --safe-area: env(safe-area-inset-bottom, 0px);
+                 padding-bottom: var(--safe-area);
+                 padding-top: env(safe-area-inset-top);
+                 gap: max(12px, env(viewport-segment-width 0 0, 10%));
+             }
+             </style>`,
+        );
+        const ids = fixture.issues().map((issue) => issue.ruleId);
+        expect(ids).not.toContain('FRONTEND_BOX_SPACING_UNIT');
+    } finally {
+        fixture.dispose();
+    }
+});
+
+test('CSS environment values retain box-spacing and font-size contracts', () => {
+    const fixture = new Fixture();
+    try {
+        fixture.write(
+            'presentation/desktop/components/BadEnvironment.vue',
+            `<template><main /></template>
+             <style scoped>
+             main {
+                 padding: env(safe-area-inset-bottom, 1rem);
+                 margin: env();
+                 font-size: env(safe-area-inset-top, 1rem);
+             }
+             </style>`,
+        );
+        const ids = fixture.issues().map((issue) => issue.ruleId);
+        expect(ids.filter(
+            (id) => id === 'FRONTEND_BOX_SPACING_UNIT',
+        )).toHaveLength(2);
+        expect(ids).toContain('FRONTEND_FONT_SIZE_UNIT');
+    } finally {
+        fixture.dispose();
+    }
+});
+
 test('invalid direct, token, fallback, math, and shorthand units are rejected', () => {
     const fixture = new Fixture();
     try {

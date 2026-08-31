@@ -116,6 +116,17 @@ npm run credentials:run -- deployment:status -- <profile> backend
 Keep the last healthy backend release active until all three commands succeed.
 Normal deployment never performs this infrastructure migration implicitly.
 
+## Template 5.0.8 CSS environment spacing
+
+Template 5.0.8 allows CSS platform environment values such as
+`env(safe-area-inset-bottom, 0px)` in margin, padding, gap, and scroll-spacing
+properties. A supplied fallback must still use the established px, percent, or
+unitless-zero contract, and `font-size` remains restricted to rem values.
+
+Unmodified Template 5.x applications receive the linter correction through a
+normal update. Applications that changed the frontend style linter locally
+must merge the incoming `env()` validation and its rule guidance explicitly.
+
 ## Template 5.0.0 Bootstrap migration
 
 Template 5 replaces Pico with Bootstrap 5.3, Sass, complete Bootstrap
