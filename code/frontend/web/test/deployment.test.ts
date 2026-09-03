@@ -17,6 +17,7 @@ import { DeploymentConfigRenderer } from '../../../../script/deployment/config.r
 import { ReleaseBuilder } from '../../../../script/deployment/release.builder.ts';
 import {
     LXC_INFRASTRUCTURE_SCHEMA_VERSION,
+    LXC_PREVIOUS_INFRASTRUCTURE_SCHEMA_VERSION,
     LxcRuntimeContract,
 } from '../../../../script/deployment/lxc-runtime.contract.ts';
 import {
@@ -1332,6 +1333,92 @@ test('release validation rejects missing entrypoints and altered contracts', () 
     );
 });
 
+test('release validation migrates exact schema 2 contracts to schema 3', () => {
+    const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'release-schema-'));
+    roots.push(fixture);
+    const contract = new LxcRuntimeContract();
+    const currentContracts = [
+        contract.release('backend', '24.19.0', '>=11 <12'),
+        ...contract.legacyBackendReleases('24.19.0', '>=11 <12'),
+    ];
+    const previousContracts = [
+        contract.release(
+            'backend',
+            '24.19.0',
+            '>=11 <12',
+            LXC_PREVIOUS_INFRASTRUCTURE_SCHEMA_VERSION,
+        ),
+        ...contract.legacyBackendReleases(
+            '24.19.0',
+            '>=11 <12',
+            LXC_PREVIOUS_INFRASTRUCTURE_SCHEMA_VERSION,
+        ),
+    ];
+    const validator = path.join(fixture, 'validator.mjs');
+    fs.writeFileSync(validator, contract.candidateValidator());
+
+    for (const [index, previous] of previousContracts.entries()) {
+        const candidate = path.join(fixture, `candidate-${index}`);
+        fs.mkdirSync(candidate);
+        for (const relativePath of previous.requiredFiles) {
+            const target = path.join(candidate, relativePath);
+            fs.mkdirSync(path.dirname(target), { recursive: true });
+            fs.writeFileSync(target, relativePath);
+        }
+        const manifest = path.join(candidate, LxcRuntimeContract.manifest);
+        fs.writeFileSync(manifest, contract.render(previous), { mode: 0o660 });
+        fs.chmodSync(manifest, 0o660);
+
+        new ProcessRunner().run(process.execPath, [
+            validator,
+            candidate,
+            JSON.stringify([...currentContracts, ...previousContracts]),
+            JSON.stringify([...currentContracts, ...currentContracts]),
+        ]);
+
+        expect(JSON.parse(fs.readFileSync(manifest, 'utf8')))
+            .toEqual(currentContracts[index]);
+        expect(fs.statSync(manifest).mode & 0o777).toBe(0o660);
+        expect(() => contract.validate(candidate, currentContracts[index]))
+            .not.toThrow();
+    }
+});
+
+test('release validation leaves an altered schema 2 contract untouched', () => {
+    const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'release-schema-'));
+    roots.push(fixture);
+    const candidate = path.join(fixture, 'candidate');
+    fs.mkdirSync(candidate);
+    const contract = new LxcRuntimeContract();
+    const current = contract.release('backend', '24.19.0', '>=11 <12');
+    const previous = contract.release(
+        'backend',
+        '24.19.0',
+        '>=11 <12',
+        LXC_PREVIOUS_INFRASTRUCTURE_SCHEMA_VERSION,
+    );
+    for (const relativePath of previous.requiredFiles) {
+        const target = path.join(candidate, relativePath);
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.writeFileSync(target, relativePath);
+    }
+    const altered = { ...previous, npmRange: '>=10 <11' };
+    const manifest = path.join(candidate, LxcRuntimeContract.manifest);
+    const original = contract.render(altered);
+    fs.writeFileSync(manifest, original);
+    const validator = path.join(fixture, 'validator.mjs');
+    fs.writeFileSync(validator, contract.candidateValidator());
+
+    expect(() => new ProcessRunner().run(process.execPath, [
+        validator,
+        candidate,
+        JSON.stringify([current, previous]),
+        JSON.stringify([current, current]),
+    ])).toThrow(ProcessExecutionError);
+    expect(fs.readFileSync(manifest, 'utf8')).toBe(original);
+    expect(fs.existsSync(`${manifest}.new`)).toBe(false);
+});
+
 test('LXC contract catalog rejects a mixed cross-file implementation', () => {
     const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'lxc-contract-'));
     roots.push(fixture);
@@ -1483,6 +1570,8 @@ test('Existing-LXC bootstrap is explicit and passes validated parameters', async
         'Unversioned Existing-LXC infrastructure exists',
     );
     expect(bootstrapScript).toContain('deployment-user must not be root');
+    expect(bootstrapScript).toContain('accepted-backend-contracts.json');
+    expect(bootstrapScript).toContain('replacement-backend-contracts.json');
 });
 
 test.each(['private-key', 'password'] as const)(
@@ -1679,6 +1768,8 @@ test('Existing-LXC infrastructure upgrade is explicit and versioned', async () =
     );
     expect(text).toContain(String(LXC_INFRASTRUCTURE_SCHEMA_VERSION));
     expect(text).toContain('legacy-workspace-contract.json');
+    expect(text).toContain('accepted-backend-contracts.json');
+    expect(text).toContain('replacement-backend-contracts.json');
     expect(text).not.toContain('deployment:deploy');
 });
 

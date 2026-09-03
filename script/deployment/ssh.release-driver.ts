@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { ComponentName } from './interfaces.ts';
 import {
     LXC_INFRASTRUCTURE_SCHEMA_VERSION,
+    LXC_PREVIOUS_INFRASTRUCTURE_SCHEMA_VERSION,
     LxcRuntimeContract,
     type LxcReleaseContractData,
 } from './lxc-runtime.contract.ts';
@@ -760,22 +761,40 @@ export class SshReleaseDriver {
         const root = this.temporaryRoot as string;
         const nodeVersion = this.nodeVersion();
         const npmRange = this.npmRange();
+        const canonical = this.runtimeContract.release(
+            'backend',
+            nodeVersion,
+            npmRange,
+        );
         const variants = this.runtimeContract.legacyBackendReleases(
             nodeVersion,
             npmRange,
         );
-        const files: string[] = [];
-        const canonical = path.join(root, 'canonical-backend-contract.json');
-        fs.writeFileSync(
-            canonical,
-            this.runtimeContract.render(this.runtimeContract.release(
+        const currentContracts = [canonical, ...variants];
+        const previousContracts = [
+            this.runtimeContract.release(
                 'backend',
                 nodeVersion,
                 npmRange,
-            )),
+                LXC_PREVIOUS_INFRASTRUCTURE_SCHEMA_VERSION,
+            ),
+            ...this.runtimeContract.legacyBackendReleases(
+                nodeVersion,
+                npmRange,
+                LXC_PREVIOUS_INFRASTRUCTURE_SCHEMA_VERSION,
+            ),
+        ];
+        const files: string[] = [];
+        const canonicalPath = path.join(
+            root,
+            'canonical-backend-contract.json',
+        );
+        fs.writeFileSync(
+            canonicalPath,
+            this.runtimeContract.render(canonical),
             'utf8',
         );
-        files.push(canonical);
+        files.push(canonicalPath);
         for (const [index, variant] of variants.entries()) {
             const label = index === 0 ? 'workspace' : 'flat';
             const entrypoint = index === 0
@@ -808,6 +827,31 @@ export class SshReleaseDriver {
             );
             files.push(launcher, maintenanceLauncher, contract);
         }
+        const acceptedContracts = path.join(
+            root,
+            'accepted-backend-contracts.json',
+        );
+        const replacementContracts = path.join(
+            root,
+            'replacement-backend-contracts.json',
+        );
+        fs.writeFileSync(
+            acceptedContracts,
+            `${JSON.stringify([
+                ...currentContracts,
+                ...previousContracts,
+            ], null, 4)}\n`,
+            'utf8',
+        );
+        fs.writeFileSync(
+            replacementContracts,
+            `${JSON.stringify([
+                ...currentContracts,
+                ...currentContracts,
+            ], null, 4)}\n`,
+            'utf8',
+        );
+        files.push(acceptedContracts, replacementContracts);
         return files;
     }
 

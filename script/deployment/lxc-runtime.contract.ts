@@ -3,12 +3,16 @@ import path from 'node:path';
 import type { ComponentName } from './interfaces.ts';
 
 export const LXC_INFRASTRUCTURE_SCHEMA_VERSION = 3;
+export const LXC_PREVIOUS_INFRASTRUCTURE_SCHEMA_VERSION = 2;
 export const LXC_RELEASE_SCHEMA_VERSION = 1;
+
+export type LxcInfrastructureSchemaVersion =
+    | typeof LXC_PREVIOUS_INFRASTRUCTURE_SCHEMA_VERSION
+    | typeof LXC_INFRASTRUCTURE_SCHEMA_VERSION;
 
 export interface LxcReleaseContractData {
     readonly schemaVersion: typeof LXC_RELEASE_SCHEMA_VERSION;
-    readonly infrastructureSchemaVersion:
-        typeof LXC_INFRASTRUCTURE_SCHEMA_VERSION;
+    readonly infrastructureSchemaVersion: LxcInfrastructureSchemaVersion;
     readonly component: ComponentName;
     readonly layout:
         | 'workspace-v1'
@@ -46,11 +50,13 @@ export class LxcRuntimeContract {
         component: ComponentName,
         nodeVersion: string,
         npmRange: string,
+        infrastructureSchemaVersion: LxcInfrastructureSchemaVersion =
+            LXC_INFRASTRUCTURE_SCHEMA_VERSION,
     ): LxcReleaseContractData {
         if (component === 'backend') {
             return {
                 schemaVersion: LXC_RELEASE_SCHEMA_VERSION,
-                infrastructureSchemaVersion: LXC_INFRASTRUCTURE_SCHEMA_VERSION,
+                infrastructureSchemaVersion,
                 component,
                 layout: 'workspace-v1',
                 launcher: LxcRuntimeContract.backendLauncher,
@@ -69,7 +75,7 @@ export class LxcRuntimeContract {
         }
         return {
             schemaVersion: LXC_RELEASE_SCHEMA_VERSION,
-            infrastructureSchemaVersion: LXC_INFRASTRUCTURE_SCHEMA_VERSION,
+            infrastructureSchemaVersion,
             component,
             layout: 'static-v1',
             launcher: null,
@@ -99,6 +105,8 @@ export class LxcRuntimeContract {
     public legacyBackendReleases(
         nodeVersion: string,
         npmRange: string,
+        infrastructureSchemaVersion: LxcInfrastructureSchemaVersion =
+            LXC_INFRASTRUCTURE_SCHEMA_VERSION,
     ): readonly LxcReleaseContractData[] {
         return [
             this.legacyBackendRelease(
@@ -106,12 +114,14 @@ export class LxcRuntimeContract {
                 'code/backend/src/index.ts',
                 nodeVersion,
                 npmRange,
+                infrastructureSchemaVersion,
             ),
             this.legacyBackendRelease(
                 'legacy-flat-v0',
                 'src/index.ts',
                 nodeVersion,
                 npmRange,
+                infrastructureSchemaVersion,
             ),
         ];
     }
@@ -155,6 +165,9 @@ export class LxcRuntimeContract {
             "if (!root || !expectedJson) fail('Release validation arguments are missing.');",
             "const expectedValue = JSON.parse(expectedJson);",
             "const expectedContracts = Array.isArray(expectedValue) ? expectedValue : [expectedValue];",
+            "const replacementValue = process.argv[4] ? JSON.parse(process.argv[4]) : undefined;",
+            "const replacements = replacementValue === undefined ? undefined : (Array.isArray(replacementValue) ? replacementValue : [replacementValue]);",
+            "if (replacements && replacements.length !== expectedContracts.length) fail('Release contract migration mapping is invalid.');",
             "const rootStatus = fs.lstatSync(root);",
             "if (!rootStatus.isDirectory() || rootStatus.isSymbolicLink()) fail('Release candidate root is unsafe.');",
             "const rootReal = fs.realpathSync(root);",
@@ -167,9 +180,29 @@ export class LxcRuntimeContract {
             `const manifestPath = path.join(root, '${LxcRuntimeContract.manifest}');`,
             "regular(manifestPath);",
             "const actual = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));",
-            "const expected = expectedContracts.find((candidate) => JSON.stringify(actual) === JSON.stringify(candidate));",
+            "const expectedIndex = expectedContracts.findIndex((candidate) => JSON.stringify(actual) === JSON.stringify(candidate));",
+            "const expected = expectedContracts[expectedIndex];",
             "if (!expected) fail('Release contract mismatch.');",
             "for (const relativePath of expected.requiredFiles) regular(path.join(root, relativePath));",
+            "const replacement = replacements?.[expectedIndex];",
+            "if (replacement && JSON.stringify(actual) !== JSON.stringify(replacement)) {",
+            "  const { infrastructureSchemaVersion: sourceSchema, ...sourceContract } = actual;",
+            "  const { infrastructureSchemaVersion: targetSchema, ...targetContract } = replacement;",
+            `  if (sourceSchema !== ${LXC_PREVIOUS_INFRASTRUCTURE_SCHEMA_VERSION} || targetSchema !== ${LXC_INFRASTRUCTURE_SCHEMA_VERSION} || JSON.stringify(sourceContract) !== JSON.stringify(targetContract)) fail('Release contract migration is unsafe.');`,
+            "  for (const relativePath of replacement.requiredFiles) regular(path.join(root, relativePath));",
+            "  const status = fs.lstatSync(manifestPath);",
+            "  const temporary = `${manifestPath}.new`;",
+            "  if (fs.existsSync(temporary)) fail('Release contract migration staging file already exists.');",
+            "  try {",
+            "    fs.writeFileSync(temporary, `${JSON.stringify(replacement, null, 4)}\\n`, { flag: 'wx', mode: status.mode & 0o777 });",
+            "    fs.chownSync(temporary, status.uid, status.gid);",
+            "    fs.chmodSync(temporary, status.mode & 0o777);",
+            "    fs.renameSync(temporary, manifestPath);",
+            "  } catch (error) {",
+            "    fs.rmSync(temporary, { force: true });",
+            "    throw error;",
+            "  }",
+            "}",
             '',
         ].join('\n');
     }
@@ -179,10 +212,11 @@ export class LxcRuntimeContract {
         entrypoint: string,
         nodeVersion: string,
         npmRange: string,
+        infrastructureSchemaVersion: LxcInfrastructureSchemaVersion,
     ): LxcReleaseContractData {
         return {
             schemaVersion: LXC_RELEASE_SCHEMA_VERSION,
-            infrastructureSchemaVersion: LXC_INFRASTRUCTURE_SCHEMA_VERSION,
+            infrastructureSchemaVersion,
             component: 'backend',
             layout,
             launcher: LxcRuntimeContract.backendLauncher,

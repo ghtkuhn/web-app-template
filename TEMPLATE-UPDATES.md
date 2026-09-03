@@ -116,6 +116,24 @@ npm run credentials:run -- deployment:status -- <profile> backend
 Keep the last healthy backend release active until all three commands succeed.
 Normal deployment never performs this infrastructure migration implicitly.
 
+## Template 5.0.9 schema-2 LXC release migration
+
+Template 5.0.9 repairs the explicit Existing-LXC infrastructure upgrade from
+schema 2 to schema 3. A complete active release with an exact schema-2 contract
+is now validated against its historical canonical or legacy layout, migrated
+atomically to the corresponding schema-3 manifest, and validated again before
+the infrastructure upgrade completes. Altered or unsafe releases still stop
+the upgrade without changing their manifest.
+
+Installations already carrying infrastructure schema 3 need no migration for
+this patch. If an earlier schema-3 upgrade attempt failed with `Release contract
+mismatch`, update to 5.0.9 and rerun:
+
+```bash
+npm run credentials:run -- deployment:infrastructure:upgrade -- <profile> backend
+npm run credentials:run -- deployment:infrastructure:status -- <profile> backend
+```
+
 ## Template 5.0.8 CSS environment spacing
 
 Template 5.0.8 allows CSS platform environment values such as

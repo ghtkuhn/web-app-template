@@ -215,12 +215,13 @@ if [ "$mode" = "upgrade" ] && [ -L "${backend_root}/current" ]; then
                 "${current}/release.contract.json"
         fi
     fi
-    allowed_contracts="$(printf '[%s,%s,%s]' \
-        "$(cat "${staging_directory}/canonical-backend-contract.json")" \
-        "$(cat "${staging_directory}/legacy-workspace-contract.json")" \
-        "$(cat "${staging_directory}/legacy-flat-contract.json")")"
     /usr/local/bin/node "${staging_directory}/lxc-release-validator.mjs" \
-        "$current" "$allowed_contracts"
+        "$current" \
+        "$(cat "${staging_directory}/accepted-backend-contracts.json")" \
+        "$(cat "${staging_directory}/replacement-backend-contracts.json")"
+    /usr/local/bin/node "${staging_directory}/lxc-release-validator.mjs" \
+        "$current" \
+        "$(cat "${staging_directory}/replacement-backend-contracts.json")"
 fi
 
 cat > "$config_helper" <<EOF
