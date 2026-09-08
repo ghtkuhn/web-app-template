@@ -124,44 +124,58 @@ export class WorkflowManager {
 
     /** Validates task identity, state, dependencies, and completion evidence. */
     public checkKanban(): void {
-        const counter = this.readCounter(path.join(
+        const errors: string[] = [];
+        const counterPath = path.join(
             this.kanbanRoot(),
             'TASK-COUNTER.md',
-        ));
+        );
+        let counter: number | undefined;
+        try {
+            counter = this.readCounter(counterPath);
+        } catch (error) {
+            errors.push(`${path.relative(this.projectRoot, counterPath)}:1:1 ${this.errorMessage(error)}`);
+        }
         const tasks = [
-            ...this.taskFiles('todo'),
-            ...this.taskFiles('done'),
+            ...this.taskFiles('todo', errors),
+            ...this.taskFiles('done', errors),
         ];
         const ids = new Set<number>();
         for (const task of tasks) {
             if (ids.has(task.id)) {
-                throw new Error(`Duplicate Kanban task ID ${task.id}.`);
+                errors.push(this.taskError(task, `Duplicate Kanban task ID ${task.id}.`, '**Task ID:**'));
             }
             ids.add(task.id);
-            if (task.id > counter) {
-                throw new Error(
-                    `Task ${task.id} exceeds counter value ${counter}.`,
-                );
+            if (counter !== undefined && task.id > counter) {
+                errors.push(this.taskError(task, `Task ${task.id} exceeds counter value ${counter}.`, '**Task ID:**'));
             }
             if (task.schemaVersion === 2) {
-                this.validateV2(task, task.directory === 'done');
+                try {
+                    this.validateV2(task, task.directory === 'done');
+                } catch (error) {
+                    errors.push(this.errorMessage(error));
+                }
+            } else if (task.schemaVersion !== 1) {
+                errors.push(this.taskError(task, 'Unsupported Schema Version; use 2 for new tasks or 1 for legacy tasks.', '**Schema Version:**'));
             }
         }
         const maximumId = tasks.reduce(
             (maximum, task) => Math.max(maximum, task.id),
             0,
         );
-        if (counter !== maximumId) {
-            throw new Error(
-                `Kanban counter ${counter} does not match maximum task ID ${maximumId}.`,
-            );
+        if (counter !== undefined && counter !== maximumId) {
+            errors.push(`${path.relative(this.projectRoot, counterPath)}:1:1 Kanban counter ${counter} does not match maximum task ID ${maximumId}.`);
         }
         for (const task of tasks.filter((entry) => entry.schemaVersion === 2)) {
-            for (const dependency of this.dependencies(task.content)) {
+            let dependencies: number[];
+            try {
+                dependencies = this.dependencies(task.content);
+            } catch (error) {
+                errors.push(this.taskError(task, this.errorMessage(error), '**Dependencies:**'));
+                continue;
+            }
+            for (const dependency of dependencies) {
                 if (dependency >= task.id || !ids.has(dependency)) {
-                    throw new Error(
-                        `Task ${task.id} has invalid dependency ${dependency}.`,
-                    );
+                    errors.push(this.taskError(task, `Task ${task.id} has invalid dependency ${dependency}.`, '**Dependencies:**'));
                 }
                 if (
                     task.directory === 'done' &&
@@ -170,91 +184,127 @@ export class WorkflowManager {
                         candidate.directory === 'done',
                     )
                 ) {
-                    throw new Error(
-                        `Done task ${task.id} depends on unfinished task ${dependency}.`,
-                    );
+                    errors.push(this.taskError(task, `Done task ${task.id} depends on unfinished task ${dependency}.`, '**Dependencies:**'));
                 }
             }
+        }
+        if (errors.length > 0) {
+            throw new Error(errors.join('\n'));
         }
     }
 
     private validateV2(task: TaskRecord, completed: boolean): void {
-        if (this.metadata(task.content, 'Schema Version') !== '2') {
-            throw new Error(`Invalid schema version in '${task.fileName}'.`);
+        const errors: string[] = [];
+        const report = (message: string, anchor?: string): void => {
+            errors.push(this.taskError(task, message, anchor));
+        };
+        const metadata = (label: string): string => {
+            const value = this.optionalMetadata(task.content, label);
+            if (!value) report(`Missing '${label}' task metadata.`);
+            return value ?? '';
+        };
+        const section = (heading: string): string => {
+            try {
+                return this.section(task.content, heading);
+            } catch (error) {
+                report(this.errorMessage(error));
+                return '';
+            }
+        };
+        if (metadata('Schema Version') !== '2') {
+            report('Invalid schema version; expected 2.', '**Schema Version:**');
         }
-        const domain = this.metadata(task.content, 'Domain');
-        this.assertKebabCase(domain, 'Task domain');
+        const domain = metadata('Domain');
+        if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(domain)) {
+            report('Task domain must be kebab-case.', '**Domain:**');
+        }
+        const escapedDomain = domain.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
         const filePattern = new RegExp(
-            `^${task.id}-${domain}-[a-z0-9]+(?:-[a-z0-9]+)*\\.md$`,
+            `^${task.id}-${escapedDomain}-[a-z0-9]+(?:-[a-z0-9]+)*\\.md$`,
             'u',
         );
         if (!filePattern.test(task.fileName)) {
-            throw new Error(`Invalid Schema Version 2 filename '${task.fileName}'.`);
+            report(`Invalid Schema Version 2 filename '${task.fileName}'.`);
         }
-        const metadataId = this.metadata(task.content, 'Task ID');
-        const created = this.metadata(task.content, 'Created');
-        const status = this.metadata(task.content, 'Status');
+        const metadataId = metadata('Task ID');
+        const created = metadata('Created');
+        const status = metadata('Status');
         if (Number(metadataId) !== task.id) {
-            throw new Error(`Task ID mismatch in '${task.fileName}'.`);
+            report(`Task ID mismatch in '${task.fileName}'.`, '**Task ID:**');
         }
         if (status !== task.directory) {
-            throw new Error(`Task status mismatch in '${task.fileName}'.`);
+            report(`Task status mismatch in '${task.fileName}'.`, '**Status:**');
         }
         if (!this.validDate(created)) {
-            throw new Error(`Invalid creation date in '${task.fileName}'.`);
+            report(`Invalid creation date in '${task.fileName}'.`, '**Created:**');
         }
-        if (/<[^>\n]+>/u.test(task.content)) {
-            throw new Error(`Unresolved placeholder in '${task.fileName}'.`);
+        errors.push(...this.placeholderErrors(task, completed));
+        for (const heading of ['Goal', 'Scope', 'Verification']) {
+            if (!section(heading).trim()) {
+                report(`Task requires a concrete ${heading} section.`, `## ${heading}`);
+            }
         }
-        const doneWhen = this.section(task.content, 'Done When');
+        const doneWhen = section('Done When');
         const criterionPattern = /^\s*- \[([ xX])\] .+$/u;
         const checkboxLines = doneWhen.split(/\r?\n/u).filter((line) =>
             /^\s*- \[/u.test(line),
         );
         if (checkboxLines.some((line) => !criterionPattern.test(line))) {
-            throw new Error(`Task '${task.fileName}' has invalid checkboxes.`);
+            report(`Task '${task.fileName}' has invalid checkboxes.`, '## Done When');
         }
         const criteria = checkboxLines.filter((line) =>
             criterionPattern.test(line),
         );
         if (criteria.length === 0) {
-            throw new Error(`Task '${task.fileName}' has no Done When criteria.`);
+            report(`Task '${task.fileName}' has no Done When criteria.`, '## Done When');
         }
         if (completed && criteria.some((line) => !/\[[xX]\]/u.test(line))) {
-            throw new Error(`Task '${task.fileName}' has unchecked criteria.`);
+            report(`Task '${task.fileName}' has unchecked criteria.`, '## Done When');
         }
         if (completed) {
-            const evidence = this.section(task.content, 'Completion Notes');
+            const evidence = section('Completion Notes');
             for (let index = 1; index <= criteria.length; index += 1) {
                 const pattern = new RegExp(
-                    '^\\s*- Criterion ' + index + ': `[^`]+`$',
+                    '^\\s*- Criterion ' + index + ': `([^`\\r\\n]+)`$',
                     'mu',
                 );
-                if (!pattern.test(evidence)) {
-                    throw new Error(
+                const value = evidence.match(pattern)?.[1]?.trim();
+                if (!value || /^<[^>]+>$/u.test(value)) {
+                    report(
                         `Task '${task.fileName}' lacks evidence for criterion ${index}.`,
+                        evidence.includes(`- Criterion ${index}:`)
+                            ? `- Criterion ${index}:` : '## Completion Notes',
                     );
                 }
             }
         }
+        if (errors.length > 0) throw new Error(errors.join('\n'));
     }
 
-    private taskFiles(directory: 'todo' | 'done'): TaskRecord[] {
+    private taskFiles(directory: 'todo' | 'done', errors?: string[]): TaskRecord[] {
         const directoryPath = path.join(this.kanbanRoot(), directory);
         if (!fs.existsSync(directoryPath)) {
+            if (errors) {
+                errors.push(`${path.relative(this.projectRoot, directoryPath)}: Missing Kanban directory '${directory}'.`);
+                return [];
+            }
             throw new Error(`Missing Kanban directory '${directory}'.`);
         }
         return fs.readdirSync(directoryPath, { withFileTypes: true })
             .filter((entry) => entry.isFile() && entry.name.endsWith('.md'))
             .sort((left, right) => left.name.localeCompare(right.name))
-            .map((entry) => {
+            .flatMap((entry): TaskRecord[] => {
                 const filePath = path.join(directoryPath, entry.name);
                 const content = fs.readFileSync(filePath, 'utf8');
                 const idMatch = entry.name.match(/^(\d+)-/u);
                 if (!idMatch) {
+                    if (errors) {
+                        errors.push(`${path.relative(this.projectRoot, filePath)}: Invalid task filename '${entry.name}'.`);
+                        return [];
+                    }
                     throw new Error(`Invalid task filename '${entry.name}'.`);
                 }
-                return {
+                return [{
                     fileName: entry.name,
                     filePath,
                     directory,
@@ -263,8 +313,51 @@ export class WorkflowManager {
                     schemaVersion: Number(
                         this.optionalMetadata(content, 'Schema Version') ?? 1,
                     ),
-                };
+                }];
             });
+    }
+
+    /** Only explicit draft markers and the frozen legacy template tokens are placeholders. */
+    private placeholderErrors(task: TaskRecord, completed: boolean): string[] {
+        const legacyTokens = [
+            '<Title>', '<counter>', '<domain>', '<YYYY-MM-DD>',
+            '<One sentence describing the concrete outcome and why it is needed.>',
+            '<Relevant architecture constraints and affected modules. Remove this section if unnecessary.>',
+            '<Required change>', '<Explicitly excluded behavior or area>',
+            '<Concrete and independently verifiable criterion>',
+            '<exact test name or verification command>', '<Concise implementation summary.>',
+        ];
+        const errors: string[] = [];
+        let heading = '';
+        for (const [index, line] of task.content.split(/\r?\n/u).entries()) {
+            if (line.startsWith('## ')) heading = line.slice(3).trim();
+            if (!completed && heading === 'Completion Notes') continue;
+            const explicit = /\[\[TODO(?::[^\]\r\n]*)?\]\]|<(?:TBD|TODO)(?:\s[^>\r\n]*)?>/gu;
+            const matches = [...line.matchAll(explicit)].map((match) => ({
+                text: match[0], column: match.index + 1,
+            }));
+            for (const token of legacyTokens) {
+                let column = line.indexOf(token);
+                while (column !== -1) {
+                    matches.push({ text: token, column: column + 1 });
+                    column = line.indexOf(token, column + token.length);
+                }
+            }
+            for (const match of matches.sort((left, right) => left.column - right.column)) {
+                errors.push(`${path.relative(this.projectRoot, task.filePath)}:${index + 1}:${match.column} Unresolved placeholder ${JSON.stringify(match.text)}. Replace it with concrete task content${completed ? ' or actual completion evidence' : '; completion evidence is only required when closing the task'}.`);
+            }
+        }
+        return errors;
+    }
+
+    private taskError(task: TaskRecord, message: string, anchor?: string): string {
+        const index = anchor ? task.content.indexOf(anchor) : -1;
+        const location = index < 0 ? '' : `:${task.content.slice(0, index).split('\n').length}:1`;
+        return `${path.relative(this.projectRoot, task.filePath)}${location} ${message}`;
+    }
+
+    private errorMessage(error: unknown): string {
+        return error instanceof Error ? error.message : String(error);
     }
 
     private dependencies(content: string): number[] {

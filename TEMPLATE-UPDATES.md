@@ -25,6 +25,23 @@ source archives for the installed and target tags.
 
 ## Update Behavior
 
+### Template 5.0.10 Kanban diagnostics
+
+The validator reports errors across the board instead of stopping at the first
+task. Draft markers include file, line, column, and the offending text.
+Open schema-v2 tasks require concrete Goal, Scope, Done When, and Verification
+sections; Completion Notes may remain pending or absent until closure.
+`task:close` and checks of `done` tasks still require checked criteria and actual
+test names or commands mapped to each criterion.
+
+New drafts use `[[TODO: description]]` markers. Known legacy template markers
+and `<TBD ...>` / `<TODO ...>` remain recognized, but ordinary angle-bracket
+examples such as `Promise<void>` and `<div>` are allowed. Custom draft markers
+should use the new explicit syntax. A stand-alone `<config-test-name>` is not
+valid completion evidence. Existing task files are never rewritten by updates.
+
+### Three-way merge
+
 The updater compares the old template, the local project, and the new template.
 Unmodified template files update automatically. Local-only files and files
 changed only by the project remain untouched. If both the project and template

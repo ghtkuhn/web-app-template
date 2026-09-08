@@ -9,33 +9,36 @@
 
 ## Goal
 
-<One sentence describing the concrete outcome and why it is needed.>
+[[TODO: Describe the concrete outcome and why it is needed.]]
 
 ## Context
 
-<Relevant architecture constraints and affected modules. Remove this section if unnecessary.>
+[[TODO: Describe relevant architecture constraints and affected modules, or remove this section.]]
 
 ## Scope
 
 ### In Scope
 
-- <Required change>
+- [[TODO: Required change]]
 
 ### Out of Scope
 
-- <Explicitly excluded behavior or area>
+- [[TODO: Explicitly excluded behavior or area]]
 
 ## Done When
 
-- [ ] <Concrete and independently verifiable criterion>
+- [ ] [[TODO: Concrete and independently verifiable criterion]]
 
 ## Verification
 
-Run the focused checks named in the completion evidence. After the final open
-task in an implementation sequence, run `npm run verify` once.
+[[TODO: Name the planned focused test or verification command for each criterion.]]
+
+After the final open task in an implementation sequence, run `npm run verify` once.
 
 ## Completion Notes
 
-- Criterion 1: `<exact test name or verification command>`
+Pending implementation. When closing this task, replace this paragraph with
+one bullet per Done When criterion in the format shown below, using actual
+test names or commands, followed by a concise implementation summary.
 
-<Concise implementation summary.>
+- Criterion 1: `[[TODO: Actual test name or verification command]]`

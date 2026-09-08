@@ -53,6 +53,8 @@
 * During an active implementation sequence, you must run only tests created or changed by the current task. You must not run pre-existing test suites again until the final open task in that sequence is complete.
 * After the final open task is complete, you must run the complete existing test suite and root `npm run verify` once before declaring the sequence complete.
 * Completion Notes must map every Done-When criterion to at least one concrete test name or verification command.
+* Open tasks must contain concrete Goal, Scope, Done When, and Verification sections. Completion Notes may remain pending until closure; never invent completed results while planning.
+* Use `[[TODO: description]]` for unfinished draft content. Replace planning markers before `check:kanban`, and completion markers before `task:close`. Ordinary HTML, TypeScript generics, and CLI argument examples are allowed.
 * You must close a task with `npm run task:close -- <id>` after its required focused checks; close the final task only after complete verification.
 * You must run `npm run check:kanban` before completing an implementation sequence.
 * You must commit in git after every completed task, if the project is a git repo.
