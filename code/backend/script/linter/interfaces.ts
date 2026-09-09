@@ -147,7 +147,6 @@ export interface SourceAnalysis {
     httpStatusAssertions: HttpStatusAssertion[];
     dtoCastFromJsonCount: number;
     permissiveAssertionCount: number;
-    testCallCount: number;
     jsonResultVariables: string[];
     dtoResultVariables: string[];
     controllerPayloadVariables: string[];

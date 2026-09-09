@@ -33,6 +33,10 @@
 
 [[TODO: Name the planned focused test or verification command for each criterion.]]
 
+Briefly identify the realistic failure risk and chosen protection following
+[Testing Rules](../../../../AGENTS.md#testing-rules). “No new test” is valid
+with a reason and existing test or check evidence; new tests are not a closure requirement.
+
 Follow [Verification Rules](../../../../AGENTS.md#verification-rules) for the
 whole implementation series. Reuse recorded results across tasks and reviewers;
 small corrections require focused rechecks. Do not add a separate full test

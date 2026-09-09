@@ -152,6 +152,13 @@ test('task and updater instructions defer to the shared verification policy', ()
     );
     const updates = fs.readFileSync(path.join(projectRoot, 'TEMPLATE-UPDATES.md'), 'utf8');
     expect(template).toContain('AGENTS.md#verification-rules');
+    expect(agents).toMatch(/# Testing Rules\n[\s\S]*?whether or not Kanban is enabled/u);
+    expect(agents).toContain('identify the realistic failure it detects and its impact');
+    expect(template).toContain('AGENTS.md#testing-rules');
+    for (const document of [agents, template, updates]) {
+        expect(document).toContain('“No new test” is valid');
+        expect(document).toContain('reason and existing test or check evidence');
+    }
     expect(template).toContain('small corrections require focused rechecks');
     expect(template).toContain('tested commit or described worktree state');
     expect(updates).toContain('[Verification Rules](AGENTS.md#verification-rules)');

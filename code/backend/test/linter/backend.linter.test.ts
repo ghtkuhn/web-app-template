@@ -16,41 +16,19 @@ test('real backend satisfies all architecture rules', () => {
     assert.ok(result.filesChecked > 0);
 });
 
-test('executable modules require direct executable local tests', () => {
+test('executable modules do not require local tests', () => {
     const fixture = new FixtureProject();
     try {
         fixture.write(
             'code/backend/src/module/example/service/example.service.ts',
             'export class ExampleService extends BaseService {}',
         );
-        assert.ok(
-            !new BackendLinter({ projectRoot: fixture.root })
-                .run()
-                .issues.some((issue) => issue.ruleId === 'MODULE_TEST_COVERAGE'),
-        );
+        const baseline = new BackendLinter({ projectRoot: fixture.root }).run().issues;
 
         fixture.remove('code/backend/src/module/example/test');
         const missing = new BackendLinter({ projectRoot: fixture.root }).run()
             .issues;
-        assert.ok(
-            missing.some((issue) => issue.ruleId === 'MODULE_TEST_COVERAGE'),
-        );
-
-        fixture.write(
-            'code/backend/src/module/contract/service/contract.service.ts',
-            'export abstract class ContractService extends BaseService {}',
-        );
-        fixture.remove('code/backend/src/module/contract/test');
-        const abstractOnly = new BackendLinter({
-            projectRoot: fixture.root,
-        }).run().issues;
-        assert.ok(
-            !abstractOnly.some(
-                (issue) =>
-                    issue.ruleId === 'MODULE_TEST_COVERAGE' &&
-                    issue.file.includes('/contract/'),
-            ),
-        );
+        assert.deepEqual(missing, baseline);
     } finally {
         fixture.dispose();
     }
@@ -1200,18 +1178,14 @@ test('store semantics require metadata mapping, active filters, and soft delete'
                 }
             }`,
         );
-        fixture.write(
-            'code/backend/test/example.store.test.ts',
-            `const store = new ExampleStore(database);
-            void store.findById('one');`,
-        );
+        fixture.remove('code/backend/src/module/example/test');
         const ruleIds: readonly string[] = new BackendLinter({ projectRoot: fixture.root })
             .run()
             .issues.map((issue) => issue.ruleId);
         assert.ok(ruleIds.includes('STORE_OBJECT_METADATA_MAPPING'));
         assert.ok(ruleIds.includes('STORE_ACTIVE_READ_FILTER'));
         assert.ok(ruleIds.includes('STORE_SOFT_DELETE_CONTRACT'));
-        assert.ok(!ruleIds.includes('STORE_TEST_EXECUTABLE_COVERAGE'));
+        assert.ok(!ruleIds.some((id) => id.startsWith('STORE_TEST_')));
     } finally {
         fixture.dispose();
     }
@@ -1245,7 +1219,7 @@ test('workspace ownership rejects nested locks, local TypeScript, and verify sho
     }
 });
 
-test('HTTP coverage requires executable requests and documented status assertions', () => {
+test('HTTP contracts allow untested routes and statuses but still require documentation', () => {
     const fixture = new FixtureProject();
     try {
         fixture.write(
@@ -1285,25 +1259,17 @@ paths:
         );
         const issues = new BackendLinter({ projectRoot: fixture.root }).run()
             .issues;
-        assert.ok(
-            issues.some(
-                (issue) => issue.ruleId === 'HTTP_STATUS_CONTRACT',
-            ),
-        );
+        assert.deepEqual(issues.filter((issue) => issue.ruleId.startsWith('HTTP_')), []);
 
-        fixture.write(
-            'code/backend/test/example.http.test.ts',
-            `// /api/example`,
-        );
+        fixture.remove('code/backend/test/example.http.test.ts');
         const missingRequest = new BackendLinter({
             projectRoot: fixture.root,
         }).run().issues;
-        assert.ok(
-            missingRequest.some(
-                (issue) =>
-                    issue.ruleId === 'HTTP_TEST_EXECUTABLE_COVERAGE',
-            ),
-        );
+        assert.deepEqual(missingRequest, issues);
+        fixture.write('code/backend/openapi/openapi.yaml', 'openapi: 3.1.0\npaths: {}\n');
+        assert.ok(new BackendLinter({ projectRoot: fixture.root }).run().issues.some(
+            (issue) => issue.ruleId === 'HTTP_OPENAPI_COVERAGE',
+        ));
     } finally {
         fixture.dispose();
     }

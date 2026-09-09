@@ -62,6 +62,20 @@
 ---
 
 
+# Testing Rules
+
+* These rules apply whether or not Kanban is enabled, including general test instructions in existing tasks; explicit user requirements remain binding. There is no coverage quota or minimum test count.
+* Before adding a test, identify the realistic failure it detects and its impact. Consider permissions, tenant isolation, data integrity, transactions, migrations, auth/network failures, updates, deployment, and rollback as risk examples, not mandatory test categories.
+* Inspect existing protection first and extend existing tests where useful. Do not duplicate the same behavior across layers without additional failure-detection value.
+* Choose the smallest test level that reliably detects the failure. Mocked unit tests alone do not establish integration behavior.
+* Do not add tests merely for trivial delegation, getters, file existence, or properties already reliably checked by TypeScript or linters. A concrete runtime or delivery contract can justify testing such a property.
+* Prefer a regression test for a bug fix that detects the original failure. If automation is not useful or feasible, explain a concrete alternative check.
+* In the existing Verification section or handover, briefly identify the failure risk and chosen protection. “No new test” is valid with a reason and existing test or check evidence. Completion Notes do not require newly written tests.
+
+
+---
+
+
 # Verification Rules
 
 * These rules apply whether or not Kanban is enabled. Apply them to general verification instructions in existing tasks without rewriting those tasks; explicit user requests for additional checks remain binding.

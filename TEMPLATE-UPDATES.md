@@ -3,6 +3,24 @@
 Applications created from this repository can adopt newer stable template
 releases without replacing project-specific code.
 
+## Risk-based testing
+
+Follow [Testing Rules](AGENTS.md#testing-rules) when choosing new tests: identify
+a concrete failure risk, reuse existing protection, and avoid redundant tests.
+There is no coverage quota or minimum test count. “No new test” is valid with
+a reason and existing test or check evidence, including for existing tasks.
+Explicit user requirements remain binding.
+
+The linter no longer requires a test per executable module, Store, HTTP route,
+or documented status (`MODULE_TEST_COVERAGE`, `STORE_TEST_EXECUTABLE_COVERAGE`,
+`HTTP_TEST_EXECUTABLE_COVERAGE`, and `HTTP_STATUS_CONTRACT` are removed).
+OpenAPI consistency and quality rules for existing tests remain enforced.
+Existing application tests are preserved. `scaffold:test` is an optional,
+explicit helper; its generated baseline does not establish business-risk protection.
+Test discovery, npm commands, and verification-evidence reuse are unchanged.
+
+## Update commands
+
 ```bash
 npm run template:check
 npm run template:init -- 1.0.0

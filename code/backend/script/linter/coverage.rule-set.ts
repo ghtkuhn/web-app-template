@@ -6,7 +6,7 @@ import type {
 import { PathResolver } from './path.resolver.ts';
 import { ProjectModel } from './project.model.ts';
 
-/** Relates concrete HTTP and persistence adapters to executable tests. */
+/** Checks HTTP documentation and the quality of existing request tests. */
 export class CoverageRuleSet {
     private readonly openApiSource: string;
     private readonly paths: PathResolver;
@@ -42,29 +42,15 @@ export class CoverageRuleSet {
             : [];
     }
 
-    /** Checks one concrete HTTP handler or Store against executable evidence. */
-    // fallow-ignore-next-line complexity -- Dispatches independent HTTP and Store coverage checks.
+    /** Checks HTTP handlers without requiring tests for every route. */
     public evaluate(analysis: SourceAnalysis): LintIssueDraft[] {
-        if (analysis.filePath.endsWith('.http.handler.ts')) {
-            return this.httpIssues(analysis);
-        }
-        if (
-            this.paths.layer(analysis.filePath) === 'store' &&
-            !this.paths.auxiliaryPath(analysis.filePath) &&
-            analysis.classes[0]?.name &&
-            analysis.methodCalls.some((method) =>
-                ['selectFrom', 'insertInto', 'updateTable', 'deleteFrom'].includes(
-                    method,
-                ),
-            )
-        ) {
-            return this.storeIssues(analysis);
-        }
-        return [];
+        return analysis.filePath.endsWith('.http.handler.ts')
+            ? this.httpIssues(analysis)
+            : [];
     }
 
-    /** Requires OpenAPI, executable request, and documented status evidence. */
-    // fallow-ignore-next-line complexity -- Correlates three independently required contract sources.
+    /** Checks OpenAPI ownership and assertions in existing request tests. */
+    // fallow-ignore-next-line complexity -- Correlates route contracts and existing assertion evidence.
     private httpIssues(analysis: SourceAnalysis): LintIssueDraft[] {
         if (
             analysis.classes.some(
@@ -107,16 +93,6 @@ export class CoverageRuleSet {
                         request.method === operation.method,
                 ),
             );
-            if (matchingTests.length === 0) {
-                issues.push(
-                    this.issue(
-                        analysis,
-                        'HTTP_TEST_EXECUTABLE_COVERAGE',
-                        `HTTP operation '${operation.method} ${operation.path}' requires an executable fetch() test; comments and string references do not count.`,
-                    ),
-                );
-                continue;
-            }
             const assertionEvidence = matchingTests.flatMap((test) =>
                 test.httpTestOperations
                     .filter(
@@ -179,21 +155,6 @@ export class CoverageRuleSet {
                     });
                 }
             }
-            const asserted = new Set(
-                assertionEvidence
-                    .filter(({ assertion }) => assertion.exact)
-                    .flatMap(({ assertion }) => assertion.statuses),
-            );
-            const missing = statuses.filter((status) => !asserted.has(status));
-            if (missing.length > 0) {
-                issues.push(
-                    this.issue(
-                        analysis,
-                        'HTTP_STATUS_CONTRACT',
-                        `Executable tests for '${operation.method} ${operation.path}' do not assert documented statuses: ${missing.join(', ')}.`,
-                    ),
-                );
-            }
         }
         return issues;
     }
@@ -221,29 +182,6 @@ export class CoverageRuleSet {
                 assertion.offset > (request.offset ?? 0) &&
                 assertion.offset < nextOffset,
         );
-    }
-
-    /** Requires Store construction and at least one persistence method call. */
-    private storeIssues(analysis: SourceAnalysis): LintIssueDraft[] {
-        const className = analysis.classes[0]?.name;
-        const tested = this.tests.some(
-            (test) =>
-                test.constructorCalls.some(
-                    (call) => call.className === className,
-                ) &&
-                test.methodCalls.some((method) =>
-                    /^(?:save|create|insert|update|delete|find)/u.test(method),
-                ),
-        );
-        return tested
-            ? []
-            : [
-                  this.issue(
-                      analysis,
-                      'STORE_TEST_EXECUTABLE_COVERAGE',
-                      `Store '${className ?? 'unknown'}' must be constructed and execute a persistence method in a backend test.`,
-                  ),
-              ];
     }
 
     /** Returns documented statuses for one path and method. */

@@ -9,15 +9,9 @@ import { FileScanner } from './file.scanner.ts';
 import { PathResolver } from './path.resolver.ts';
 import { TestCatalogManager } from '../test-catalog/test-catalog.manager.ts';
 
-const EXECUTABLE_LAYERS = new Set([
-    'api',
-    'controller',
-    'service',
-    'store',
-]);
 const TEST_FILE_PATTERN = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*\.test\.ts$/u;
 
-/** Enforces module-local test ownership, structure, imports, and coverage. */
+/** Enforces module-local test ownership, structure and imports. */
 export class ModuleTestRuleSet {
     private readonly paths: PathResolver;
     private readonly scanner = new FileScanner();
@@ -71,36 +65,6 @@ export class ModuleTestRuleSet {
                 dependency.location,
             ),
         ]);
-    }
-
-    /** Requires every executable module to own an executable local test. */
-    public coverageIssues(
-        production: readonly SourceAnalysis[],
-        tests: readonly SourceAnalysis[],
-    ): LintIssueDraft[] {
-        const executableModules = new Set(
-            production
-                .filter((analysis) => this.isExecutable(analysis))
-                .map((analysis) => this.paths.moduleName(analysis.filePath))
-                .filter((name): name is string => Boolean(name)),
-        );
-        return [...executableModules]
-            .sort((left, right) => left.localeCompare(right))
-            .flatMap((moduleName) =>
-                this.hasExecutableTest(moduleName, tests)
-                    ? []
-                    : [
-                          this.issue(
-                              path.join(
-                                  this.paths.moduleRoot(),
-                                  moduleName,
-                                  'index.ts',
-                              ),
-                              'MODULE_TEST_COVERAGE',
-                              `Executable module '${moduleName}' requires at least one direct test/*.test.ts file containing an executable node:test test().`,
-                          ),
-                      ],
-            );
     }
 
     /** Returns module-test directory shape findings. */
@@ -216,27 +180,6 @@ export class ModuleTestRuleSet {
                 ),
             ];
         }
-    }
-
-    /** Returns whether a production file contains a concrete executable class. */
-    private isExecutable(analysis: SourceAnalysis): boolean {
-        return (
-            EXECUTABLE_LAYERS.has(this.paths.layer(analysis.filePath)) &&
-            analysis.classes.some((candidate) => !candidate.isAbstract)
-        );
-    }
-
-    /** Returns whether a module owns a direct executable test. */
-    private hasExecutableTest(
-        moduleName: string,
-        tests: readonly SourceAnalysis[],
-    ): boolean {
-        return tests.some(
-            (analysis) =>
-                this.paths.moduleName(analysis.filePath) === moduleName &&
-                this.paths.isModuleTestFile(analysis.filePath) &&
-                analysis.testCallCount > 0,
-        );
     }
 
     /** Creates one normalized module-test diagnostic draft. */

@@ -136,7 +136,6 @@ export class BackendLinter {
                     ? this.moduleTestRules.evaluateTest(analysis)
                     : [],
             ),
-            ...this.moduleTestRules.coverageIssues(analyses, testAnalyses),
         );
 
         const factory = new DiagnosticFactory(this.paths, [

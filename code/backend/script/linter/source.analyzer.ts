@@ -180,7 +180,6 @@ export class SourceAnalyzer {
             httpStatusAssertions: [],
             dtoCastFromJsonCount: 0,
             permissiveAssertionCount: 0,
-            testCallCount: 0,
             jsonResultVariables: [],
             dtoResultVariables: [],
             controllerPayloadVariables: [],
@@ -341,13 +340,6 @@ export class SourceAnalyzer {
         }
 
         const astNode = node as AstNode;
-        if (
-            astNode.type === 'CallExpression' &&
-            astNode.callee?.type === 'Identifier' &&
-            astNode.callee.name === 'test'
-        ) {
-            analysis.testCallCount += 1;
-        }
         if (
             astNode.type === 'TSTypeReference' &&
             this.expressionName(
