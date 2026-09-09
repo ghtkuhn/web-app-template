@@ -50,14 +50,28 @@
 * You must not write more than one task per task file.
 * Task file names must be in the following format: `<task-counter>-<domain>-<title>.md`
 * You must work tasks sequentially.
-* During an active implementation sequence, you must run only tests created or changed by the current task. You must not run pre-existing test suites again until the final open task in that sequence is complete.
-* After the final open task is complete, you must run the complete existing test suite and root `npm run verify` once before declaring the sequence complete.
+* You must follow [Verification Rules](#verification-rules) throughout implementation, review, and task closure.
 * Completion Notes must map every Done-When criterion to at least one concrete test name or verification command.
 * Open tasks must contain concrete Goal, Scope, Done When, and Verification sections. Completion Notes may remain pending until closure; never invent completed results while planning.
 * Use `[[TODO: description]]` for unfinished draft content. Replace planning markers before `check:kanban`, and completion markers before `task:close`. Ordinary HTML, TypeScript generics, and CLI argument examples are allowed.
-* You must close a task with `npm run task:close -- <id>` after its required focused checks; close the final task only after complete verification.
+* You must close a task with `npm run task:close -- <id>` after its required focused checks; close the final task only when the Verification Rules are satisfied by recorded results.
 * You must run `npm run check:kanban` before completing an implementation sequence.
 * You must commit in git after every completed task, if the project is a git repo.
+
+
+---
+
+
+# Verification Rules
+
+* These rules apply whether or not Kanban is enabled. Apply them to general verification instructions in existing tasks without rewriting those tasks; explicit user requests for additional checks remain binding.
+* During implementation, run focused tests and checks relevant to the change, including existing regression tests when affected.
+* For a connected implementation series, run root `npm run verify` once after implementation and, where possible, code review are complete. It already includes the full test suite; do not run that suite separately as another completion gate. Documentation-only changes require only affected contract checks and `git diff --check`.
+* Reuse recorded results across implementation, review, and release. Task boundaries, agent changes, context loss, commits, pushes, release creation, and Completion Notes edits alone must not trigger another full Verify.
+* After small corrections, rerun only affected tests and checks. Repeat the full Verify only for broad effects, dependency/runtime contract changes, or coverage that cannot be reliably scoped; state the concrete reason before repeating it.
+* If Verify fails, diagnose and repair the failed stage, rerun it and any other stages affected by the repair, then execute remaining stages that have not run. Reuse successful unaffected stages. Keep the original run recorded as failed and document the supplemental results; do not claim the original command passed. Completion requires every required stage to have valid passing evidence for the resulting state.
+* In Completion Notes or the handover, record commands, results, the tested commit or described worktree state, existing log paths when available, and subsequent changes with their focused rechecks. Reuse evidence only when it can be tied to the relevant state; resolve missing or conflicting evidence with targeted inspection/checks. Do not create a separate verification report or cache.
+* A successful automatic post-update Verify counts as the series' full run. Apply the same failure recovery and evidence rules when it fails.
 
 
 ---
@@ -136,6 +150,6 @@
 * Template updates must preserve local modules, features, migrations, secrets, runtime data, local deployment profiles, Memory, and Kanban task contents.
 * Template updates must preserve every existing `project.json` value and local key while recursively adding only settings newly introduced by the template.
 * Application-owned package metadata must remain local. Template scripts, engines, workspaces, and dependencies are merged property by property.
-* A failed post-update Verify does not roll back the installed template. Inspect `.template/status.json` and its referenced log, migrate the application, and run `npm run verify` again.
+* A failed post-update Verify does not roll back the installed template. Inspect `.template/status.json` and its referenced log, repair the application as needed, and apply [Verification Rules](#verification-rules) to recovery and follow-up checks. A successful automatic run already counts; do not repeat it merely for review or commit.
 * After an update, inspect the uncommitted diff and verification status before creating a deliberate commit.
 * Template updates must not commit, push, deploy, restore databases, or mutate external infrastructure automatically.

@@ -33,12 +33,19 @@
 
 [[TODO: Name the planned focused test or verification command for each criterion.]]
 
-After the final open task in an implementation sequence, run `npm run verify` once.
+Follow [Verification Rules](../../../../AGENTS.md#verification-rules) for the
+whole implementation series. Reuse recorded results across tasks and reviewers;
+small corrections require focused rechecks. Do not add a separate full test
+suite or repeat the full Verify merely to close this task.
 
 ## Completion Notes
 
 Pending implementation. When closing this task, replace this paragraph with
 one bullet per Done When criterion in the format shown below, using actual
 test names or commands, followed by a concise implementation summary.
+
+Record commands, results, the tested commit or described worktree state, existing
+log paths when available, and subsequent changes with their focused rechecks.
+Reference the series' shared verification evidence rather than repeating it.
 
 - Criterion 1: `[[TODO: Actual test name or verification command]]`

@@ -83,9 +83,26 @@ File or dependency-installation failures restore affected files, metadata, and
 the lockfile. After successful installation, the target version is recorded
 and `npm run verify` runs. A failed Verify intentionally keeps the update
 installed, exits with code `1`, and writes `.template/status.json` plus an
-ignored log under `.template/logs/`. This state means that application
-migration is required; it is not an updater rollback. The result always remains
+ignored log under `.template/logs/`. This state requires diagnosis and any
+necessary application or environment repairs; it is not an updater rollback. The result always remains
 uncommitted for review.
+
+Follow [Verification Rules](AGENTS.md#verification-rules): a successful automatic
+post-update Verify already counts as the implementation series' full run.
+Review, commit, or release alone must not trigger another run. After a failure,
+rerun the failed stage and other checks affected by the repair, then complete
+the stages that did not run; retain successful unaffected stage results.
+For small follow-up corrections, run focused rechecks. Repeat the full Verify
+only for broad effects, dependency/runtime contract changes, or coverage that
+cannot be reliably scoped, stating the concrete reason first.
+
+Record commands, results, the tested commit or described worktree state,
+existing log paths when available, and subsequent changes/rechecks in Completion
+Notes or the handover. The original failed run and `.template/status.json`
+remain historical evidence; targeted recovery does not change their status or
+mean that the original command passed. Do not rerun the updater or Verify merely
+to clear that historical status. All required stages need passing evidence for
+the resulting state before completion. No separate report or cache is needed.
 
 ## Requirements and Security
 
@@ -121,7 +138,8 @@ application dependencies and scripts but adopts these incoming fields:
 
 Do not combine local and incoming LXC deployment implementation files. Resolve
 the complete LXC runtime-contract group to the incoming 4.0.1 versions, finish
-the template update, and run full verification. Before the next Existing-LXC
+the template update, and confirm passing evidence under the Verification Rules
+(the automatic post-update Verify counts). Before the next Existing-LXC
 backend deployment, inspect and explicitly upgrade the remote infrastructure:
 
 ```bash

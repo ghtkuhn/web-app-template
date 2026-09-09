@@ -114,3 +114,57 @@ test('canonical agent instructions own the basis and delegate project rules', ()
         '`AGENTS.md` is template-owned and replaced by every update',
     );
 });
+
+test('verification policy is independent of Kanban and shares evidence across agents', () => {
+    const agents = fs.readFileSync(path.join(projectRoot, 'AGENTS.md'), 'utf8');
+    const section = agents.match(/# Verification Rules\n([\s\S]*?)(?=\n---)/u)?.[1];
+    expect(section).toBeDefined();
+    for (const requirement of [
+        'whether or not Kanban is enabled',
+        'explicit user requests for additional checks remain binding',
+        'including existing regression tests when affected',
+        'It already includes the full test suite',
+        'Documentation-only changes require only affected contract checks',
+        'Task boundaries, agent changes, context loss, commits, pushes, release creation, and Completion Notes edits alone must not trigger another full Verify',
+        'After small corrections, rerun only affected tests and checks',
+        'dependency/runtime contract changes',
+        'state the concrete reason before repeating it',
+        'Reuse successful unaffected stages',
+        'Keep the original run recorded as failed',
+        'every required stage to have valid passing evidence',
+        'tested commit or described worktree state',
+        'existing log paths when available',
+        'Do not create a separate verification report or cache',
+        'successful automatic post-update Verify counts',
+    ]) {
+        expect(section).toContain(requirement);
+    }
+    const kanban = agents.match(/# Kanban Rules\n([\s\S]*?)(?=\n---)/u)?.[1];
+    expect(kanban).toContain('[Verification Rules](#verification-rules)');
+    expect(kanban).toContain('satisfied by recorded results');
+    expect(kanban).not.toContain('npm run verify');
+});
+
+test('task and updater instructions defer to the shared verification policy', () => {
+    const agents = fs.readFileSync(path.join(projectRoot, 'AGENTS.md'), 'utf8');
+    const template = fs.readFileSync(
+        path.join(projectRoot, 'data/ai/kanban/TASK-TEMPLATE.md'), 'utf8',
+    );
+    const updates = fs.readFileSync(path.join(projectRoot, 'TEMPLATE-UPDATES.md'), 'utf8');
+    expect(template).toContain('AGENTS.md#verification-rules');
+    expect(template).toContain('small corrections require focused rechecks');
+    expect(template).toContain('tested commit or described worktree state');
+    expect(updates).toContain('[Verification Rules](AGENTS.md#verification-rules)');
+    expect(updates).toContain('retain successful unaffected stage results');
+    expect(updates).toContain('targeted recovery does not change their status');
+    expect(updates).toContain('automatic post-update Verify counts');
+    for (const obsolete of [
+        'run the complete existing test suite and root `npm run verify`',
+        'run only tests created or changed by the current task',
+        'run `npm run verify` again',
+        'After the final open task in an implementation sequence, run `npm run verify` once.',
+        'the template update, and run full verification',
+    ]) {
+        expect([agents, template, updates].join('\n')).not.toContain(obsolete);
+    }
+});
