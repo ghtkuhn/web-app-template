@@ -722,13 +722,17 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        account: {
+                            accountId: string;
+                            id: string;
+                            providerId: string;
+                        };
                         data: {
                             [key: string]: unknown;
                         };
                         user: {
-                            email?: string;
+                            email?: string | null;
                             emailVerified: boolean;
-                            id: string;
                             image?: string;
                             name?: string;
                         };
@@ -916,6 +920,7 @@ export interface operations {
                     device_id?: string;
                     error?: string;
                     error_description?: string;
+                    iss?: string;
                     state?: string;
                     user?: string;
                 };
@@ -1574,10 +1579,16 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** @description The account ID associated with the refresh token */
-                    accountId?: string;
-                    /** @description The provider ID for the OAuth provider */
-                    providerId: string;
+                    /** @description The Better Auth account ID */
+                    accountId: string;
+                    /** @description The user ID associated with the account */
+                    userId?: string;
+                } | {
+                    /**
+                     * @description Select the current OAuth account from its signed cookie
+                     * @enum {unknown}
+                     */
+                    useAccountCookie: true;
                     /** @description The user ID associated with the account */
                     userId?: string;
                 };
@@ -1885,6 +1896,10 @@ export interface operations {
                     additionalData?: {
                         [key: string]: unknown;
                     };
+                    /** @description Extra query parameters to append to the provider authorization URL (e.g. Cognito identity_provider, Google hd). */
+                    additionalParams?: {
+                        [key: string]: string;
+                    };
                     /** @description The URL to redirect to after the user has signed in */
                     callbackURL?: string;
                     /** @description Disable automatic redirection to the provider. Useful for handling the redirection yourself */
@@ -1895,10 +1910,11 @@ export interface operations {
                         accessToken?: string;
                         nonce?: string;
                         refreshToken?: string;
-                        scopes?: string[];
                         token: string;
                     };
-                    provider: ("apple" | "atlassian" | "cognito" | "discord" | "facebook" | "figma" | "github" | "microsoft" | "google" | "huggingface" | "slack" | "spotify" | "twitch" | "twitter" | "dropbox" | "kick" | "linear" | "linkedin" | "gitlab" | "tiktok" | "reddit" | "roblox" | "salesforce" | "vk" | "zoom" | "notion" | "kakao" | "naver" | "line" | "paybin" | "paypal" | "polar" | "railway" | "vercel" | "wechat") | string;
+                    /** @description The login hint to use for the authorization code request */
+                    loginHint?: string;
+                    provider: ("apple" | "atlassian" | "cloudflare" | "cognito" | "discord" | "facebook" | "figma" | "github" | "microsoft" | "google" | "huggingface" | "slack" | "spotify" | "twitch" | "twitter" | "dropbox" | "kick" | "linear" | "linkedin" | "gitlab" | "tiktok" | "reddit" | "roblox" | "salesforce" | "vk" | "zoom" | "notion" | "kakao" | "naver" | "line" | "paybin" | "paypal" | "polar" | "railway" | "vercel" | "wechat") | string;
                     requestSignUp?: boolean;
                     /** @description Additional scopes to request from the provider */
                     scopes?: string[];
@@ -2306,10 +2322,16 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** @description The account ID associated with the refresh token */
-                    accountId?: string;
-                    /** @description The provider ID for the OAuth provider */
-                    providerId: string;
+                    /** @description The Better Auth account ID */
+                    accountId: string;
+                    /** @description The user ID associated with the account */
+                    userId?: string;
+                } | {
+                    /**
+                     * @description Select the current OAuth account from its signed cookie
+                     * @enum {unknown}
+                     */
+                    useAccountCookie: true;
                     /** @description The user ID associated with the account */
                     userId?: string;
                 };
@@ -3280,6 +3302,10 @@ export interface operations {
                     additionalData?: {
                         [key: string]: unknown;
                     };
+                    /** @description Extra query parameters to append to the provider authorization URL (e.g. Cognito identity_provider, Google hd). */
+                    additionalParams?: {
+                        [key: string]: string;
+                    };
                     /** @description Callback URL to redirect to after the user has signed in */
                     callbackURL?: string;
                     /** @description Disable automatic redirection to the provider. Useful for handling the redirection yourself */
@@ -3309,7 +3335,7 @@ export interface operations {
                     /** @description The login hint to use for the authorization code request */
                     loginHint?: string;
                     newUserCallbackURL?: string;
-                    provider: ("apple" | "atlassian" | "cognito" | "discord" | "facebook" | "figma" | "github" | "microsoft" | "google" | "huggingface" | "slack" | "spotify" | "twitch" | "twitter" | "dropbox" | "kick" | "linear" | "linkedin" | "gitlab" | "tiktok" | "reddit" | "roblox" | "salesforce" | "vk" | "zoom" | "notion" | "kakao" | "naver" | "line" | "paybin" | "paypal" | "polar" | "railway" | "vercel" | "wechat") | string;
+                    provider: ("apple" | "atlassian" | "cloudflare" | "cognito" | "discord" | "facebook" | "figma" | "github" | "microsoft" | "google" | "huggingface" | "slack" | "spotify" | "twitch" | "twitter" | "dropbox" | "kick" | "linear" | "linkedin" | "gitlab" | "tiktok" | "reddit" | "roblox" | "salesforce" | "vk" | "zoom" | "notion" | "kakao" | "naver" | "line" | "paybin" | "paypal" | "polar" | "railway" | "vercel" | "wechat") | string;
                     /** @description Explicitly request sign-up. Useful when disableImplicitSignUp is true for this provider */
                     requestSignUp?: boolean;
                     /** @description Array of scopes to request from the provider. This will override the default scopes passed. */
@@ -3418,7 +3444,14 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    /** @description The URL to redirect to after provider logout */
+                    callbackURL?: string;
+                    /** @description Return the provider logout URL without redirecting */
+                    disableRedirect?: boolean;
+                    /** @description State to pass to the provider logout endpoint */
+                    state?: string;
+                };
             };
         };
         responses: {
@@ -3429,7 +3462,11 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        /** @description Whether the client should redirect to the provider logout URL */
+                        redirect?: boolean;
                         success?: boolean;
+                        /** @description Provider logout URL when RP-initiated logout is available */
+                        url?: string;
                     };
                 };
             };
@@ -3674,8 +3711,8 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    accountId?: string;
-                    providerId: string;
+                    /** @description The Better Auth account ID to unlink */
+                    accountId: string;
                 };
             };
         };

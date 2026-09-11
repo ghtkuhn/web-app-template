@@ -42,7 +42,7 @@ interface FallowProcessResult {
 
 /** Runs Fallow while keeping console output bounded for agents and CI logs. */
 export class FallowAudit {
-    private static readonly VERSION = '3.15.0';
+    private static readonly VERSION = '3.25.0';
     private static readonly MAX_EXAMPLES = 10;
     private static readonly MAX_STDERR_CHARACTERS = 2_000;
     private readonly reportPath: string;

@@ -5,6 +5,7 @@ import SwaggerParser from '@apidevtools/swagger-parser';
 import { Kysely, SqliteDialect } from 'kysely';
 import type { Database } from '../../src/database.ts';
 import { AuthRuntimeService } from '../../src/module/auth/service/auth-runtime.service.ts';
+import { up as createAuthTables } from '../../src/migration/sqlite/002-better-auth.migration.ts';
 import { YamlSerializer } from './yaml.serializer.ts';
 
 /** Generates and checks the merged application and Better Auth OpenAPI contract. */
@@ -67,6 +68,7 @@ export class AuthOpenApiGenerator {
             }),
         });
         try {
+            await createAuthTables(database);
             const runtime = new AuthRuntimeService({
                 database,
                 databaseType: 'sqlite',

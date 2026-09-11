@@ -90,12 +90,14 @@
     "typecheck": "tsc --project tsconfig.deployment.json && npm run typecheck --workspaces --if-present",
     "test": "npm test --workspaces --if-present",
     "audit": "node script/fallow.ts",
+    "code:inspect": "fallow inspect --format json --file",
+    "code:trace": "fallow trace --depth 2",
     "verify": "npm run runtime:check && npm run credentials:check && npm run check:memory && npm run check:kanban && npm run check:modules && npm run check:migrations && npm run deployment:validate -- --all && npm run check:api && npm run lint && npm run typecheck && npm test && npm run build && npm run test:e2e --workspace @app/web && npm run test:e2e:pwa --workspaces --if-present && npm run audit",
     "verify:module": "node code/backend/script/module-tools.ts verify"
   },
   "devDependencies": {
     "ajv": "^8.20.0",
-    "fallow": "3.15.0",
+    "fallow": "3.25.0",
     "typescript": "^5.0.0"
   }
 }

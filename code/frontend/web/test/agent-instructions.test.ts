@@ -64,7 +64,18 @@ test('agent instructions document the curated root quality commands', () => {
                     'Updates the backend test catalog.'],
             ],
         },
+        {
+            title: 'Code Navigation',
+            commands: [
+                ['code:inspect', 'npm run code:inspect -- <file-path>',
+                    'Inspects a repository-relative file and its dependencies, consumers, and evidence as JSON.'],
+                ['code:trace', 'npm run code:trace -- <file-path>:<export>',
+                    'Shows a best-effort caller/callee chain for an exported symbol, limited to two hops.'],
+            ],
+        },
     ] as const;
+    expect(packageJson.scripts['code:inspect']).toBe('fallow inspect --format json --file');
+    expect(packageJson.scripts['code:trace']).toBe('fallow trace --depth 2');
     const expected = groups.map(({ title, commands }) => [
         `### ${title}`,
         '',
@@ -120,22 +131,9 @@ test('verification policy is independent of Kanban and shares evidence across ag
     const section = agents.match(/# Verification Rules\n([\s\S]*?)(?=\n---)/u)?.[1];
     expect(section).toBeDefined();
     for (const requirement of [
-        'whether or not Kanban is enabled',
-        'explicit user requests for additional checks remain binding',
-        'including existing regression tests when affected',
-        'It already includes the full test suite',
-        'Documentation-only changes require only affected contract checks',
-        'Task boundaries, agent changes, context loss, commits, pushes, release creation, and Completion Notes edits alone must not trigger another full Verify',
-        'After small corrections, rerun only affected tests and checks',
-        'dependency/runtime contract changes',
-        'state the concrete reason before repeating it',
-        'Reuse successful unaffected stages',
-        'Keep the original run recorded as failed',
-        'every required stage to have valid passing evidence',
-        'tested commit or described worktree state',
-        'existing log paths when available',
-        'Do not create a separate verification report or cache',
-        'successful automatic post-update Verify counts',
+        'reuse valid results across tasks, agents, updates, and releases',
+        'recheck only affected stages',
+        'passing evidence for every required stage',
     ]) {
         expect(section).toContain(requirement);
     }
@@ -152,10 +150,18 @@ test('task and updater instructions defer to the shared verification policy', ()
     );
     const updates = fs.readFileSync(path.join(projectRoot, 'TEMPLATE-UPDATES.md'), 'utf8');
     expect(template).toContain('AGENTS.md#verification-rules');
-    expect(agents).toMatch(/# Testing Rules\n[\s\S]*?whether or not Kanban is enabled/u);
-    expect(agents).toContain('identify the realistic failure it detects and its impact');
+    expect(agents).toContain('select tests by concrete failure risk and impact');
+    expect(agents).toContain('You may add no new test if you document the reason');
+    for (const heading of ['Testing Rules', 'Verification Rules']) {
+        const section = agents.split(`# ${heading}\n`)[1]?.split('\n---')[0];
+        const rules = section?.split('\n').filter((line) => line.startsWith('* '));
+        expect(rules?.length).toBeGreaterThan(0);
+        for (const rule of rules ?? []) {
+            expect(rule).toMatch(/^\* You (?:must not|must|should|may) /u);
+        }
+    }
     expect(template).toContain('AGENTS.md#testing-rules');
-    for (const document of [agents, template, updates]) {
+    for (const document of [template, updates]) {
         expect(document).toContain('“No new test” is valid');
         expect(document).toContain('reason and existing test or check evidence');
     }

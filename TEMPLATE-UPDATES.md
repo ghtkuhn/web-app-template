@@ -3,6 +3,19 @@
 Applications created from this repository can adopt newer stable template
 releases without replacing project-specific code.
 
+## Template 5.0.13 dependency and navigation update
+
+Fallow is pinned to 3.25.0 and both workspaces use Better Auth 1.7.4. The OpenAPI
+generator now creates the auth schema in its temporary in-memory database before
+initialization; retain this step when resolving local generator conflicts.
+Generated auth API contracts are updated. No new template database migration or
+infrastructure upgrade is required. Review Better Auth's upstream 1.7 changes
+if the application uses custom auth integrations.
+
+`code:inspect -- <file-path>` and `code:trace -- <file-path>:<export>` are optional
+root npm navigation scripts, not new verification requirements. The shortened
+agent rules retain risk-based tests and reuse of valid verification evidence.
+
 ## Risk-based testing
 
 Follow [Testing Rules](AGENTS.md#testing-rules) when choosing new tests: identify

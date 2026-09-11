@@ -190,6 +190,20 @@ paths:
                             schema:
                                 additionalProperties: false
                                 properties:
+                                    account:
+                                        additionalProperties: false
+                                        properties:
+                                            accountId:
+                                                type: "string"
+                                            id:
+                                                type: "string"
+                                            providerId:
+                                                type: "string"
+                                        required:
+                                            - "id"
+                                            - "providerId"
+                                            - "accountId"
+                                        type: "object"
                                     data:
                                         additionalProperties: true
                                         properties: {}
@@ -197,22 +211,22 @@ paths:
                                     user:
                                         properties:
                                             email:
-                                                type: "string"
+                                                type:
+                                                    - "string"
+                                                    - "null"
                                             emailVerified:
                                                 type: "boolean"
-                                            id:
-                                                type: "string"
                                             image:
                                                 type: "string"
                                             name:
                                                 type: "string"
                                         required:
-                                            - "id"
                                             - "emailVerified"
                                         type: "object"
                                 required:
                                     - "user"
                                     - "data"
+                                    - "account"
                                 type: "object"
                     description: "Success"
                 "400":
@@ -387,6 +401,8 @@ paths:
                                 error:
                                     type: "string"
                                 error_description:
+                                    type: "string"
+                                iss:
                                     type: "string"
                                 state:
                                     type: "string"
@@ -1032,19 +1048,30 @@ paths:
                 content:
                     "application/json":
                         schema:
-                            properties:
-                                accountId:
-                                    description: "The account ID associated with the refresh token"
-                                    type: "string"
-                                providerId:
-                                    description: "The provider ID for the OAuth provider"
-                                    type: "string"
-                                userId:
-                                    description: "The user ID associated with the account"
-                                    type: "string"
-                            required:
-                                - "providerId"
-                            type: "object"
+                            anyOf:
+                                -
+                                    properties:
+                                        accountId:
+                                            description: "The Better Auth account ID"
+                                            type: "string"
+                                        userId:
+                                            description: "The user ID associated with the account"
+                                            type: "string"
+                                    required:
+                                        - "accountId"
+                                    type: "object"
+                                -
+                                    properties:
+                                        useAccountCookie:
+                                            description: "Select the current OAuth account from its signed cookie"
+                                            enum:
+                                                - true
+                                        userId:
+                                            description: "The user ID associated with the account"
+                                            type: "string"
+                                    required:
+                                        - "useAccountCookie"
+                                    type: "object"
                 required: true
             responses:
                 "200":
@@ -1328,6 +1355,13 @@ paths:
                                     propertyNames:
                                         type: "string"
                                     type: "object"
+                                additionalParams:
+                                    additionalProperties:
+                                        type: "string"
+                                    description: "Extra query parameters to append to the provider authorization URL (e.g. Cognito identity_provider, Google hd)."
+                                    propertyNames:
+                                        type: "string"
+                                    type: "object"
                                 callbackURL:
                                     description: "The URL to redirect to after the user has signed in"
                                     type: "string"
@@ -1345,21 +1379,21 @@ paths:
                                             type: "string"
                                         refreshToken:
                                             type: "string"
-                                        scopes:
-                                            items:
-                                                type: "string"
-                                            type: "array"
                                         token:
                                             type: "string"
                                     required:
                                         - "token"
                                     type: "object"
+                                loginHint:
+                                    description: "The login hint to use for the authorization code request"
+                                    type: "string"
                                 provider:
                                     anyOf:
                                         -
                                             enum:
                                                 - "apple"
                                                 - "atlassian"
+                                                - "cloudflare"
                                                 - "cognito"
                                                 - "discord"
                                                 - "facebook"
@@ -1787,19 +1821,30 @@ paths:
                 content:
                     "application/json":
                         schema:
-                            properties:
-                                accountId:
-                                    description: "The account ID associated with the refresh token"
-                                    type: "string"
-                                providerId:
-                                    description: "The provider ID for the OAuth provider"
-                                    type: "string"
-                                userId:
-                                    description: "The user ID associated with the account"
-                                    type: "string"
-                            required:
-                                - "providerId"
-                            type: "object"
+                            anyOf:
+                                -
+                                    properties:
+                                        accountId:
+                                            description: "The Better Auth account ID"
+                                            type: "string"
+                                        userId:
+                                            description: "The user ID associated with the account"
+                                            type: "string"
+                                    required:
+                                        - "accountId"
+                                    type: "object"
+                                -
+                                    properties:
+                                        useAccountCookie:
+                                            description: "Select the current OAuth account from its signed cookie"
+                                            enum:
+                                                - true
+                                        userId:
+                                            description: "The user ID associated with the account"
+                                            type: "string"
+                                    required:
+                                        - "useAccountCookie"
+                                    type: "object"
                 required: true
             responses:
                 "200":
@@ -2716,6 +2761,13 @@ paths:
                                     propertyNames:
                                         type: "string"
                                     type: "object"
+                                additionalParams:
+                                    additionalProperties:
+                                        type: "string"
+                                    description: "Extra query parameters to append to the provider authorization URL (e.g. Cognito identity_provider, Google hd)."
+                                    propertyNames:
+                                        type: "string"
+                                    type: "object"
                                 callbackURL:
                                     description: "Callback URL to redirect to after the user has signed in"
                                     type: "string"
@@ -2769,6 +2821,7 @@ paths:
                                             enum:
                                                 - "apple"
                                                 - "atlassian"
+                                                - "cloudflare"
                                                 - "cognito"
                                                 - "discord"
                                                 - "facebook"
@@ -2916,16 +2969,32 @@ paths:
                 content:
                     "application/json":
                         schema:
-                            properties: {}
+                            properties:
+                                callbackURL:
+                                    description: "The URL to redirect to after provider logout"
+                                    type: "string"
+                                disableRedirect:
+                                    description: "Return the provider logout URL without redirecting"
+                                    type: "boolean"
+                                state:
+                                    description: "State to pass to the provider logout endpoint"
+                                    type: "string"
                             type: "object"
+                required: false
             responses:
                 "200":
                     content:
                         "application/json":
                             schema:
                                 properties:
+                                    redirect:
+                                        description: "Whether the client should redirect to the provider logout URL"
+                                        type: "boolean"
                                     success:
                                         type: "boolean"
+                                    url:
+                                        description: "Provider logout URL when RP-initiated logout is available"
+                                        type: "string"
                                 type: "object"
                     description: "Success"
                 "400":
@@ -3173,11 +3242,10 @@ paths:
                         schema:
                             properties:
                                 accountId:
-                                    type: "string"
-                                providerId:
+                                    description: "The Better Auth account ID to unlink"
                                     type: "string"
                             required:
-                                - "providerId"
+                                - "accountId"
                             type: "object"
                 required: true
             responses:

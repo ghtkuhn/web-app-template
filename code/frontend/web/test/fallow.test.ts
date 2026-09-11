@@ -11,14 +11,14 @@ function fixture(): string {
     roots.push(root);
     const manifest = path.join(root, 'node_modules/fallow/package.json');
     fs.mkdirSync(path.dirname(manifest), { recursive: true });
-    fs.writeFileSync(manifest, JSON.stringify({ version: '3.15.0' }));
+    fs.writeFileSync(manifest, JSON.stringify({ version: '3.25.0' }));
     return root;
 }
 
 function report(introduced: number): string {
     return JSON.stringify({
         kind: 'audit',
-        version: '3.15.0',
+        version: '3.25.0',
         verdict: introduced === 0 ? 'pass' : 'fail',
         summary: { dead_code_issues: 3 },
         attribution: {

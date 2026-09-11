@@ -51,9 +51,9 @@
 * Task file names must be in the following format: `<task-counter>-<domain>-<title>.md`
 * You must work tasks sequentially.
 * You must follow [Verification Rules](#verification-rules) throughout implementation, review, and task closure.
-* Completion Notes must map every Done-When criterion to at least one concrete test name or verification command.
-* Open tasks must contain concrete Goal, Scope, Done When, and Verification sections. Completion Notes may remain pending until closure; never invent completed results while planning.
-* Use `[[TODO: description]]` for unfinished draft content. Replace planning markers before `check:kanban`, and completion markers before `task:close`. Ordinary HTML, TypeScript generics, and CLI argument examples are allowed.
+* You must link each Done-When criterion to a test or check in Completion Notes before closure.
+* You must define Goal, Scope, Done When, and Verification before implementation; completion results must reflect actual checks.
+* You must use `[[TODO: description]]` for drafts and resolve planning markers before `check:kanban`, completion markers before `task:close`.
 * You must close a task with `npm run task:close -- <id>` after its required focused checks; close the final task only when the Verification Rules are satisfied by recorded results.
 * You must run `npm run check:kanban` before completing an implementation sequence.
 * You must commit in git after every completed task, if the project is a git repo.
@@ -64,13 +64,10 @@
 
 # Testing Rules
 
-* These rules apply whether or not Kanban is enabled, including general test instructions in existing tasks; explicit user requirements remain binding. There is no coverage quota or minimum test count.
-* Before adding a test, identify the realistic failure it detects and its impact. Consider permissions, tenant isolation, data integrity, transactions, migrations, auth/network failures, updates, deployment, and rollback as risk examples, not mandatory test categories.
-* Inspect existing protection first and extend existing tests where useful. Do not duplicate the same behavior across layers without additional failure-detection value.
-* Choose the smallest test level that reliably detects the failure. Mocked unit tests alone do not establish integration behavior.
-* Do not add tests merely for trivial delegation, getters, file existence, or properties already reliably checked by TypeScript or linters. A concrete runtime or delivery contract can justify testing such a property.
-* Prefer a regression test for a bug fix that detects the original failure. If automation is not useful or feasible, explain a concrete alternative check.
-* In the existing Verification section or handover, briefly identify the failure risk and chosen protection. “No new test” is valid with a reason and existing test or check evidence. Completion Notes do not require newly written tests.
+* You must select tests by concrete failure risk and impact; explicit user requirements remain binding.
+* You must not add tests solely for coverage, test counts, or behavior already reliably checked elsewhere.
+* You should extend existing tests at the smallest reliable test level and add regression coverage for bug fixes.
+* You may add no new test if you document the reason and existing protection or an alternative check in the task or handover.
 
 
 ---
@@ -78,14 +75,10 @@
 
 # Verification Rules
 
-* These rules apply whether or not Kanban is enabled. Apply them to general verification instructions in existing tasks without rewriting those tasks; explicit user requests for additional checks remain binding.
-* During implementation, run focused tests and checks relevant to the change, including existing regression tests when affected.
-* For a connected implementation series, run root `npm run verify` once after implementation and, where possible, code review are complete. It already includes the full test suite; do not run that suite separately as another completion gate. Documentation-only changes require only affected contract checks and `git diff --check`.
-* Reuse recorded results across implementation, review, and release. Task boundaries, agent changes, context loss, commits, pushes, release creation, and Completion Notes edits alone must not trigger another full Verify.
-* After small corrections, rerun only affected tests and checks. Repeat the full Verify only for broad effects, dependency/runtime contract changes, or coverage that cannot be reliably scoped; state the concrete reason before repeating it.
-* If Verify fails, diagnose and repair the failed stage, rerun it and any other stages affected by the repair, then execute remaining stages that have not run. Reuse successful unaffected stages. Keep the original run recorded as failed and document the supplemental results; do not claim the original command passed. Completion requires every required stage to have valid passing evidence for the resulting state.
-* In Completion Notes or the handover, record commands, results, the tested commit or described worktree state, existing log paths when available, and subsequent changes with their focused rechecks. Reuse evidence only when it can be tied to the relevant state; resolve missing or conflicting evidence with targeted inspection/checks. Do not create a separate verification report or cache.
-* A successful automatic post-update Verify counts as the series' full run. Apply the same failure recovery and evidence rules when it fails.
+* You must run focused checks during implementation and one root `npm run verify` after implementation and review. Documentation-only changes need only affected contract checks and `git diff --check`.
+* You must reuse valid results across tasks, agents, updates, and releases; Verify already includes the test suite. Repeat a full run only for broad, dependency/runtime, or uncertain impact, stating why; explicit user requests remain binding.
+* You must recheck only affected stages after corrections, plus unfinished stages after a failed Verify. Completion requires passing evidence for every required stage; the original failed run remains failed.
+* You must record commands, results, tested revision or worktree state, available log paths, and later rechecks in the task or handover.
 
 
 ---
@@ -145,6 +138,11 @@
 * `npm run generate:migrations`: Updates the migration checksum catalog.
 * `npm run check:test-catalog`: Checks the backend test catalog for drift.
 * `npm run generate:test-catalog`: Updates the backend test catalog.
+
+### Code Navigation
+
+* `npm run code:inspect -- <file-path>`: Inspects a repository-relative file and its dependencies, consumers, and evidence as JSON.
+* `npm run code:trace -- <file-path>:<export>`: Shows a best-effort caller/callee chain for an exported symbol, limited to two hops.
 
 
 ---
