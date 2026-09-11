@@ -105,6 +105,7 @@
     3. If the native platform or framework does it, use that feature.
     4. If an installed dependency does it, use the installed dependency.
     5. Only write the minimum code that works.
+* You should scaffold the required code structure before implementing new features. Describe unfinished behavior with concise TODOs where business logic has yet to be written. You must not return success on TODO placeholders, only once the actual code is implemented.
 * You must not solve issues or implement features with ad hoc heuristics or keyword lists. Prefer real contracts, structured data, parsers, schemas, native platform/framework features, installed dependencies, embeddings, or model-backed validation.
 * You must not build island solutions or implementations tailored to one specific test case, fixture, or issue.
 * You must derive solutions generically; tests may cover examples, but implementation logic must not special-case them.
