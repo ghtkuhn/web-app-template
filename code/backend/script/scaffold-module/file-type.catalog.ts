@@ -152,7 +152,7 @@ export class FileTypeCatalog {
     public get(type: string): FileTypeDefinition {
         if (type === 'service-aux' || type === 'controller-aux') {
             throw new ScaffoldInputError(
-                `${type} scaffolding is obsolete. Use npm run scaffold:operation instead.`,
+                `${type} scaffolding is obsolete. Use npm run help -- scaffold operation to select its service, name, input, and output.`,
             );
         }
         const definition = this.definitions.find(

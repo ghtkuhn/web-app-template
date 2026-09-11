@@ -720,6 +720,35 @@ test('major update preserves application state and keeps opt-ins disabled', () =
     expect(paths).not.toContain('code/frontend/web/src/app/sw.ts');
 });
 
+test('command migration removes unchanged aliases, preserves tasks, and conflicts on local scripts', () => {
+    const base = temporaryRoot('commands-base-');
+    const local = temporaryRoot('commands-local-');
+    const incoming = temporaryRoot('commands-incoming-');
+    const previous = { scripts: { 'deployment:deploy': 'node old-deploy.ts', 'scaffold:module': 'node old-scaffold.ts' } };
+    const next = { scripts: { deployment: 'node script/deployment/deployment.cli.ts', scaffold: 'node script/scaffold.ts', help: 'node script/help.ts' } };
+    write(base, 'package.json', JSON.stringify(previous));
+    write(local, 'package.json', JSON.stringify(previous));
+    write(incoming, 'package.json', JSON.stringify(next));
+    writeCanonicalInstructions([base, local, incoming]);
+    const task = 'data/ai/kanban/todo/1-backend-example.md';
+    const taskText = 'Run npm run scaffold:module -- billing';
+    write(local, task, taskText);
+    const plan = new UpdatePlanner().plan(base, local, incoming);
+    expect(plan.conflicts).toEqual([]);
+    const action = plan.actions.find((item) => item.relativePath === 'package.json');
+    expect(action?.kind).toBe('write');
+    expect(JSON.parse(fs.readFileSync((action as { sourcePath: string }).sourcePath, 'utf8')).scripts).toEqual(next.scripts);
+    expect(plan.actions.some((item) => item.relativePath === task)).toBe(false);
+    expect(fs.readFileSync(path.join(local, task), 'utf8')).toBe(taskText);
+    write(local, 'package.json', JSON.stringify({ scripts: {
+        ...previous.scripts, 'deployment:deploy': 'node custom.ts', deployment: 'node local-deployment.ts',
+    } }));
+    const conflict = new UpdatePlanner().plan(base, local, incoming).conflicts.find((item) => item.relativePath === 'package.json');
+    expect(conflict?.reason).toContain('/scripts/deployment:deploy');
+    expect(conflict?.reason).toContain('/scripts/deployment');
+    expect(fs.readFileSync(path.join(local, task), 'utf8')).toBe(taskText);
+});
+
 test('package planning preserves app identity and merges template properties', () => {
     const base = temporaryRoot('template-base-');
     const local = temporaryRoot('template-local-');

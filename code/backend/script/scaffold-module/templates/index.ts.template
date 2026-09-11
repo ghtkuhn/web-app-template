@@ -14,7 +14,7 @@ export class {{PASCAL_NAME}}Module
     implements {{PASCAL_NAME}}ModulePort
 {
     // module-sync:start
-    /** Generated registry metadata. Change module.manifest.json, then run module:sync. */
+    /** Generated registry metadata. Change module.manifest.json, then run npm run module:sync -- {{MODULE_NAME}}. */
     public static readonly definition = {
         name: {{CONSTANT_NAME}}_MODULE_NAME,
         dependencies: [],

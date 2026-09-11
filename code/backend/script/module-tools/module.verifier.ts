@@ -1,5 +1,4 @@
 import path from 'node:path';
-import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import type {
     ModuleCommandResult,
@@ -52,10 +51,7 @@ export class ModuleVerifier {
             ['npm', ['run', 'lint:architecture']],
             ['npm', ['run', 'lint:openapi']],
         ];
-        const tests = this.moduleTests(moduleName);
-        if (tests.length > 0) {
-            commands.push([process.execPath, ['--test', ...tests]]);
-        }
+        commands.push([process.execPath, [path.join(this.projectRoot, 'script/test.ts'), '--module', moduleName]]);
         return commands;
     }
 
@@ -76,22 +72,4 @@ export class ModuleVerifier {
         return 0;
     }
 
-    /** Returns direct local test paths relative to the backend workspace. */
-    private moduleTests(moduleName: string): string[] {
-        const relativeDirectory = `src/module/${moduleName}/test`;
-        const directory = path.join(
-            this.projectRoot,
-            'code/backend',
-            relativeDirectory,
-        );
-        try {
-            return fs
-                .readdirSync(directory)
-                .filter((file: string) => file.endsWith('.test.ts'))
-                .sort()
-                .map((file: string) => `${relativeDirectory}/${file}`);
-        } catch {
-            return [];
-        }
-    }
 }

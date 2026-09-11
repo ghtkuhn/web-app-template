@@ -114,36 +114,16 @@
 
 ## Root npm Scripts
 
-### Complete Verification
-
-* `npm run runtime:check`: Checks the pinned Node.js and npm contract.
+* `npm run code:inspect -- <file-path>`: Inspects file dependencies and consumers as JSON.
+* `npm run code:trace -- <file-path>:<export>`: Traces a best-effort caller/callee chain, limited to two hops.
+* `npm run scaffold -- <type> [args]`: Creates architecture-aligned files; get parameters with `npm run help -- scaffold <type>`.
+* `npm run lint`: Checks architecture, styles, and OpenAPI.
+* `npm run typecheck`: Typechecks root tooling and both workspaces.
+* `npm run test -- [--module <module> | --file <file-path>]`: Runs all workspace tests, direct backend module tests, or one test file.
 * `npm run verify`: Runs the complete required quality pipeline.
-* `npm run audit`: Checks for newly introduced code-health findings with the locally pinned Fallow.
+* `npm run help -- [topic] [command]`: Shows focused command syntax, examples, and side effects without running commands.
 
-### Focused Quality Checks
-
-* `npm run lint`: Checks architecture, styles, and OpenAPI across all workspaces.
-* `npm run typecheck`: Typechecks root tooling and all workspaces.
-* `npm run test`: Runs workspace unit, integration, and component tests.
-* `npm run build`: Builds every workspace that defines a build script.
-* `npm run verify:module -- <module>`: Runs backend-wide type and lint checks plus the module's direct tests.
-
-### Generated Contracts
-
-* `npm run check:api`: Checks backend OpenAPI and generated frontend types.
-* `npm run generate:api`: Updates backend OpenAPI and generated frontend types.
-* `npm run check:modules`: Checks generated module mechanics for drift.
-* `npm run module:sync -- <module>`: Updates one module's generated mechanics.
-* `npm run check:migrations`: Checks migration order, dialect pairs, catalog, and checksums.
-* `npm run generate:migrations`: Updates the migration checksum catalog.
-* `npm run check:test-catalog`: Checks the backend test catalog for drift.
-* `npm run generate:test-catalog`: Updates the backend test catalog.
-
-### Code Navigation
-
-* `npm run code:inspect -- <file-path>`: Inspects a repository-relative file and its dependencies, consumers, and evidence as JSON.
-* `npm run code:trace -- <file-path>:<export>`: Shows a best-effort caller/callee chain for an exported symbol, limited to two hops.
-
+Understand the code → implement → run focused checks → verify once at completion. Paths are repository-relative; quote spaces. Use help for maintenance and deployment commands.
 
 ---
 

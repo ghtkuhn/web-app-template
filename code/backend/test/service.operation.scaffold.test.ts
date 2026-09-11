@@ -152,7 +152,7 @@ test('operation scaffold CLI documents usage and stable invalid-input status', (
             stderr,
         );
         assert.equal(cli.run(['--help']), 0);
-        assert.match(stdout.value, /scaffold:operation/);
+        assert.match(stdout.value, /scaffold -- operation/);
         assert.equal(cli.run(['example']), 1);
         assert.match(stderr.value, /Expected <module> <service> <operation>/);
     } finally {

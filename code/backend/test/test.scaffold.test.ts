@@ -9,6 +9,7 @@ import type {
     TestScaffoldWriter,
 } from '../script/scaffold-test/interfaces.ts';
 import { TestScaffolder } from '../script/scaffold-test/test.scaffolder.ts';
+import { TestScaffoldVerificationRunner } from '../script/scaffold-test/test-scaffold.verification.ts';
 
 /** Records or rejects scaffold verification. */
 class RecordingVerification implements TestScaffoldVerification {
@@ -104,6 +105,21 @@ test('test scaffold creates a real module contract test and updates the catalog'
     }
 });
 
+test('test scaffold verifier runs only the created test after backend checks', () => {
+    const calls: Array<readonly [string, readonly string[], string]> = [];
+    const root = path.resolve('code/backend');
+    const file = path.join(root, 'src/module/example/test/example.module.test.ts');
+    new TestScaffoldVerificationRunner((command, args, cwd) => {
+        calls.push([command, args, cwd]);
+        return { status: 0 };
+    }).verify(root, file);
+    assert.deepEqual(calls, [
+        ['npm', ['run', 'lint'], root],
+        ['npm', ['run', 'typecheck'], root],
+        [process.execPath, ['--test', '--test-concurrency=1', 'src/module/example/test/example.module.test.ts'], root],
+    ]);
+});
+
 test('test scaffold rejects invalid targets and rolls back verification failures', () => {
     const fixture = new TestScaffoldFixture();
     const originalCatalog = fs.readFileSync(fixture.catalogPath, 'utf8');
@@ -138,7 +154,7 @@ test('test scaffold CLI documents syntax and stable exit codes', () => {
             stderr,
         );
         assert.equal(cli.run(['--help']), 0);
-        assert.match(stdout.value, /scaffold:test/u);
+        assert.match(stdout.value, /scaffold -- test/u);
         assert.equal(cli.run([]), 1);
         assert.equal(cli.run(['missing']), 1);
         assert.match(stderr.value, /Expected exactly one|does not exist/u);

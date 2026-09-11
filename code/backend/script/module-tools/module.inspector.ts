@@ -52,13 +52,13 @@ export class ModuleInspector {
                 moduleName: moduleName.value,
                 state: 'contract',
                 message:
-                    'Contract module is valid. Next: scaffold a resource or architecture file.',
+                    'Contract module is valid. To choose an architecture file, use npm run help -- scaffold file.',
             };
         }
         return {
             moduleName: moduleName.value,
             state: 'ready',
-            message: 'Module architecture is ready for focused verification.',
+            message: `Module architecture is ready. Focused verification: npm run verify:module -- ${moduleName.value}`,
         };
     }
 

@@ -29,7 +29,7 @@ export class AuthModule
     implements AuthModulePort
 {
     // module-sync:start
-    /** Generated registry metadata. Change module.manifest.json, then run module:sync. */
+    /** Generated registry metadata. Change module.manifest.json, then run npm run module:sync -- auth. */
     public static readonly definition = {
         name: AUTH_MODULE_NAME,
         dependencies: [],

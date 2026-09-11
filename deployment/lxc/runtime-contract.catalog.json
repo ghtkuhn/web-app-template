@@ -3,7 +3,7 @@
     "files": {
         "script/deployment/lxc-runtime.contract.ts": "00809f38661033dfb080959455b7d4569acd4307e45cb6e867a50c11db138483",
         "script/deployment/release.builder.ts": "9e0fe7e485ca16c2e4b522756951ff161506b807a22861a7cef550cc4303ae33",
-        "script/deployment/ssh.release-driver.ts": "b36753ccc2375295036f27e232aba6e2e4b7d70a81fa69fc9684ceb23e147680",
+        "script/deployment/ssh.release-driver.ts": "58ed4a0a79f9f740f209a80169a28642c9fe41ddb752c6225a837e135309947e",
         "deployment/lxc/bootstrap-existing-lxc.sh": "b34c396ef924c05d43377770c1dea9eb801caf59202f8eeee5be013bb8999290",
         "deployment/lxc/install-backend.sh": "525daabb7e25e868ca2750a78cf9c5dcca90bc378864a81e8145daa582e35c84",
         "deployment/lxc/install-frontend.sh": "43d871f3d550a840c405b020e9daf97b7164dd303579a4bb838295a7d060309c"

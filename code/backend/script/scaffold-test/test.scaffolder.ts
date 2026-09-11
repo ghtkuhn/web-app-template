@@ -46,7 +46,7 @@ export class TestScaffolder {
             fs.mkdirSync(testDirectory, { recursive: true });
             fs.writeFileSync(testPath, this.render(moduleName), 'utf8');
             new TestCatalogManager(this.backendRoot).generate();
-            this.verification.verify(this.backendRoot);
+            this.verification.verify(this.backendRoot, testPath);
         } catch (error: unknown) {
             this.rollback(testPath, testDirectory, createdDirectory, catalogPath, previousCatalog);
             throw this.executionError(error);

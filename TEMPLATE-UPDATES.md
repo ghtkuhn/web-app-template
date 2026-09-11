@@ -3,6 +3,36 @@
 Applications created from this repository can adopt newer stable template
 releases without replacing project-specific code.
 
+## Template 6.0.0 command interface migration
+
+Template 6.0.0 removes the old root deployment and scaffold
+aliases without a compatibility period. Translate old task instructions when
+executing them; local tasks, Memory, and application scripts are not rewritten.
+
+| Previous root invocation | New invocation |
+| --- | --- |
+| `npm run deployment:<action> -- ...` | `npm run deployment -- <action> ...` |
+| `npm run scaffold:<type> -- ...` | `npm run scaffold -- <type> ...` |
+| `npm run credentials:run -- deployment:<action> -- ...` | `npm run credentials:run -- deployment <action> ...` |
+
+Operational deployment commands require an explicit profile and component.
+Database commands require the profile and implicitly target only the backend;
+restore additionally requires an explicit backup ID. No target defaults remain.
+Use `npm run help -- deployment <action>` for the exact syntax and side effects.
+Existing-LXC deploy never bootstraps; Proxmox deploy retains its provisioning
+behavior. This is a breaking CLI change, not an infrastructure schema upgrade.
+The template remains single-app; no application-directory or database migration
+is introduced. Existing 5.x applications use the normal template updater.
+
+`npm run help` presents eight daily commands. Focused tests use
+`npm run test -- --module <module>` or `npm run test -- --file <file-path>`;
+`npm test` still runs the complete workspace suites. Browser/PWA tests retain
+their workspace commands. Invalid selectors never run the full suite.
+
+The normal package merger removes unchanged old aliases. Locally changed script
+entries and collisions with the new `deployment`, `scaffold`, or `help` names
+require ordinary conflict resolution; they are not overwritten automatically.
+
 ## Template 5.0.13 dependency and navigation update
 
 Fallow is pinned to 3.25.0 and both workspaces use Better Auth 1.7.4. The OpenAPI
@@ -28,7 +58,7 @@ The linter no longer requires a test per executable module, Store, HTTP route,
 or documented status (`MODULE_TEST_COVERAGE`, `STORE_TEST_EXECUTABLE_COVERAGE`,
 `HTTP_TEST_EXECUTABLE_COVERAGE`, and `HTTP_STATUS_CONTRACT` are removed).
 OpenAPI consistency and quality rules for existing tests remain enforced.
-Existing application tests are preserved. `scaffold:test` is an optional,
+Existing application tests are preserved. `npm run scaffold -- test` is an optional,
 explicit helper; its generated baseline does not establish business-risk protection.
 Test discovery, npm commands, and verification-evidence reuse are unchanged.
 
@@ -174,9 +204,9 @@ the template update, and confirm passing evidence under the Verification Rules
 backend deployment, inspect and explicitly upgrade the remote infrastructure:
 
 ```bash
-npm run credentials:run -- deployment:infrastructure:status -- <profile> backend
-npm run credentials:run -- deployment:infrastructure:upgrade -- <profile> backend
-npm run credentials:run -- deployment:status -- <profile> backend
+npm run credentials:run -- deployment infrastructure:status <profile> backend
+npm run credentials:run -- deployment infrastructure:upgrade <profile> backend
+npm run credentials:run -- deployment status <profile> backend
 ```
 
 Keep the last healthy backend release active until all three commands succeed.
@@ -196,8 +226,8 @@ this patch. If an earlier schema-3 upgrade attempt failed with `Release contract
 mismatch`, update to 5.0.9 and rerun:
 
 ```bash
-npm run credentials:run -- deployment:infrastructure:upgrade -- <profile> backend
-npm run credentials:run -- deployment:infrastructure:status -- <profile> backend
+npm run credentials:run -- deployment infrastructure:upgrade <profile> backend
+npm run credentials:run -- deployment infrastructure:status <profile> backend
 ```
 
 ## Template 5.0.8 CSS environment spacing
@@ -264,9 +294,9 @@ this fix.
 
 Template 5.0.4 preserves bounded, explicitly redacted child-process output for
 deployment failures and reports the exact remote activation or rollback stage.
-The standard `deployment:deploy` command now exposes actionable npm, validator,
+The standard `npm run deployment -- deploy` command now exposes actionable npm, validator,
 service, and health-check evidence without printing process arguments, stdin,
-or known SSH/sudo credentials. `deployment:diagnose` provides a read-only JSON
+or known SSH/sudo credentials. `npm run deployment -- diagnose` provides a read-only JSON
 snapshot of the Existing-LXC connection, infrastructure contract, runtime,
 active release, and service state. The credential runner also normalizes the
 optional separator in `credentials:run -- <script> -- <arguments>` so older

@@ -82,7 +82,7 @@ test('focused verifier runs required checks and direct module tests', () => {
         'npm run typecheck',
         'npm run lint:architecture',
         'npm run lint:openapi',
-        `${process.execPath} --test src/module/health/test/health.module.test.ts`,
+        `${process.execPath} ${path.join(projectRoot, 'script/test.ts')} --module health`,
     ]);
 });
 

@@ -25,7 +25,7 @@ export class HealthModule
     implements HealthModulePort
 {
     // module-sync:start
-    /** Generated registry metadata. Change module.manifest.json, then run module:sync. */
+    /** Generated registry metadata. Change module.manifest.json, then run npm run module:sync -- health. */
     public static readonly definition = {
         name: HEALTH_MODULE_NAME,
         dependencies: [],

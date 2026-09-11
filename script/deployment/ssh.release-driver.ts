@@ -207,7 +207,7 @@ export class SshReleaseDriver {
                 {
                     stage: 'release-switch',
                     releaseState:
-                        'release switch may be incomplete; run deployment:diagnose',
+                        'release switch may be incomplete; use npm run help -- deployment diagnose to select the profile and component',
                     command: [
                         `current=$(if [ -L ${root}/current ]; then readlink -f ${root}/current; fi)`,
                         `ln -sfnT "$candidate" ${root}/current`,
@@ -216,7 +216,7 @@ export class SshReleaseDriver {
                 {
                     stage: 'activation-healthcheck',
                     releaseState:
-                        'restoration of the formerly active release was attempted; run deployment:diagnose',
+                        'restoration of the formerly active release was attempted; use npm run help -- deployment diagnose to select the profile and component',
                     command: `if ! ${this.installCommand(root, component)} || ! ${this.healthCommand(component)}; then if [ -n "$current" ]; then ln -sfnT "$current" ${root}/current; ${this.installCommand(root, component)}; fi; exit 1; fi`,
                 },
             ]);
@@ -430,7 +430,7 @@ export class SshReleaseDriver {
             {
                 stage: 'release-switch',
                 releaseState:
-                    'release switch may be incomplete; run deployment:diagnose',
+                    'release switch may be incomplete; use npm run help -- deployment diagnose to select the profile and component',
                 command: [
                     `if [ -n "$previous" ]; then ln -sfnT "$previous" ${root}/previous; fi`,
                     `ln -sfnT ${candidate} ${root}/current`,
@@ -439,7 +439,7 @@ export class SshReleaseDriver {
             {
                 stage: 'activation-healthcheck',
                 releaseState:
-                    'rollback to the previous release was attempted; run deployment:diagnose',
+                    'rollback to the previous release was attempted; use npm run help -- deployment diagnose to select the profile and component',
                 command: `if ! ${this.installCommand(root, component)} || ! ${this.healthCommand(component)}; then if [ -n "$previous" ]; then ln -sfnT "$previous" ${root}/current; ${this.installCommand(root, component)}; fi; exit 1; fi`,
             },
             {
@@ -611,7 +611,7 @@ export class SshReleaseDriver {
             infrastructure.deploymentUser !== this.target.sshUser
         ) {
             throw new Error(
-                `Existing-LXC infrastructure contract requires schema ${LXC_INFRASTRUCTURE_SCHEMA_VERSION}, deployment user ${this.target.sshUser}, Node.js ${requiredNode}, npm '${requiredNpm}', launcher ${LxcRuntimeContract.backendLauncher}, and maintenance launcher ${LxcRuntimeContract.backendMaintenanceLauncher}; observed metadata is missing, stale, or invalid. Run deployment:infrastructure:upgrade before deploying.`,
+                `Existing-LXC infrastructure contract requires schema ${LXC_INFRASTRUCTURE_SCHEMA_VERSION}, deployment user ${this.target.sshUser}, Node.js ${requiredNode}, npm '${requiredNpm}', launcher ${LxcRuntimeContract.backendLauncher}, and maintenance launcher ${LxcRuntimeContract.backendMaintenanceLauncher}; observed metadata is missing, stale, or invalid. Use npm run help -- deployment infrastructure:upgrade for the explicit profile and component arguments before deploying.`,
             );
         }
         const observedNode = this.transport('ssh', this.sshArguments([
@@ -627,7 +627,7 @@ export class SshReleaseDriver {
             !this.matchesNpm(observedNpm, requiredNpm)
         ) {
             throw new Error(
-                `Remote runtime mismatch: required Node.js ${requiredNode} and npm '${requiredNpm}'; observed Node.js ${observedNode} and npm ${observedNpm}. Run deployment:infrastructure:upgrade before deploying.`,
+                `Remote runtime mismatch: required Node.js ${requiredNode} and npm '${requiredNpm}'; observed Node.js ${observedNode} and npm ${observedNpm}. Use npm run help -- deployment infrastructure:upgrade for the explicit profile and component arguments before deploying.`,
             );
         }
     }

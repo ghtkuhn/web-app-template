@@ -1014,8 +1014,8 @@ test('Existing-LXC diagnosis is read-only and reports runtime state', async () =
         path.join(projectRoot, 'package.json'),
         'utf8',
     ));
-    expect(manifest.scripts['deployment:diagnose'])
-        .toBe('node script/deployment/deployment.cli.ts diagnose');
+    expect(manifest.scripts.deployment)
+        .toBe('node script/deployment/deployment.cli.ts');
 });
 
 test('Existing-LXC runtime mismatch fails before upload or downtime', async () => {

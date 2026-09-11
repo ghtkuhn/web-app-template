@@ -1,6 +1,9 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { parseArgs } from 'node:util';
+import { commandHelp } from '../commands/catalog.ts';
+import { validateDeploymentArguments } from './arguments.ts';
 import type {
     ComponentName,
     ComponentSelection,
@@ -20,7 +23,7 @@ import {
 /** Coordinates profile validation and the selected deployment drivers. */
 export class DeploymentCli {
     private readonly root: string;
-    private readonly profiles: DeploymentProfileRepository;
+    private profileRepository?: DeploymentProfileRepository;
     private readonly docker: DockerDeploymentDriver;
     private readonly releases: ReleaseBuilder;
     private readonly projectConfiguration: DeploymentProjectConfigRepository;
@@ -31,17 +34,29 @@ export class DeploymentCli {
         '../..',
     )) {
         this.root = root;
-        this.profiles = new DeploymentProfileRepository(root);
         this.docker = new DockerDeploymentDriver(root);
         this.releases = new ReleaseBuilder(root);
         this.projectConfiguration =
             new DeploymentProjectConfigRepository(root);
     }
 
+    private get profiles(): DeploymentProfileRepository {
+        return this.profileRepository ??= new DeploymentProfileRepository(this.root);
+    }
+
     public async run(arguments_: readonly string[]): Promise<number> {
         try {
+            if (arguments_.length === 0 || (arguments_.length === 1 && arguments_[0] === '--help')) {
+                process.stdout.write(commandHelp(['deployment']));
+                return 0;
+            }
+            if (arguments_.length === 2 && arguments_[1] === '--help') {
+                process.stdout.write(commandHelp(['deployment', arguments_[0]]));
+                return 0;
+            }
+            validateDeploymentArguments(arguments_);
             this.projectConfiguration.load();
-            const [command = 'validate', ...rest] = arguments_;
+            const [command, ...rest] = arguments_;
             if (command === 'scaffold') {
                 return this.scaffold(rest);
             }
@@ -52,10 +67,10 @@ export class DeploymentCli {
                 );
                 return 0;
             }
-            const profileName = this.positional(rest, 0) ?? 'local';
+            const profileName = rest[0];
             const selection = command.startsWith('database:')
                 ? 'backend'
-                : this.selection(this.positional(rest, 1));
+                : command === 'validate' ? 'all' : this.selection(rest[1]);
             const profile = this.profiles.load(profileName);
             if (command === 'deploy') {
                 this.assertSecrets(profile);
@@ -88,7 +103,7 @@ export class DeploymentCli {
                 await this.rollback(
                     profile,
                     selection,
-                    this.positional(rest, 2),
+                    rest[2],
                 );
             } else if (command === 'database:list') {
                 await this.databaseList(profile, selection);
@@ -96,7 +111,7 @@ export class DeploymentCli {
                 await this.databaseRestore(
                     profile,
                     selection,
-                    this.positional(rest, 1),
+                    rest[1],
                 );
             } else {
                 throw new Error(`Unknown deployment command '${command}'.`);
@@ -139,14 +154,15 @@ export class DeploymentCli {
     }
 
     private scaffold(arguments_: readonly string[]): number {
-        const name = this.positional(arguments_, 0);
-        if (!name) {
-            throw new Error('A deployment profile name is required.');
-        }
-        const source = this.option(arguments_, '--from') ?? 'local';
-        const backend = this.option(arguments_, '--backend-driver');
-        const frontend = this.option(arguments_, '--frontend-driver');
-        const database = this.option(arguments_, '--database') ?? 'sqlite';
+        const { positionals, values } = parseArgs({ args: [...arguments_], allowPositionals: true, options: {
+            from: { type: 'string' }, 'backend-driver': { type: 'string' },
+            'frontend-driver': { type: 'string' }, database: { type: 'string' },
+        } });
+        const name = positionals[0];
+        const source = values.from ?? 'local';
+        const backend = values['backend-driver'];
+        const frontend = values['frontend-driver'];
+        const database = values.database ?? 'sqlite';
         const target = this.profiles.scaffold(
             name,
             source,
@@ -445,30 +461,13 @@ export class DeploymentCli {
         }
     }
 
-    private selection(value: string | undefined): ComponentSelection {
-        const selection = value ?? 'all';
+    private selection(selection: string): ComponentSelection {
         if (!['backend', 'frontend', 'all'].includes(selection)) {
             throw new Error(`Unknown component '${selection}'.`);
         }
         return selection as ComponentSelection;
     }
 
-    private positional(
-        arguments_: readonly string[],
-        index: number,
-    ): string | undefined {
-        return arguments_.filter((value, position) =>
-            position === 0 || !arguments_[position - 1].startsWith('--'),
-        ).filter((value) => !value.startsWith('--'))[index];
-    }
-
-    private option(
-        arguments_: readonly string[],
-        name: string,
-    ): string | undefined {
-        const index = arguments_.indexOf(name);
-        return index >= 0 ? arguments_[index + 1] : undefined;
-    }
 }
 
 const entryPath = process.argv[1];

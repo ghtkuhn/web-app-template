@@ -444,7 +444,7 @@ test('CLI documents usage and returns stable success and input exit codes', () =
             stderr,
         );
         assert.equal(cli.run(['--help']), 0);
-        assert.match(stdout.value, /Usage: npm run scaffold:module/);
+        assert.match(stdout.value, /Usage: npm run scaffold -- module/);
         assert.equal(cli.run([]), 1);
         assert.equal(cli.run(['BadName']), 1);
         assert.match(stderr.value, /Expected exactly one module name/);

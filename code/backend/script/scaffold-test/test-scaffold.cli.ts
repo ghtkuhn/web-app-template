@@ -46,7 +46,7 @@ export class TestScaffoldCli {
         try {
             const result = this.scaffolder.scaffold(moduleName);
             this.stdout.write(
-                `Created module test '${result.file}'.\nTest catalog updated; backend lint, typecheck, and tests passed.\n`,
+                `Created module test '${result.file}'.\nTest catalog updated; backend lint, typecheck, and only the created test passed. This baseline does not establish business-risk coverage.\n`,
             );
             return 0;
         } catch (error: unknown) {
@@ -65,7 +65,7 @@ export class TestScaffoldCli {
     /** Returns command syntax and exit-code documentation. */
     private help(): string {
         return [
-            'Usage: npm run scaffold:test -- <existing-module>',
+            'Usage: npm run scaffold -- test <existing-module>',
             '',
             'Exit codes:',
             '  0  Test created, cataloged, and verified',

@@ -308,7 +308,7 @@ test('invalid requests and collisions do not mutate the module', () => {
                 fileType: 'service-aux',
                 name: 'test',
             }),
-            /service-aux scaffolding is obsolete.*scaffold:operation/,
+            /service-aux scaffolding is obsolete.*help -- scaffold operation/,
         );
         const invalidRequests: FileScaffoldRequest[] = [
             { moduleName: 'missing', fileType: 'service', name: 'test' },

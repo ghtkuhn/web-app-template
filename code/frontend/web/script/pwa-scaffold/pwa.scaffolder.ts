@@ -375,7 +375,7 @@ export class PwaScaffolder {
     }
 
     private help(): string {
-        return 'Usage: scaffold:pwa -- <app-id> --name "<Name>" ' +
+        return 'Usage: npm run scaffold -- pwa <app-id> --name "<Name>" ' +
             '--short-name "<Short Name>"\n';
     }
 }

@@ -8,102 +8,15 @@ const projectRoot = path.resolve(
     '../../../..',
 );
 
-test('agent instructions document the curated root quality commands', () => {
-    const packageJson = JSON.parse(
-        fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8'),
-    ) as { scripts: Record<string, string> };
-    const agents = fs.readFileSync(
-        path.join(projectRoot, 'AGENTS.md'),
-        'utf8',
-    );
-    const groups = [
-        {
-            title: 'Complete Verification',
-            commands: [
-                ['runtime:check', 'npm run runtime:check',
-                    'Checks the pinned Node.js and npm contract.'],
-                ['verify', 'npm run verify',
-                    'Runs the complete required quality pipeline.'],
-                ['audit', 'npm run audit',
-                    'Checks for newly introduced code-health findings with the locally pinned Fallow.'],
-            ],
-        },
-        {
-            title: 'Focused Quality Checks',
-            commands: [
-                ['lint', 'npm run lint',
-                    'Checks architecture, styles, and OpenAPI across all workspaces.'],
-                ['typecheck', 'npm run typecheck',
-                    'Typechecks root tooling and all workspaces.'],
-                ['test', 'npm run test',
-                    'Runs workspace unit, integration, and component tests.'],
-                ['build', 'npm run build',
-                    'Builds every workspace that defines a build script.'],
-                ['verify:module', 'npm run verify:module -- <module>',
-                    "Runs backend-wide type and lint checks plus the module's direct tests."],
-            ],
-        },
-        {
-            title: 'Generated Contracts',
-            commands: [
-                ['check:api', 'npm run check:api',
-                    'Checks backend OpenAPI and generated frontend types.'],
-                ['generate:api', 'npm run generate:api',
-                    'Updates backend OpenAPI and generated frontend types.'],
-                ['check:modules', 'npm run check:modules',
-                    'Checks generated module mechanics for drift.'],
-                ['module:sync', 'npm run module:sync -- <module>',
-                    "Updates one module's generated mechanics."],
-                ['check:migrations', 'npm run check:migrations',
-                    'Checks migration order, dialect pairs, catalog, and checksums.'],
-                ['generate:migrations', 'npm run generate:migrations',
-                    'Updates the migration checksum catalog.'],
-                ['check:test-catalog', 'npm run check:test-catalog',
-                    'Checks the backend test catalog for drift.'],
-                ['generate:test-catalog', 'npm run generate:test-catalog',
-                    'Updates the backend test catalog.'],
-            ],
-        },
-        {
-            title: 'Code Navigation',
-            commands: [
-                ['code:inspect', 'npm run code:inspect -- <file-path>',
-                    'Inspects a repository-relative file and its dependencies, consumers, and evidence as JSON.'],
-                ['code:trace', 'npm run code:trace -- <file-path>:<export>',
-                    'Shows a best-effort caller/callee chain for an exported symbol, limited to two hops.'],
-            ],
-        },
-    ] as const;
-    expect(packageJson.scripts['code:inspect']).toBe('fallow inspect --format json --file');
-    expect(packageJson.scripts['code:trace']).toBe('fallow trace --depth 2');
-    const expected = groups.map(({ title, commands }) => [
-        `### ${title}`,
-        '',
-        ...commands.map(([, usage, description]) =>
-            `* \`${usage}\`: ${description}`,
-        ),
-    ].join('\n')).join('\n\n');
-    const section = agents.match(
-        /## Root npm Scripts\n\n([\s\S]*?)\n\n---/u,
-    )?.[1];
-
-    expect(section?.trimEnd()).toBe(expected);
-    for (const { commands } of groups) {
-        for (const [script] of commands) {
-            expect(packageJson.scripts).toHaveProperty(script);
-        }
-    }
-    for (const excluded of [
-        'credentials:',
-        'deployment:',
-        'icons',
-        'scaffold:',
-        'task:',
-        'template:',
-        'workflow:',
-    ]) {
-        expect(section).not.toContain(`npm run ${excluded}`);
-    }
+test('agent instructions expose only the eight daily command entries', () => {
+    const scripts = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8')).scripts;
+    const agents = fs.readFileSync(path.join(projectRoot, 'AGENTS.md'), 'utf8');
+    const section = agents.split('## Root npm Scripts')[1]?.split('\n---')[0];
+    const names = [...(section ?? '').matchAll(/^\* `npm run ([a-z:]+)/gmu)].map((match) => match[1]);
+    expect(names).toEqual(['code:inspect', 'code:trace', 'scaffold', 'lint', 'typecheck', 'test', 'verify', 'help']);
+    for (const name of names) expect(scripts).toHaveProperty(name);
+    expect(section).toContain('--module <module> | --file <file-path>');
+    expect(section).toContain('npm run help -- scaffold <type>');
 });
 
 test('canonical agent instructions own the basis and delegate project rules', () => {

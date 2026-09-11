@@ -73,7 +73,7 @@ export class ScaffoldCli {
     /** Returns command usage and exit-code documentation. */
     private help(): string {
         return [
-            'Usage: npm run scaffold:module -- <kebab-case-name>',
+            'Usage: npm run scaffold -- module <kebab-case-name>',
             '',
             'Exit codes:',
             '  0  Module created, registered, activated, and verified',

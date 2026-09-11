@@ -112,7 +112,7 @@ export class FrontendScaffold {
     private componentFiles(arguments_: readonly string[]): PlannedFile[] {
         if (arguments_.length !== 2) {
             throw new Error(
-                'Usage: scaffold:component -- <desktop|tablet|mobile> <name>',
+                'Usage: npm run scaffold -- component <desktop|tablet|mobile> <name>',
             );
         }
         const presentation = arguments_[0];
@@ -318,9 +318,9 @@ export class FrontendScaffold {
     private help(): string {
         return [
             'Usage:',
-            '  scaffold:route -- <name>',
-            '  scaffold:component -- <desktop|tablet|mobile> <name>',
-            '  scaffold:feature -- <name>',
+            '  npm run scaffold -- route <name>',
+            '  npm run scaffold -- component <desktop|tablet|mobile> <name>',
+            '  npm run scaffold -- feature <name>',
             'Exit codes: 0 success, 1 help/usage, 2 validation or verification error.',
             '',
         ].join('\n');

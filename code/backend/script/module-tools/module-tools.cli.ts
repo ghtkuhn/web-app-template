@@ -121,7 +121,7 @@ export class ModuleToolsCli {
             return 0;
         }
         this.stderr.write(
-            `Generated module drift: ${stale.join(', ')}. Run module:sync.\n`,
+            `Generated module drift: ${stale.join(', ')}.\n${stale.map((name) => `npm run module:sync -- ${name}`).join('\n')}\n`,
         );
         return 1;
     }

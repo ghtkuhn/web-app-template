@@ -31,7 +31,7 @@ export class OperationScaffoldCli {
         try {
             const result = this.scaffolder.scaffold(this.parse(arguments_));
             this.stdout.write(
-                `Created Operation draft '${result.className}'.\n- ${result.file}\n`,
+                `Created Operation draft '${result.className}'.\n- ${result.file}\nAfter implementing execute(): npm run module:sync -- ${arguments_[0]}\n`,
             );
             return 0;
         } catch (error: unknown) {
@@ -75,7 +75,7 @@ export class OperationScaffoldCli {
     /** Documents syntax and stable exit codes. */
     private help(): string {
         return [
-            'Usage: npm run scaffold:operation -- <module> <service> <operation> --input <type|void> --output <type|void>',
+            'Usage: npm run scaffold -- operation <module> <service> <operation> --input <type|void> --output <type|void>',
             '',
             'The Service owner and named module-local contracts must already exist.',
             'The generated abstract draft is not routed until execute() is implemented and module:sync runs.',

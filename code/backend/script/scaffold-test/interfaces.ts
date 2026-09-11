@@ -5,7 +5,7 @@ export interface TestScaffoldWriter {
 
 /** Verification boundary used after a test scaffold transaction. */
 export interface TestScaffoldVerification {
-    verify(backendRoot: string): void;
+    verify(backendRoot: string, testFile: string): void;
 }
 
 /** Result returned after one test was created and cataloged. */

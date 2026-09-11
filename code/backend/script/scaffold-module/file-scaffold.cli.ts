@@ -82,7 +82,7 @@ export class FileScaffoldCli {
     /** Returns usage, supported types, owner rules, and exit codes. */
     private help(): string {
         return [
-            'Usage: npm run scaffold:file -- <module> <type> <name> [--owner <owner>]',
+            'Usage: npm run scaffold -- file <module> <type> <name> [--owner <owner>]',
             '',
             'Types:',
             `  ${this.catalog.types().join(', ')}`,

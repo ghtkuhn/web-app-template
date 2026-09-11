@@ -1,25 +1,26 @@
 # Deployment Profiles
 
 Deployment is controlled by versioned JSON profiles in `deployment/profiles/`.
-The default profile is `local` and continues to use Docker. The tracked
+The starter profile is `local` and continues to use Docker. Every operational
+command requires an explicit profile and component; there are no target defaults. The tracked
 `project.json` setting `deployment.platform` selects the default driver only
 for newly scaffolded profiles. Its supported values are `docker`,
 `existing-lxc`, and `proxmox-lxc`; `local` is an environment and profile name,
 not a driver.
 
 ```bash
-npm run deployment:validate
-npm run deployment:validate -- --all
-npm run deployment:scaffold -- staging
-npm run deployment:scaffold -- staging --database postgres
-npm run deployment:scaffold -- staging --backend-driver existing-lxc
-npm run deployment:build -- local backend
-npm run credentials:run -- deployment:bootstrap -- staging backend
-npm run credentials:run -- deployment:deploy -- local all
-npm run credentials:run -- deployment:status -- local all
-npm run credentials:run -- deployment:stop -- local all
-npm run credentials:run -- deployment:database:list -- local
-npm run credentials:run -- deployment:database:restore -- local <backup-id>
+npm run deployment -- validate local
+npm run deployment -- validate --all
+npm run deployment -- scaffold staging
+npm run deployment -- scaffold staging --database postgres
+npm run deployment -- scaffold staging --backend-driver existing-lxc
+npm run deployment -- build local backend
+npm run credentials:run -- deployment bootstrap staging backend
+npm run credentials:run -- deployment deploy local all
+npm run credentials:run -- deployment status local all
+npm run credentials:run -- deployment stop local all
+npm run credentials:run -- deployment database:list local
+npm run credentials:run -- deployment database:restore local <backup-id>
 ```
 
 Backend and frontend targets are independent. A profile can therefore select
@@ -137,7 +138,7 @@ trusted repository setup remains available explicitly through `npm run prepare`.
 Bootstrap is an explicit one-time operation:
 
 ```bash
-npm run credentials:run -- deployment:bootstrap -- <profile> <backend|frontend|all>
+npm run credentials:run -- deployment bootstrap <profile> <backend|frontend|all>
 ```
 
 It connects as the non-root `deployment.sshUser` configured in `project.json`
@@ -149,16 +150,16 @@ installs the Node version from `.nvmrc` and configures that same account as the
 systemd application owner with Nginx, persistent directories, and narrowly
 scoped sudo helpers. Existing-LXC profiles therefore do not own an independent
 SSH user setting.
-`deployment:deploy` never invokes bootstrap and does not otherwise
+`npm run deployment -- deploy` never invokes bootstrap and does not otherwise
 provision or mutate the operating system.
 
 Existing-LXC infrastructure is versioned independently from application
 releases. Inspect and explicitly upgrade it with:
 
 ```bash
-npm run credentials:run -- deployment:infrastructure:status -- <profile> <backend|frontend|all>
-npm run credentials:run -- deployment:infrastructure:upgrade -- <profile> <backend|frontend|all>
-npm run credentials:run -- deployment:diagnose -- <profile> <backend|frontend|all>
+npm run credentials:run -- deployment infrastructure:status <profile> <backend|frontend|all>
+npm run credentials:run -- deployment infrastructure:upgrade <profile> <backend|frontend|all>
+npm run credentials:run -- deployment diagnose <profile> <backend|frontend|all>
 ```
 
 Deploy refuses a backend upload when the remote infrastructure schema, exact
@@ -175,7 +176,7 @@ pinned SSH target, infrastructure contract, Node/npm runtime, active release,
 and service state without uploading files or changing the LXC:
 
 ```bash
-npm run credentials:run -- deployment:diagnose -- <profile> <backend|frontend|all>
+npm run credentials:run -- deployment diagnose <profile> <backend|frontend|all>
 ```
 
 Deployment stages distinguish artifact checksum, release staging and
@@ -200,7 +201,7 @@ Before changing external infrastructure, an AI agent must:
    logs, documentation, commits, or task notes.
 6. Use the public SSH key in the profile and never place private key material in
    JSON.
-7. Run `deployment:validate`, deploy only the requested component, check status
+7. Run `npm run deployment -- validate <profile>`, deploy only the requested component, check status
    and health, and stop test resources when the test is complete.
 
 Provisioning is intentionally non-destructive: the supplied commands do not

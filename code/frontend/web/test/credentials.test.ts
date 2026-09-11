@@ -81,7 +81,7 @@ test('credential run gives an existing environment value precedence', () => {
     expect(fs.readFileSync(path.join(root, 'result.txt'), 'utf8')).toBe('host');
 });
 
-test('credential run accepts the documented optional argument separator', () => {
+test('credential run forwards deployment subcommands with or without the optional separator', () => {
     const root = fixture();
     fs.writeFileSync(
         path.join(root, '.credentials.env'),
@@ -93,17 +93,14 @@ test('credential run accepts the documented optional argument separator', () => 
         "fs.writeFileSync('arguments.json', JSON.stringify(process.argv.slice(2)));",
     ].join('\n'));
     fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
-        scripts: { capture: 'node capture.mjs' },
+        scripts: { deployment: 'node capture.mjs' },
     }));
 
-    expect(new CredentialManager(root).run(
-        'capture',
-        ['--', 'local', 'all'],
-    )).toBe(0);
-    expect(JSON.parse(fs.readFileSync(
-        path.join(root, 'arguments.json'),
-        'utf8',
-    ))).toEqual(['local', 'all']);
+    for (const prefix of [[], ['--']]) {
+        expect(new CredentialManager(root).run('deployment', [...prefix, 'deploy', 'production', 'backend'])).toBe(0);
+        expect(JSON.parse(fs.readFileSync(path.join(root, 'arguments.json'), 'utf8')))
+            .toEqual(['deploy', 'production', 'backend']);
+    }
 });
 
 test('credential run redacts file and overridden values from child output', () => {

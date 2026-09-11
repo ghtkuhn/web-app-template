@@ -4,6 +4,11 @@
         "types": ["node"]
     },
     "include": [
+        "script/commands/**/*.ts",
+        "script/testing/**/*.ts",
+        "script/help.ts",
+        "script/scaffold.ts",
+        "script/test.ts",
         "script/credentials.ts",
         "script/credentials/**/*.ts",
         "script/deployment/**/*.ts",
