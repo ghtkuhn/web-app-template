@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { ProcessRunner } from '../deployment/process.runner.ts';
 
-/** Validates and extracts GitHub source archives into isolated directories. */
+/** Validates and extracts template source archives into isolated directories. */
 export class ArchiveRepository {
     private readonly processes: ProcessRunner;
 

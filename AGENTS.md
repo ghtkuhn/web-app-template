@@ -131,13 +131,13 @@ Understand the code → implement → run focused checks → verify once at comp
 
 # Template Update Rules
 
-* Check stable upstream releases with `npm run template:check`.
+* Check private upstream releases with `npm run credentials:run -- template:check`; keep the required read token `TEMPLATE_REPOSITORY_TOKEN` only in `.credentials.env`.
 * `AGENTS.md` is template-owned and replaced by every update; project-specific additions belong exclusively in `AGENTS-PROJECT.md`.
 * `AGENTS-PROJECT.md` is project-owned and must never be overwritten or removed by template updates.
 * The first update to the canonical-agent migration release may expose one legacy `AGENTS.md` conflict; resolve it with `incoming`. Later updates replace the basis automatically.
 * `.template/version.json` is the only installed-template version source; `package.json.version` always belongs to the application.
 * Initialize legacy applications without metadata exactly once with `npm run template:init -- <installed-version>`.
-* Update only from a clean Git worktree with `npm run template:update` or an explicit stable version.
+* Update only from a clean Git worktree with `npm run credentials:run -- template:update` or an explicit stable version; use the same credential runner for `template:init` and update continuation.
 * Resolve updater conflicts only under `.template/conflicts/<version>/`, select `local`, `incoming`, `merged`, or `delete` in `resolutions.json`, and continue with `npm run template:update -- --continue <version>`.
 * Abort unresolved staging with `npm run template:update -- --abort <version>`; this must not change project files.
 * Template updates must preserve local modules, features, migrations, secrets, runtime data, local deployment profiles, Memory, and Kanban task contents.

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { ArchiveRepository } from './archive.repository.ts';
 import { ConflictReporter } from './conflict.reporter.ts';
 import { TemplateUpdateError } from './errors.ts';
-import { GitHubReleaseClient } from './github.release-client.ts';
+import { PrivateReleaseClient } from './private.release-client.ts';
 import type {
     ConflictSession,
     TemplateMetadata,
@@ -32,7 +32,7 @@ type PreparedUpdate = {
     readonly plan: UpdatePlan;
 };
 
-type ReleaseClient = Pick<GitHubReleaseClient, 'resolve' | 'download'>;
+type ReleaseClient = Pick<PrivateReleaseClient, 'resolve' | 'download'>;
 type ReleaseClientFactory = (repository: string) => ReleaseClient;
 
 /** Coordinates resumable release checks and safe three-way template updates. */
@@ -50,7 +50,7 @@ export class TemplateUpdater {
     public constructor(
         processes = new ProcessRunner(),
         releaseClientFactory: ReleaseClientFactory = (repository) =>
-            new GitHubReleaseClient(repository),
+            new PrivateReleaseClient(repository),
     ) {
         this.processes = processes;
         this.transaction = new UpdateTransaction(processes);

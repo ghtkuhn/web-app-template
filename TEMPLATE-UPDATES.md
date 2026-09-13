@@ -65,24 +65,47 @@ Test discovery, npm commands, and verification-evidence reuse are unchanged.
 ## Update commands
 
 ```bash
-npm run template:check
-npm run template:init -- 1.0.0
-npm run template:update
-npm run template:update -- 1.1.0
-npm run template:update -- --continue 1.1.0
-npm run template:update -- --abort 1.1.0
+npm run credentials:run -- template:check
+npm run credentials:run -- template:init 6.0.2
+npm run credentials:run -- template:update
+npm run credentials:run -- template:update 6.0.3
+npm run credentials:run -- template:update --continue 6.0.3
+npm run template:update -- --abort 6.0.3
 ```
 
 `template:check` is read-only and reports the latest stable release published
-at [GitHub Releases](https://github.com/ghtkuhn/web-app-template/releases).
+at [the private repository](https://git.tobitron.com/tobias/web-app-template/releases).
+It requires a `TEMPLATE_REPOSITORY_TOKEN` with read access to this repository,
+supplied through `.credentials.env` and `credentials:run`. A Git SSH key or a
+`GITHUB_TOKEN` is not a substitute. Existing credential files are never overwritten
+or filled with secrets by an update; add the token locally, never to task files or
+command arguments. CI may supply the same environment variable through its secret store.
 Applications created before explicit updater metadata was introduced must run
 `template:init` once with the stable release version they actually contain.
 The command verifies that release before creating `.template/version.json`.
 This file is the only source of the installed template version;
 `package.json.version` remains the application's own version.
 
-`template:update` requires a clean Git worktree and uses the normal GitHub
-source archives for the installed and target tags.
+`template:update` requires a clean Git worktree and uses authenticated private
+source archives for the installed and target tags. Authentication, network, or
+missing-release errors do not trigger a fallback to GitHub. Abort remains offline.
+
+### Final GitHub bridge: 6.0.2
+
+Install 6.0.2 with the existing GitHub-based updater first. It is the final GitHub
+release and is published with identical contents under `v6.0.2` in the private
+repository, providing the exact three-way-merge base for subsequent updates.
+The new updater accepts the legacy `ghtkuhn/web-app-template` metadata identifier
+as an alias for the private source. This is necessary because old updaters write
+their previous repository identifier back after installing the bridge.
+The alias does not permit any GitHub network requests. Later successful updates
+write the canonical private repository URL into `.template/version.json`.
+
+Do not change the installed version manually or copy only the new transport into
+an older application. Historical versions before 6.0.2 are not published in the
+private repository: initialize and update those applications using the old
+GitHub updater first. Preserve the final GitHub release and historical tags for
+this initial transition. Local code conflicts still require normal resolution.
 
 ## Update Behavior
 

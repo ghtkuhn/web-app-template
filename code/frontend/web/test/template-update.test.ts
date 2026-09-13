@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { afterEach, expect, test } from 'vitest';
 import { ArchiveRepository } from '../../../../script/template-update/archive.repository.ts';
 import { ConflictReporter } from '../../../../script/template-update/conflict.reporter.ts';
-import { GitHubReleaseClient } from '../../../../script/template-update/github.release-client.ts';
+import { PrivateReleaseClient } from '../../../../script/template-update/private.release-client.ts';
 import { SemanticVersion } from '../../../../script/template-update/semantic-version.ts';
 import { TemplateMetadataRepository } from '../../../../script/template-update/template.metadata-repository.ts';
 import { TemplateUpdater } from '../../../../script/template-update/template.updater.ts';
@@ -85,7 +85,7 @@ test('metadata loads only the dedicated template version file', () => {
 
     expect(new TemplateMetadataRepository().load(project)).toEqual({
         version: '1.4.0',
-        repository: 'ghtkuhn/web-app-template',
+        repository: 'https://git.tobitron.com/tobias/web-app-template',
     });
 });
 
@@ -152,26 +152,110 @@ test('template updater CLI documents usage and stable input exit codes', () => {
     expect(invalid.stderr).toContain("Unknown template command 'unknown'");
 });
 
-test('GitHub release resolution rejects prereleases and builds source URLs', async () => {
+test('private release resolution builds authenticated same-origin source URLs', async () => {
     const requests: string[] = [];
-    const client = new GitHubReleaseClient(
-        'ghtkuhn/web-app-template',
-        async (input) => {
+    const client = new PrivateReleaseClient(
+        'https://git.tobitron.com/tobias/web-app-template',
+        async (input, options) => {
             requests.push(String(input));
+            expect(options?.headers).toMatchObject({ Authorization: 'token test-only-token' });
+            expect(options?.redirect).toBe('error');
             return new Response(JSON.stringify({
                 tag_name: 'v1.2.0',
                 draft: false,
                 prerelease: false,
             }));
         },
-        {},
+        { TEMPLATE_REPOSITORY_TOKEN: 'test-only-token' },
     );
 
     const release = await client.resolve('1.2.0');
 
     expect(release.version).toBe('1.2.0');
-    expect(release.archiveUrl).toContain('/refs/tags/v1.2.0.tar.gz');
+    expect(release.archiveUrl).toBe('https://git.tobitron.com/api/v1/repos/tobias/web-app-template/archive/v1.2.0.tar.gz');
     expect(requests[0]).toContain('/releases/tags/v1.2.0');
+});
+
+test('private transport fails closed without leaking tokens or following arbitrary archive URLs', async () => {
+    const repository = 'https://git.tobitron.com/tobias/web-app-template';
+    let calls = 0;
+    const failingFetch: typeof fetch = async () => {
+        calls++;
+        throw new Error('test-only-sensitive-token');
+    };
+    for (const token of [undefined, '', ' ', 'bad\ntoken']) {
+        await expect(new PrivateReleaseClient(repository, failingFetch, {
+            TEMPLATE_REPOSITORY_TOKEN: token,
+        }).resolve()).rejects.toThrow(/TEMPLATE_REPOSITORY_TOKEN/);
+    }
+    expect(calls).toBe(0);
+    const client = new PrivateReleaseClient(repository, failingFetch, {
+        TEMPLATE_REPOSITORY_TOKEN: 'test-only-sensitive-token',
+    });
+    await expect(client.resolve()).rejects.toThrow(/^Private template request failed: check HTTPS access, certificate, and server availability. Redirects are forbidden\.$/);
+    await expect(client.download({ version: '6.0.2', tag: 'v6.0.2',
+        archiveUrl: 'https://example.com/archive.tar.gz' })).rejects.toThrow(/Untrusted/);
+    expect(calls).toBe(1);
+});
+
+test('private transport rejects unstable, malformed, and mismatched release responses', async () => {
+    for (const body of [null, {}, { tag_name: 'v6.0.2', draft: true, prerelease: false },
+        { tag_name: 'v6.0.2', draft: false, prerelease: true },
+        { tag_name: 'v6.0.3', draft: false, prerelease: false },
+        { tag_name: 'v6.0.2-beta.1', draft: false, prerelease: false }]) {
+        const client = new PrivateReleaseClient('https://git.tobitron.com/tobias/web-app-template',
+            async () => new Response(JSON.stringify(body)),
+            { TEMPLATE_REPOSITORY_TOKEN: 'test-only-token' });
+        await expect(client.resolve('6.0.2')).rejects.toThrow();
+    }
+});
+
+test('private archive download is bounded and authentication errors do not expose response bodies', async () => {
+    const repository = 'https://git.tobitron.com/tobias/web-app-template';
+    const release = { version: '6.0.2', tag: 'v6.0.2',
+        archiveUrl: `${repository.replace('/tobias/', '/api/v1/repos/tobias/')}/archive/v6.0.2.tar.gz` };
+    const create = (response: () => Response) => new PrivateReleaseClient(repository,
+        async () => response(), { TEMPLATE_REPOSITORY_TOKEN: 'test-only-token' });
+    expect(await create(() => new Response('archive')).download(release)).toEqual(Buffer.from('archive'));
+    await expect(create(() => new Response('oversized', { headers: {
+        'content-length': String(101 * 1024 * 1024),
+    } })).download(release)).rejects.toThrow(/100 MiB/);
+    let cancelled = false;
+    await expect(create(() => new Response(new ReadableStream({
+        pull(controller) { controller.enqueue(new Uint8Array(10 * 1024 * 1024)); },
+        cancel() { cancelled = true; },
+    }))).download(release)).rejects.toThrow(/100 MiB/);
+    expect(cancelled).toBe(true);
+    for (const status of [401, 403, 404, 500]) {
+        await expect(create(() => new Response('test-only-sensitive-body', { status })).resolve())
+            .rejects.toThrow(`Private template request failed with status ${status}.`);
+    }
+});
+
+test('bridge metadata left by the old updater selects only the private repository without rewriting local metadata', async () => {
+    const project = temporaryRoot('template-bridge-');
+    const metadata = JSON.stringify({ version: '6.0.2', repository: 'ghtkuhn/web-app-template' });
+    write(project, '.template/version.json', metadata);
+    const repositories: string[] = [];
+    const updater = new TemplateUpdater({ run: () => '' } as ProcessRunner, (repository) => {
+        repositories.push(repository);
+        return {
+            resolve: async () => ({ version: '6.0.3', tag: 'v6.0.3', archiveUrl: 'unused' }),
+            download: async () => { throw new Error('check must not download'); },
+        };
+    });
+    expect((await updater.check(project)).latest).toBe('6.0.3');
+    expect(repositories).toEqual(['https://git.tobitron.com/tobias/web-app-template']);
+    expect(fs.readFileSync(path.join(project, '.template/version.json'), 'utf8')).toBe(metadata);
+    for (const repository of ['https://github.com/ghtkuhn/web-app-template.git',
+        'https://git.tobitron.com/tobias/web-app-template.git']) {
+        write(project, '.template/version.json', JSON.stringify({ version: '6.0.2', repository }));
+        expect(new TemplateMetadataRepository().load(project).repository).toBe(
+            'https://git.tobitron.com/tobias/web-app-template');
+    }
+    write(project, '.template/version.json', JSON.stringify({ version: '6.0.2',
+        repository: 'https://example.com/tobias/web-app-template' }));
+    expect(() => new TemplateMetadataRepository().load(project)).toThrow(/Unsupported/);
 });
 
 test('three-way planning updates safe files and reports real conflicts', () => {

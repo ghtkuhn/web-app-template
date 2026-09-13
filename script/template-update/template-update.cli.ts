@@ -203,7 +203,8 @@ export class TemplateUpdateCli {
             '  npm run template:update -- --continue <version>',
             '  npm run template:update -- --abort <version>',
             '',
-            'Requirements: Node 24.19.0, npm 11, Git, tar, and HTTPS access to GitHub.',
+            'Requirements: Node 24.19.0, npm 11, Git, tar, HTTPS access to git.tobitron.com, and TEMPLATE_REPOSITORY_TOKEN with repository read access.',
+            'Use npm run credentials:run -- template:check (or template:update) to load the token from .credentials.env.',
             'Exit codes: 0 success/current, 1 input/conflict/verify follow-up, 2 execution failure.',
             '',
         ].join('\n');

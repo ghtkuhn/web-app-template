@@ -3,7 +3,8 @@ import path from 'node:path';
 import type { TemplateMetadata } from './interfaces.ts';
 import { SemanticVersion } from './semantic-version.ts';
 
-export const DEFAULT_TEMPLATE_REPOSITORY = 'ghtkuhn/web-app-template';
+export const DEFAULT_TEMPLATE_REPOSITORY = 'https://git.tobitron.com/tobias/web-app-template';
+const LEGACY_TEMPLATE_REPOSITORY = 'ghtkuhn/web-app-template';
 
 /** npm package repository metadata accepted during legacy initialization. */
 interface PackageRepository {
@@ -73,15 +74,23 @@ export class TemplateMetadataRepository {
         if (repositoryUrl === DEFAULT_TEMPLATE_REPOSITORY) {
             return repositoryUrl;
         }
+        // Pre-bridge updaters retain the installed repository when writing metadata.
+        if (repositoryUrl === LEGACY_TEMPLATE_REPOSITORY) {
+            return DEFAULT_TEMPLATE_REPOSITORY;
+        }
 
         try {
             const parsed = new URL(repositoryUrl.replace(/^git\+/, ''));
             const repositoryPath = parsed.pathname
                 .replace(/^\/|\/$/g, '')
                 .replace(/\.git$/, '');
-            return parsed.hostname === 'github.com'
-                ? repositoryPath
-                : repositoryUrl;
+            if (!parsed.username && !parsed.password && !parsed.search && !parsed.hash &&
+                parsed.protocol === 'https:' && !parsed.port &&
+                ((parsed.hostname === 'github.com' && repositoryPath === LEGACY_TEMPLATE_REPOSITORY) ||
+                 (parsed.hostname === 'git.tobitron.com' && repositoryPath === 'tobias/web-app-template'))) {
+                return DEFAULT_TEMPLATE_REPOSITORY;
+            }
+            return repositoryUrl;
         } catch {
             return repositoryUrl;
         }
